@@ -1,4 +1,66 @@
 {
-  "image": "mcr.microsoft.com/devcontainers/go",
-  "name": "Domestic Light & Magic"
+  "name": "Domestic Light & Magic",
+  "image": "mcr.microsoft.com/devcontainers/go:1-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "lts",
+      "nodeGypDependencies": true,
+      "pnpmVersion": "none",
+      "yarnVersion": "none",
+      "nvmVersion": "latest"
+    }
+  },
+  "forwardPorts": [3000, 8080],
+  "portsAttributes": {
+    "3000": {
+      "label": "Next.js dev",
+      "onAutoForward": "notify"
+    },
+    "8080": {
+      "label": "Go server",
+      "onAutoForward": "notify"
+    }
+  },
+  "postCreateCommand": "bash -c 'set -e; cd web && npm ci; cd ../backend && go mod download'",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "golang.go",
+        "dbaeumer.vscode-eslint",
+        "bradlc.vscode-tailwindcss"
+      ],
+      "settings": {
+        "editor.formatOnSave": true,
+        "files.eol": "\n",
+        "files.insertFinalNewline": true,
+        "files.trimTrailingWhitespace": true,
+        "editor.codeActionsOnSave": {
+          "source.fixAll.eslint": "explicit"
+        },
+        "[go]": {
+          "editor.defaultFormatter": "golang.go",
+          "editor.codeActionsOnSave": {
+            "source.fixAll.eslint": "never",
+            "source.organizeImports": "explicit"
+          }
+        },
+        "eslint.workingDirectories": [{ "directory": "web", "!cwd": true }],
+        "eslint.validate": [
+          "javascript",
+          "javascriptreact",
+          "typescript",
+          "typescriptreact"
+        ],
+        "tailwindCSS.experimental.configFile": "web/tailwind.config.ts",
+        "tailwindCSS.rootFontSize": 16,
+        "go.toolsManagement.checkForUpdates": "local",
+        "go.useLanguageServer": true,
+        "go.lintOnSave": "package",
+        "go.testFlags": ["-count=1"]
+      }
+    }
+  },
+  "remoteEnv": {
+    "NEXT_TELEMETRY_DISABLED": "1"
+  }
 }

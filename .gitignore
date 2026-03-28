@@ -20,6 +20,12 @@ profile.cov
 # Dependency directories (remove the comment below to include it)
 # vendor/
 
+backend/bin/
+
+# Next static export copied into embed tree (run: cd web && npm run release:sync)
+backend/internal/webdist/dist/**
+!backend/internal/webdist/dist/index.html
+
 # Go workspace file
 go.work
 go.work.sum
@@ -30,3 +36,8 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# Node / Next.js (web/)
+web/node_modules/
+web/.next/
+web/out/
