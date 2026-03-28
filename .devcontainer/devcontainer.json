@@ -2,6 +2,10 @@
   "name": "Domestic Light & Magic",
   "image": "mcr.microsoft.com/devcontainers/go:1-bookworm",
   "features": {
+    "ghcr.io/devcontainers/features/git:1": {
+      "version": "os-provided",
+      "ppa": false
+    },
     "ghcr.io/devcontainers/features/node:1": {
       "version": "lts",
       "nodeGypDependencies": true,
