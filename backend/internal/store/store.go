@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"example.com/dlm/backend/internal/samples"
 	"example.com/dlm/backend/internal/wiremodel"
 
 	_ "modernc.org/sqlite"
@@ -87,6 +88,48 @@ func (s *Store) migrate(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+// SeedDefaultSamples inserts the three REQ-009 geometric samples when the models table is empty.
+func (s *Store) SeedDefaultSamples(ctx context.Context) error {
+	var n int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM models`).Scan(&n); err != nil {
+		return err
+	}
+	if n > 0 {
+		return nil
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	seed := []struct {
+		name   string
+		lights []wiremodel.Light
+	}{
+		{samples.NameSphere, samples.SphereLights()},
+		{samples.NameCube, samples.CubeLights()},
+		{samples.NameCone, samples.ConeLights()},
+	}
+	for _, m := range seed {
+		id := uuid.NewString()
+		created := time.Now().UTC().Format(time.RFC3339Nano)
+		if _, err := tx.ExecContext(ctx, `INSERT INTO models (id, name, created_at) VALUES (?, ?, ?)`,
+			id, m.name, created); err != nil {
+			return err
+		}
+		for _, L := range m.lights {
+			if _, err := tx.ExecContext(ctx,
+				`INSERT INTO lights (model_id, idx, x, y, z) VALUES (?, ?, ?, ?, ?)`,
+				id, L.ID, L.X, L.Y, L.Z,
+			); err != nil {
+				return err
+			}
+		}
+	}
+	return tx.Commit()
 }
 
 // Close releases the database handle.

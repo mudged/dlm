@@ -1,6 +1,6 @@
 # Architecture
 
-This document defines technical structure and deployment for the product described in `docs/requirements.md` (**REQ-001–REQ-007**). It satisfies **REQ-001** (Go + Next.js + Tailwind), **REQ-002** (responsive, client-interactive UI), **REQ-003** (Raspberry Pi 4 Model B, **ARM64**, resource awareness), **REQ-004** (**one runnable executable** per release target; **no** mandatory Docker/OCI/compose packaging at this stage), **REQ-005** (wire light model shape, CSV interchange, metadata), **REQ-006** (list / view / delete / create via CSV upload), and **REQ-007** (server-side CSV validation and actionable errors).
+This document defines technical structure and deployment for the product described in `docs/requirements.md` (**REQ-001–REQ-009**). It satisfies **REQ-001** (Go + Next.js + Tailwind), **REQ-002** (responsive, client-interactive UI), **REQ-003** (Raspberry Pi 4 Model B, **ARM64**, resource awareness), **REQ-004** (**one runnable executable** per release target; **no** mandatory Docker/OCI/compose packaging at this stage), **REQ-005** (wire light model shape, CSV interchange, metadata), **REQ-006** (list / view / delete / create via CSV upload), **REQ-007** (server-side CSV validation and actionable errors), **REQ-008** (single command to build UI and run the Go server locally), and **REQ-009** (default geometric sample models: sphere, cube, cone; **0.1 m** consecutive spacing; **~2 m** characteristic size).
 
 ## Architectural resolution: REQ-004 (single binary) vs Next.js
 
@@ -27,6 +27,8 @@ This meets REQ-004 rule 1 (**no separate Node.js runtime** in the distribution) 
 | REQ-005 | **Domain types** + **CSV** contract; **metadata** (**name**, **creation instant**) stored with each model; coordinates as **float64** in Go/API JSON. |
 | REQ-006 | **REST JSON API** for models + **Next.js** client pages (list, detail, upload, delete); **multipart** upload for CSV. |
 | REQ-007 | **Authoritative validation** in Go when ingesting CSV; **transactional** create (all-or-nothing); **400** responses with clear **error** envelope. |
+| REQ-008 | **`scripts/run.sh`** (or documented equivalent) from repo root: **`npm run release:sync`** in `web/` then **`go run ./cmd/server`** in `backend/`; **README** documents exact invocation (**§3.7**). |
+| REQ-009 | **`internal/samples`** generates three polylines in **SI meters**; **`store`** (or **`cmd/server`**) **seeds** when **`models`** row count is **0** at startup (**§3.8**). |
 
 **Assumed Pi context:** Raspberry Pi 4 Model B, **64-bit OS**, **ARM64** userspace. **2–8 GB RAM** — with **no Node** at runtime, **4 GB** is practical for modest traffic; **off-device** `next export` builds recommended.
 
@@ -42,18 +44,20 @@ Monorepo (single Git root), **one Go module** under `backend/`, **no `go.work`**
 
 ```
 dlm/
+  scripts/
+    run.sh                    # REQ-008: release:sync + go run server (repo root relative paths)
   backend/
     cmd/
-      server/                 # main() — single binary entry
+      server/                 # main() — single binary entry; calls seed-if-empty (REQ-009)
     internal/
       config/
       httpapi/                # API mux + middleware + JSON handlers (incl. models HTTP)
       wiremodel/              # domain types, CSV parse + validation (REQ-005/007)
-      store/                  # persistence for models (SQLite, REQ-006)
+      samples/                # deterministic 3D polylines: sphere, cube, cone (REQ-009)
+      store/                  # persistence for models (SQLite, REQ-006); SeedDefaultSamples (REQ-009)
       webdist/                # holds embedded payload (see §3.5); populated by build, not hand-edited
         placeholder.txt       # optional tiny file so empty embed works in dev before first UI build
-    web/                      # symlink or copy strategy avoided — UI source stays ../web from repo root
-  web/                        # Next.js + Tailwind (source only for runtime)
+  web/                        # Next.js + Tailwind (source only for runtime; sibling of backend/)
     app/
     components/
     lib/
@@ -77,7 +81,8 @@ dlm/
 - **`internal/config`:** **Env-based** listen address, timeouts, optional **CORS** (primarily for **dev** when UI dev server uses another origin); production **same-origin** reduces CORS; **SQLite** path via **`DLM_DB_PATH`** and/or **`DLM_DATA_DIR`** (**§3.3**).
 - **`internal/httpapi`:** Middleware (**request ID**, **slog**, **recover**, optional **CORS**); **JSON** handlers and error envelope `{ "error": { "code", "message" } }`; **models** routes delegate to **`internal/store`** and **`internal/wiremodel`**.
 - **`internal/wiremodel`:** Parses and validates uploaded **CSV** per **§3.6**; returns structured errors for HTTP **400** responses (**REQ-007**).
-- **`internal/store`:** **SQLite** repository (see **§3.3**); opened at process start; migrations or `CREATE IF NOT EXISTS` for schema (**REQ-006**).
+- **`internal/store`:** **SQLite** repository (see **§3.3**); opened at process start; migrations or `CREATE IF NOT EXISTS` for schema (**REQ-006**); **idempotent default seed** when no models exist (**§3.8**, **REQ-009**).
+- **`internal/samples`:** Pure functions that return **`[]wiremodel.Light`** (sequential **id**s from **0**) for the three canonical shapes; no I/O (**REQ-009**).
 
 ### 3.2 HTTP surface
 
@@ -140,6 +145,43 @@ dlm/
 - **Detail:** same metadata plus `"lights": [ { "id": 0, "x": 0, "y": 0, "z": 0 }, … ]` ordered by **`id`** ascending.
 
 **HTTP errors:** Use existing **`{ "error": { "code", "message" } }`** envelope; optional **`details`** field for row/column hints (**REQ-007**). **409 Conflict** for duplicate **`name`**.
+
+### 3.7 Local build-and-run script (**REQ-008**)
+
+- **Canonical path:** **`scripts/run.sh`** at the **repository root**, executable (`chmod +x`), **`#!/usr/bin/env bash`** with **`set -euo pipefail`** (or equivalent strictness).
+- **Behavior (single invocation):**
+  1. Resolve repo root (e.g. `ROOT="$(cd "$(dirname "$0")/.." && pwd)"`).
+  2. Under **`cwd = $ROOT/web`**: run **`npm ci`** when **`node_modules`** is missing or **`DLM_FORCE_NPM_CI=1`**; skip **`npm ci`** when **`DLM_SKIP_NPM_CI=1`** or when **`node_modules`** already exists (see **README** for trade-offs). Then **`npm run release:sync`** so **`web/out/`** is copied to **`backend/internal/webdist/dist/`**.
+  3. Run **`go run ./cmd/server`** with **`cwd = $ROOT/backend`** (or **`go build -o … && exec ./dlm`** if preferred—document in **README**). Use **`exec`** for the final Go process so **SIGINT** reaches the server.
+- **Prerequisites:** **Node.js** + **npm** on **PATH**, **Go** on **PATH**; network for **`npm ci`** on cold clone or when forcing a clean install.
+- **README.md** MUST show the exact line, e.g. **`./scripts/run.sh`** or **`bash scripts/run.sh`**, and note **WSL / Git Bash** on Windows if applicable.
+- **AGENTS.md** already references **REQ-008**; keep **README** and this section aligned when the script changes.
+- **Not** a substitute for **Pi** production install (still **one binary** + optional **systemd**); operators may build off-device and copy **`dlm-arm64`** per **§3.4**.
+
+### 3.8 Default sample models (**REQ-009**)
+
+**Units:** All coordinates in **meters**; consecutive lights (**id** **i** → **i+1**) have Euclidean distance **exactly `0.1`** (10 cm), within **floating-point tolerance** used in tests (e.g. **`1e-9`** m or **ulp**-aware assert—implementor picks one and documents it).
+
+**Architectural resolutions (requirements open questions):**
+
+- **Sphere vs multiple rings:** Use a **single** open polyline (or closed loop) in **3D** whose vertices lie on the **sphere surface**. Recommended approach: **radius `R = 1.0` m** (diameter **2 m**); generate vertices by walking a **space curve** on the sphere (e.g. **parametric loxodrome / approximate spiral** from south toward north) such that each step has chord length **0.1** m until the curve completes a visually clear sphere outline; **cap total lights ≤ 1000** by **stopping early** or **coarsening** only if needed (REQ-005).
+- **User deletes samples:** **Seed only when `SELECT COUNT(*) FROM models` is 0** immediately after migrations on **process startup**. Deleting a subset does **not** re-seed during that run; if the user deletes **all** models, **next** process start seeds again.
+- **Fixed English names** (must remain **unique** vs typical user uploads): **`Sample sphere`**, **`Sample cube`**, **`Sample cone`** (adjust only if **i18n** is added later).
+
+**Per-shape geometry (implement `internal/samples`):**
+
+| Shape | Characteristic size | Path / sampling |
+|-------|---------------------|-----------------|
+| **Sphere** | Diameter **2 m** (`R = 1` m) | Surface polyline as above; chord step **0.1** m. |
+| **Cube** | Edge length **2 m** | Axis-aligned cube; traverse **all 12 edges** as one continuous **3D** polyline (order implementor’s choice). Insert vertices so **consecutive** Euclidean distance is **0.1** m (interpolate along edges); total path length **24** m ⇒ **~240** segments if corners are shared—stay **≤ 1000** lights. |
+| **Cone** | Height **2 m**, right circular | Base radius **`r = 1` m** (base diameter **2 m**); path: **base circle** (circumference **2π** m) sampled at **0.1** m chords, then **slant** from base rim to **apex** (slant height **`√(r² + h²) = √5` m**) with **0.1** m steps—**concatenate** into one **id** order. Verify total lights **≤ 1000**. |
+
+**Integration:**
+
+- After **`store.Open`** + **`migrate`**, if **model count is 0**, **`store.SeedDefaultSamples(ctx)`** (or equivalent) runs **one transaction** inserting three models and their lights using **`samples.SphereLights()`**, **`samples.CubeLights()`**, **`samples.ConeLights()`** (names as above, server **`created_at`**).
+- Samples use the **same** insert path as user CSV (reuse **`Create`-style** logic or bulk insert) so **invariants** match **REQ-005**.
+
+**Tests:** Unit tests in **`internal/samples`** assert **consecutive distance ≈ 0.1**, bounding **height** / diameter / edge within documented tolerance of **2 m**; optional integration test that **list** after fresh DB returns **three** expected names.
 
 ---
 
@@ -376,7 +418,9 @@ sequenceDiagram
 | REQ-005 | §1, §3.1, §3.6 |
 | REQ-006 | §1, §3.1–§3.3, §3.2, §4.3, §4.6, §7–§8 |
 | REQ-007 | §1, §3.3, §3.6, §8.3 |
+| REQ-008 | §1, §2, §3.1, §3.7, §3.5 (release:sync contract) |
+| REQ-009 | §1, §2, §3.1, §3.3, §3.8 |
 
 ---
 
-**Next step:** Invoke the **`@implementor`** agent to implement **`internal/wiremodel`**, **`internal/store`**, HTTP handlers, and **`web/`** models pages per this document and **`docs/acceptance_criteria.md`**. When the feature is done, invoke the **`@verifier`** agent to audit, run tests, and update **`docs/traceability_matrix.md`**.
+**Next step:** Invoke the **`@implementor`** agent to add **`scripts/run.sh`**, **`internal/samples`**, **`store.SeedDefaultSamples`** (or equivalent) wired from **`cmd/server`**, and update **`README.md`** with the exact **REQ-008** command. Then invoke the **`@verifier`** agent to audit, run tests, and update **`docs/traceability_matrix.md`**.

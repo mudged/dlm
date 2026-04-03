@@ -289,3 +289,85 @@ As a user, when I upload a CSV to create a model, I want the system to **reject 
 - Whether **empty** models (**n = 0**) are allowed.
 
 ---
+
+### REQ-008 — Single command to build and run locally
+
+| Field | Value |
+|-------|-------|
+| **ID** | REQ-008 |
+| **Title** | Single command to build and run locally |
+| **Priority** | Must |
+| **Actor(s)** | Developer; operator |
+
+**User story**
+
+As a developer, I want **one command** from the repository (or a **single script** invoked from the repo root) that **builds** the UI for embedding and **starts** the application, so that I can run the full stack without remembering multiple steps.
+
+**Scope**
+
+- In scope: A **documented** entry point (e.g. shell script under `scripts/`, or a **Makefile** target, or equivalent agreed in architecture) runnable from a **normal clone** that performs: produce the **static export** needed for embed, then **launch** the **Go** server so the app is reachable (default listen per configuration, e.g. `:8080`). The command MUST be suitable for **local** use on Linux/macOS/WSL; Windows MAY use Git Bash/WSL or a documented alternative.
+- Out of scope: **Production** Pi install scripts as the only path; **Docker** as the canonical runner (REQ-004 still applies); CI matrix beyond “this command is documented and works in the devcontainer or primary dev OS.”
+
+**Business rules**
+
+1. **README.md** MUST document the **exact** command(s) to invoke (including script path or target name).
+2. The workflow MUST **not** require a **second manual step** after the single command for a **standard** “build UI + run server” session (one invocation completes both).
+3. **AGENTS.md** (or this requirements set referenced there) MUST acknowledge that **REQ-008** exists so agents keep **README** and the script in sync when the workflow changes.
+
+**Responsive / UX notes** *(when UI is involved)*
+
+- Mobile: N/A (developer tooling).
+- Tablet: N/A
+- Desktop: N/A
+
+**Dependencies**
+
+- REQ-001, REQ-004
+
+**Open questions**
+
+- Whether the same command also runs **`go test`** or **lint** (optional flags vs separate targets).
+
+---
+
+### REQ-009 — Default sample models (sphere, cube, cone)
+
+| Field | Value |
+|-------|-------|
+| **ID** | REQ-009 |
+| **Title** | Default sample models (sphere, cube, cone) |
+| **Priority** | Must |
+| **Actor(s)** | End user |
+
+**User story**
+
+As a user, I want **three sample light models** available **by default** that illustrate **geometric shapes**, so that I can explore the product before uploading my own CSV.
+
+**Scope**
+
+- In scope: On a **fresh** application data set (e.g. empty database or first startup), the system MUST expose **exactly three** predefined models, distinct in name and geometry, representing: a **sphere**, a **cube**, and a **cone**. Coordinates use **SI meters**; **consecutive** lights (by **id** order **0, 1, …**) MUST be separated by a Euclidean distance of **exactly 0.1 m** (**10 cm**). Each shape MUST have an overall vertical extent (**height**) of **about 2 m** (interpreted as: sphere **diameter** ~2 m; cube **edge length** ~2 m; **right circular cone** with **height** ~2 m and base diameter chosen consistently with the geometry—exact proportions deferred to architecture within these bounds).
+- Out of scope: User editing of sample models; optional **toggle to hide** samples; lighting beyond positions.
+
+**Business rules**
+
+1. The three samples MUST appear in the **same** **list** and **detail** flows as user-created models (**REQ-006**).
+2. Each sample MUST stay within **REQ-005** (**≤ 1000** lights per model). If a literal **0.1 m** spacing along the chosen path would exceed **1000** lights, architecture MUST adjust the **path length** or **sampling** while keeping rules testable (document any cap in architecture).
+3. Sample model **names** MUST make the shape identifiable (e.g. containing “sphere”, “cube”, “cone” or equivalent localized labels—English product default acceptable).
+4. Samples MUST be **regenerated** or **re-seeded** when appropriate on empty store per persistence rules in architecture (e.g. migration seed, idempotent startup hook).
+
+**Responsive / UX notes** *(when UI is involved)*
+
+- Mobile: Samples appear in the list like other models; readable names.
+- Tablet: Same as mobile.
+- Desktop: Same.
+
+**Dependencies**
+
+- REQ-005, REQ-006
+
+**Open questions**
+
+- Whether samples are **removed** if the user deletes them manually.
+- Whether **multiple** coordinate rings on the sphere are allowed vs a **single** space curve.
+
+---

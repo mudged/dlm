@@ -80,3 +80,28 @@ func TestStore_EmptyLights(t *testing.T) {
 		t.Fatalf("detail %+v err %v", d, err)
 	}
 }
+
+func TestStore_SeedDefaultSamples_idempotent(t *testing.T) {
+	ctx := context.Background()
+	s := testDB(t)
+	if err := s.SeedDefaultSamples(ctx); err != nil {
+		t.Fatal(err)
+	}
+	list, err := s.List(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 3 {
+		t.Fatalf("after seed want 3 models, got %d", len(list))
+	}
+	if err := s.SeedDefaultSamples(ctx); err != nil {
+		t.Fatal(err)
+	}
+	list2, err := s.List(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list2) != 3 {
+		t.Fatalf("second seed must not duplicate, got %d", len(list2))
+	}
+}

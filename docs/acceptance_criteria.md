@@ -147,6 +147,50 @@ Feature: CSV upload validation
     When the user uploads the file to create a model
     Then the upload is rejected
     And the user sees feedback indicating the file format is incorrect
+
+Feature: Single command build and run (REQ-008)
+
+  Scenario: README documents the one-shot build-and-run command
+    Parent requirement: REQ-008
+    Given docs/requirements.md defines REQ-008
+    When README.md is read
+    Then it states the exact command or script path to build the static UI and run the Go server in one invocation
+    And AGENTS.md references REQ-008 so the workflow stays documented for agents
+
+  Scenario: Requirements mandate no extra manual step for standard local run
+    Parent requirement: REQ-008
+    Given docs/requirements.md exists
+    When REQ-008 business rules are read
+    Then a single documented invocation must complete static UI build for embed and start the server without requiring a second manual step for that standard session
+
+Feature: Default geometric sample models (REQ-009)
+
+  Scenario: Fresh data set exposes three shape samples
+    Parent requirement: REQ-009
+    Given the application store has no user-created models and default seeding applies
+    When the user opens the model list
+    Then exactly three predefined models are visible
+    And their names identify a sphere, a cube, and a cone respectively
+
+  Scenario: Consecutive lights are 10 cm apart in meters
+    Parent requirement: REQ-009
+    Given a default sample model with at least two lights
+    When lights are ordered by id ascending
+    Then the Euclidean distance between each pair of consecutive lights is 0.1 meters
+
+  Scenario: Each sample shape is about 2 meters tall
+    Parent requirement: REQ-009
+    Given the default sphere, cube, and cone sample models
+    When their geometry is evaluated per REQ-009 scope
+    Then the sphere has diameter about 2 meters
+    And the cube has edge length about 2 meters
+    And the cone has height about 2 meters
+
+  Scenario: Samples respect the 1000 light cap
+    Parent requirement: REQ-009
+    Given docs/requirements.md defines REQ-005 and REQ-009
+    When each default sample model is inspected
+    Then each has at most 1000 lights
 ```
 
 ---

@@ -19,6 +19,10 @@ This repo uses a **spec-driven, multi-agent** process. Agent definitions live un
 
 **Handoffs:** Each agent’s instructions end with who to invoke next; follow that chain unless you intentionally revisit an earlier stage.
 
+## Local build and run (REQ-008)
+
+**REQ-008** (see `docs/requirements.md`) requires a **single documented command** (script or Makefile target) that builds the Next static export for embed and starts the Go server. **`README.md` MUST stay aligned** with that command. When changing how the app is built or launched locally, update **requirements/architecture** if behavior changes, then **README**, then implementation.
+
 ## Supporting documents (expected paths)
 
 Create and maintain these as the process runs (templates define shape):

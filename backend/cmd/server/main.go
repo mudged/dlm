@@ -37,6 +37,11 @@ func main() {
 	}
 	defer func() { _ = st.Close() }()
 
+	if err := st.SeedDefaultSamples(context.Background()); err != nil {
+		log.Error("seed default samples", "err", err)
+		os.Exit(1)
+	}
+
 	ui, err := webdist.StaticFS()
 	if err != nil {
 		log.Error("webdist", "err", err)
