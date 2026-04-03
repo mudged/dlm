@@ -7,11 +7,13 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
 	"example.com/dlm/backend/internal/config"
 	"example.com/dlm/backend/internal/httpapi"
+	"example.com/dlm/backend/internal/store"
 	"example.com/dlm/backend/internal/webdist"
 )
 
@@ -24,13 +26,24 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err := os.MkdirAll(filepath.Dir(cfg.DBPath), 0o755); err != nil {
+		log.Error("mkdir db dir", "path", cfg.DBPath, "err", err)
+		os.Exit(1)
+	}
+	st, err := store.Open(cfg.DBPath)
+	if err != nil {
+		log.Error("store", "path", cfg.DBPath, "err", err)
+		os.Exit(1)
+	}
+	defer func() { _ = st.Close() }()
+
 	ui, err := webdist.StaticFS()
 	if err != nil {
 		log.Error("webdist", "err", err)
 		os.Exit(1)
 	}
 
-	handler := httpapi.NewSiteHandler(cfg, ui)
+	handler := httpapi.NewSiteHandler(cfg, ui, st)
 	srv := &http.Server{
 		Addr:              cfg.HTTPListen,
 		Handler:           handler,

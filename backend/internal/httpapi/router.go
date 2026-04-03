@@ -9,18 +9,33 @@ import (
 	"strings"
 
 	"example.com/dlm/backend/internal/config"
+	"example.com/dlm/backend/internal/store"
 )
+
+// apiDeps holds API handlers' shared dependencies.
+type apiDeps struct {
+	store *store.Store
+}
 
 // NewSiteHandler wires /health, /api/v1/, and optional static UI from content (Next export).
 // API routes are registered before the static file server. If content is nil, only API routes exist.
-func NewSiteHandler(cfg *config.Config, content fs.FS) http.Handler {
+// st must be non-nil (models API requires persistence).
+func NewSiteHandler(cfg *config.Config, content fs.FS, st *store.Store) http.Handler {
+	if st == nil {
+		panic("httpapi.NewSiteHandler: store is nil")
+	}
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{}))
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", healthHandler)
 
 	api := http.NewServeMux()
+	deps := &apiDeps{store: st}
 	api.HandleFunc("GET /status", statusHandler)
+	api.HandleFunc("GET /models", deps.listModels)
+	api.HandleFunc("POST /models", deps.createModel)
+	api.HandleFunc("GET /models/{id}", deps.getModel)
+	api.HandleFunc("DELETE /models/{id}", deps.deleteModel)
 	api.HandleFunc("GET /{path...}", apiNotFoundHandler)
 	mux.Handle("/api/v1/", http.StripPrefix("/api/v1", api))
 

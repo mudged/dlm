@@ -3,17 +3,19 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 )
 
-// Config holds HTTP server and CORS settings (12-factor env).
+// Config holds HTTP server, CORS, and SQLite path (12-factor env).
 type Config struct {
 	HTTPListen         string
 	ReadTimeout        time.Duration
 	WriteTimeout       time.Duration
 	CORSAllowedOrigins []string
+	DBPath             string
 }
 
 // Load reads configuration from environment variables.
@@ -44,11 +46,21 @@ func Load() (*Config, error) {
 		}
 	}
 
+	dbPath := strings.TrimSpace(os.Getenv("DLM_DB_PATH"))
+	if dbPath == "" {
+		dataDir := strings.TrimSpace(os.Getenv("DLM_DATA_DIR"))
+		if dataDir == "" {
+			dataDir = "data"
+		}
+		dbPath = filepath.Join(dataDir, "dlm.db")
+	}
+
 	return &Config{
 		HTTPListen:         listen,
 		ReadTimeout:        time.Duration(readSec) * time.Second,
 		WriteTimeout:       time.Duration(writeSec) * time.Second,
 		CORSAllowedOrigins: origins,
+		DBPath:             dbPath,
 	}, nil
 }
 

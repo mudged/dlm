@@ -5,24 +5,39 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 	"testing/fstest"
 	"time"
 
 	"example.com/dlm/backend/internal/config"
+	"example.com/dlm/backend/internal/store"
 )
+
+func testStore(t *testing.T) *store.Store {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "test.db")
+	s, err := store.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	return s
+}
 
 func newTestHandler(t *testing.T, cfg *config.Config) http.Handler {
 	t.Helper()
 	if cfg == nil {
-		var err error
-		cfg, err = config.Load()
-		if err != nil {
-			t.Fatal(err)
+		cfg = &config.Config{
+			HTTPListen:         ":8080",
+			ReadTimeout:        15 * time.Second,
+			WriteTimeout:       15 * time.Second,
+			CORSAllowedOrigins: nil,
+			DBPath:             filepath.Join(t.TempDir(), "unused.db"),
 		}
 	}
-	return NewSiteHandler(cfg, nil)
+	return NewSiteHandler(cfg, nil, testStore(t))
 }
 
 func TestHealth_returnsOKJSON(t *testing.T) {
@@ -31,6 +46,7 @@ func TestHealth_returnsOKJSON(t *testing.T) {
 		ReadTimeout:        15 * time.Second,
 		WriteTimeout:       15 * time.Second,
 		CORSAllowedOrigins: nil,
+		DBPath:             filepath.Join(t.TempDir(), "unused.db"),
 	}))
 	t.Cleanup(srv.Close)
 
@@ -62,6 +78,7 @@ func TestAPIv1Status_returnsJSON(t *testing.T) {
 		ReadTimeout:        15 * time.Second,
 		WriteTimeout:       15 * time.Second,
 		CORSAllowedOrigins: nil,
+		DBPath:             filepath.Join(t.TempDir(), "unused.db"),
 	}))
 	t.Cleanup(srv.Close)
 
@@ -91,6 +108,7 @@ func TestAPIv1UnknownRoute_returnsErrorEnvelope(t *testing.T) {
 		ReadTimeout:        15 * time.Second,
 		WriteTimeout:       15 * time.Second,
 		CORSAllowedOrigins: nil,
+		DBPath:             filepath.Join(t.TempDir(), "unused.db"),
 	}))
 	t.Cleanup(srv.Close)
 
@@ -123,8 +141,9 @@ func TestCORSPreflight_allowsConfiguredOrigin(t *testing.T) {
 		ReadTimeout:        15 * time.Second,
 		WriteTimeout:       15 * time.Second,
 		CORSAllowedOrigins: []string{"http://localhost:3000"},
+		DBPath:             filepath.Join(t.TempDir(), "unused.db"),
 	}
-	srv := httptest.NewServer(NewSiteHandler(cfg, nil))
+	srv := httptest.NewServer(NewSiteHandler(cfg, nil, testStore(t)))
 	t.Cleanup(srv.Close)
 
 	req, err := http.NewRequest(http.MethodOptions, srv.URL+"/api/v1/status", nil)
@@ -159,8 +178,9 @@ func TestStatic_servesEmbeddableExport(t *testing.T) {
 		ReadTimeout:        15 * time.Second,
 		WriteTimeout:       15 * time.Second,
 		CORSAllowedOrigins: nil,
+		DBPath:             filepath.Join(t.TempDir(), "unused.db"),
 	}
-	srv := httptest.NewServer(NewSiteHandler(cfg, fsys))
+	srv := httptest.NewServer(NewSiteHandler(cfg, fsys, testStore(t)))
 	t.Cleanup(srv.Close)
 
 	res, err := http.Get(srv.URL + "/")
@@ -195,8 +215,9 @@ func TestAPI_precedenceOverStaticPrefix(t *testing.T) {
 		ReadTimeout:        15 * time.Second,
 		WriteTimeout:       15 * time.Second,
 		CORSAllowedOrigins: nil,
+		DBPath:             filepath.Join(t.TempDir(), "unused.db"),
 	}
-	srv := httptest.NewServer(NewSiteHandler(cfg, fsys))
+	srv := httptest.NewServer(NewSiteHandler(cfg, fsys, testStore(t)))
 	t.Cleanup(srv.Close)
 
 	res, err := http.Get(srv.URL + "/health")
@@ -220,8 +241,9 @@ func TestStatic_unknownClientRoute_fallsBackToIndexHTML(t *testing.T) {
 		ReadTimeout:        15 * time.Second,
 		WriteTimeout:       15 * time.Second,
 		CORSAllowedOrigins: nil,
+		DBPath:             filepath.Join(t.TempDir(), "unused.db"),
 	}
-	srv := httptest.NewServer(NewSiteHandler(cfg, fsys))
+	srv := httptest.NewServer(NewSiteHandler(cfg, fsys, testStore(t)))
 	t.Cleanup(srv.Close)
 
 	res, err := http.Get(srv.URL + "/settings/profile")
@@ -247,8 +269,9 @@ func TestStatic_missingNextAsset_returnsNotFound(t *testing.T) {
 		ReadTimeout:        15 * time.Second,
 		WriteTimeout:       15 * time.Second,
 		CORSAllowedOrigins: nil,
+		DBPath:             filepath.Join(t.TempDir(), "unused.db"),
 	}
-	srv := httptest.NewServer(NewSiteHandler(cfg, fsys))
+	srv := httptest.NewServer(NewSiteHandler(cfg, fsys, testStore(t)))
 	t.Cleanup(srv.Close)
 
 	res, err := http.Get(srv.URL + "/_next/static/missing.js")
