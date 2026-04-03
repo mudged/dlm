@@ -30,6 +30,21 @@ func readRequirements(t *testing.T) string {
 	return string(b)
 }
 
+// requirementBlock returns the markdown subsection starting at "### REQ-xxx" up to (but not including) the next "### REQ-" heading.
+func requirementBlock(doc, reqID string) string {
+	prefix := "### " + reqID + " —"
+	i := strings.Index(doc, prefix)
+	if i < 0 {
+		return ""
+	}
+	rest := doc[i:]
+	next := strings.Index(rest[len(prefix):], "\n### REQ-")
+	if next < 0 {
+		return rest
+	}
+	return rest[: len(prefix)+next]
+}
+
 func TestAcceptance_REQ001_fullStackComposition(t *testing.T) {
 	doc := readRequirements(t)
 	lower := strings.ToLower(doc)
@@ -100,5 +115,111 @@ func TestAcceptance_REQ004_singleBinaryNoDocker(t *testing.T) {
 	}
 	if !strings.Contains(lower, "docs/architecture.md") {
 		t.Fatal("REQ-004 must require architecture reconciliation (single-binary model)")
+	}
+}
+
+func TestAcceptance_REQ005_wireLightModel(t *testing.T) {
+	doc := readRequirements(t)
+	block := requirementBlock(doc, "REQ-005")
+	if block == "" {
+		t.Fatal("requirements must contain ### REQ-005 section")
+	}
+	lower := strings.ToLower(block)
+	if !strings.Contains(lower, "1000") {
+		t.Fatal("REQ-005 must cap lights at 1000")
+	}
+	if !strings.Contains(lower, "csv") {
+		t.Fatal("REQ-005 must mention CSV interchange")
+	}
+	for _, col := range []string{"id", "x", "y", "z"} {
+		needle := "**" + col + "**"
+		if !strings.Contains(block, needle) {
+			t.Fatalf("REQ-005 must mention column/field %s in requirements text", needle)
+		}
+	}
+	if !strings.Contains(lower, "metadata") {
+		t.Fatal("REQ-005 must mention model metadata")
+	}
+	if !strings.Contains(lower, "name") {
+		t.Fatal("REQ-005 must mention model name in metadata")
+	}
+	if !strings.Contains(lower, "creation date") {
+		t.Fatal("REQ-005 must mention creation date in metadata")
+	}
+	if !strings.Contains(lower, "sequential") && !strings.Contains(lower, "contiguous") {
+		t.Fatal("REQ-005 must require sequential/contiguous light indices")
+	}
+	if !strings.Contains(block, "starting at **0**") {
+		t.Fatal("REQ-005 must state indices start at 0")
+	}
+	if !strings.Contains(block, "| **Priority** | Must |") {
+		t.Fatal("REQ-005 metadata must state priority Must")
+	}
+}
+
+func TestAcceptance_REQ006_modelCRUDAndCSVUpload(t *testing.T) {
+	doc := readRequirements(t)
+	block := requirementBlock(doc, "REQ-006")
+	if block == "" {
+		t.Fatal("requirements must contain ### REQ-006 section")
+	}
+	lower := strings.ToLower(block)
+	for _, verb := range []string{"list", "view", "delete"} {
+		if !strings.Contains(lower, verb) {
+			t.Fatalf("REQ-006 must mention %q", verb)
+		}
+	}
+	if !strings.Contains(lower, "upload") {
+		t.Fatal("REQ-006 must mention uploading a CSV")
+	}
+	if !strings.Contains(lower, "csv") {
+		t.Fatal("REQ-006 must mention CSV for create")
+	}
+	for _, kw := range []string{"mobile", "tablet", "desktop"} {
+		if !strings.Contains(lower, kw) {
+			t.Fatalf("REQ-006 responsive notes must mention %q", kw)
+		}
+	}
+	if !strings.Contains(lower, "req-005") || !strings.Contains(lower, "req-001") {
+		t.Fatal("REQ-006 dependencies must reference prior requirements (e.g. REQ-001, REQ-005)")
+	}
+	if !strings.Contains(block, "| **Priority** | Must |") {
+		t.Fatal("REQ-006 metadata must state priority Must")
+	}
+}
+
+func TestAcceptance_REQ007_validateCSVOnUpload(t *testing.T) {
+	doc := readRequirements(t)
+	block := requirementBlock(doc, "REQ-007")
+	if block == "" {
+		t.Fatal("requirements must contain ### REQ-007 section")
+	}
+	lower := strings.ToLower(block)
+	if !strings.Contains(lower, "validat") {
+		t.Fatal("REQ-007 must require validation on upload")
+	}
+	if !strings.Contains(lower, "csv") {
+		t.Fatal("REQ-007 must mention CSV")
+	}
+	if !strings.Contains(lower, "sequential") || !strings.Contains(lower, "id") {
+		t.Fatal("REQ-007 must mention sequential id rules")
+	}
+	if !strings.Contains(lower, "1000") {
+		t.Fatal("REQ-007 must reference the 1000-light maximum")
+	}
+	if !strings.Contains(lower, "finite") {
+		t.Fatal("REQ-007 must require finite numeric coordinates")
+	}
+	if !strings.Contains(lower, "actionable") || !strings.Contains(lower, "feedback") {
+		t.Fatal("REQ-007 must require actionable feedback on rejection")
+	}
+	if !strings.Contains(lower, "partial") {
+		t.Fatal("REQ-007 must forbid persisting a partial model on failed upload")
+	}
+	if !strings.Contains(lower, "req-005") && !strings.Contains(lower, "req-006") {
+		t.Fatal("REQ-007 dependencies must reference REQ-005 or REQ-006")
+	}
+	if !strings.Contains(block, "| **Priority** | Must |") {
+		t.Fatal("REQ-007 metadata must state priority Must")
 	}
 }
