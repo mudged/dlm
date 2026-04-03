@@ -1,9 +1,20 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import type { ModelDetail } from "@/lib/models";
+
+const ModelLightsCanvas = dynamic(() => import("@/components/ModelLightsCanvas"), {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-[min(50vh,24rem)] min-h-[240px] w-full items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-400">
+        Preparing 3D view…
+      </div>
+    ),
+  },
+);
 
 export function ModelDetailClient() {
   const router = useRouter();
@@ -81,6 +92,21 @@ export function ModelDetailClient() {
           {new Date(model.created_at).toLocaleString()}
         </p>
       </header>
+
+      <section className="space-y-2" aria-labelledby="model-3d-heading">
+        <h2
+          id="model-3d-heading"
+          className="text-sm font-semibold text-slate-800 dark:text-slate-200"
+        >
+          3D view
+        </h2>
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          Drag to rotate; scroll or pinch to zoom. Hover a sphere for id and
+          coordinates (desktop). Tap a sphere to pin the label; tap empty space
+          to clear (touch and mouse).
+        </p>
+        <ModelLightsCanvas lights={model.lights} />
+      </section>
 
       {model.lights.length === 0 ? (
         <p className="text-sm text-slate-600 dark:text-slate-400">

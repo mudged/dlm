@@ -1,0 +1,337 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import * as THREE from "three";
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { boundingFromLights } from "@/lib/lightBounds";
+import type { Light } from "@/lib/models";
+import {
+  buildWireSegmentPositions,
+  SPHERE_RADIUS_M,
+} from "@/lib/wireSegments";
+
+type Props = {
+  lights: Light[];
+};
+
+type PickData = { id: number; x: number; y: number; z: number };
+/** Client coordinates for `position: fixed` tooltip (avoids overflow clipping). */
+type TooltipState = { pick: PickData; cx: number; cy: number };
+
+const TAP_PX = 10;
+const LINE_OPACITY = 0.28;
+const HOVER_DECIMALS = 4;
+
+function sceneBackgroundColor(): THREE.Color {
+  if (typeof window === "undefined") {
+    return new THREE.Color(0xf1f5f9);
+  }
+  return new THREE.Color(
+    window.matchMedia("(prefers-color-scheme: dark)").matches
+      ? 0x0f172a
+      : 0xf1f5f9,
+  );
+}
+
+function formatCoord(n: number): string {
+  return n.toFixed(HOVER_DECIMALS);
+}
+
+function ModelLightsCanvas({ lights }: Props) {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const canvasHostRef = useRef<HTMLDivElement>(null);
+  const [pinned, setPinned] = useState<TooltipState | null>(null);
+  const [hover, setHover] = useState<TooltipState | null>(null);
+  const pinnedRef = useRef<TooltipState | null>(null);
+  pinnedRef.current = pinned;
+
+  useEffect(() => {
+    setPinned(null);
+    setHover(null);
+  }, [lights]);
+
+  useEffect(() => {
+    const wrap = wrapRef.current;
+    const container = canvasHostRef.current;
+    if (!container || !wrap) {
+      return;
+    }
+
+    const sorted = [...lights].sort((a, b) => a.id - b.id);
+    const n = sorted.length;
+
+    const scene = new THREE.Scene();
+    scene.background = sceneBackgroundColor();
+
+    const camera = new THREE.PerspectiveCamera(55, 1, 0.001, 1e7);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.screenSpacePanning = true;
+
+    const margin = SPHERE_RADIUS_M * 2;
+    const { center, maxDim } = boundingFromLights(lights);
+    const [cx, cy, cz] = center;
+    const framedDim = maxDim + margin;
+    const target = new THREE.Vector3(cx, cy, cz);
+    controls.target.copy(target);
+
+    const dist = Math.max(framedDim * 1.8, 0.5);
+    camera.position.set(cx + dist * 0.85, cy + dist * 0.55, cz + dist * 0.85);
+    camera.lookAt(target);
+    controls.update();
+
+    const gridSize = Math.max(framedDim * 2.5, 1);
+    const grid = new THREE.GridHelper(gridSize, 12, 0x94a3b8, 0xcbd5e1);
+    grid.position.set(cx, cy - framedDim * 0.5 - 1e-6, cz);
+    scene.add(grid);
+
+    const disposeGrid = () => {
+      grid.geometry.dispose();
+      const mat = grid.material;
+      if (Array.isArray(mat)) {
+        mat.forEach((m) => m.dispose());
+      } else {
+        mat.dispose();
+      }
+    };
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+    const dir = new THREE.DirectionalLight(0xffffff, 0.9);
+    dir.position.set(1, 1.5, 0.8);
+    scene.add(dir);
+
+    const sphereGeom = new THREE.SphereGeometry(SPHERE_RADIUS_M, 20, 16);
+    const sphereMat = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      metalness: 0.05,
+      roughness: 0.45,
+    });
+
+    let instanced: THREE.InstancedMesh | null = null;
+    const dummy = new THREE.Object3D();
+
+    if (n > 0) {
+      instanced = new THREE.InstancedMesh(sphereGeom, sphereMat, n);
+      instanced.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      for (let i = 0; i < n; i++) {
+        const L = sorted[i];
+        dummy.position.set(L.x, L.y, L.z);
+        dummy.updateMatrix();
+        instanced.setMatrixAt(i, dummy.matrix);
+      }
+      instanced.instanceMatrix.needsUpdate = true;
+      scene.add(instanced);
+    }
+
+    const segPos = buildWireSegmentPositions(lights);
+    let lineSegments: THREE.LineSegments | null = null;
+    if (segPos.length > 0) {
+      const lg = new THREE.BufferGeometry();
+      lg.setAttribute("position", new THREE.BufferAttribute(segPos, 3));
+      const lm = new THREE.LineBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: LINE_OPACITY,
+        depthWrite: false,
+      });
+      lineSegments = new THREE.LineSegments(lg, lm);
+      scene.add(lineSegments);
+    }
+
+    const raycaster = new THREE.Raycaster();
+    const ndc = new THREE.Vector2();
+
+    function pickInstance(clientX: number, clientY: number): PickData | null {
+      if (!instanced || n === 0) {
+        return null;
+      }
+      const canvas = renderer.domElement;
+      const cr = canvas.getBoundingClientRect();
+      ndc.x = ((clientX - cr.left) / cr.width) * 2 - 1;
+      ndc.y = -((clientY - cr.top) / cr.height) * 2 + 1;
+      raycaster.setFromCamera(ndc, camera);
+      const hits = raycaster.intersectObject(instanced, false);
+      if (hits.length === 0 || hits[0].instanceId === undefined) {
+        return null;
+      }
+      const i = hits[0].instanceId;
+      const L = sorted[i];
+      return { id: L.id, x: L.x, y: L.y, z: L.z };
+    }
+
+    let rafHover = 0;
+    let pendingHover: { cx: number; cy: number } | null = null;
+
+    function applyHover(clientX: number, clientY: number) {
+      if (pinnedRef.current) {
+        return;
+      }
+      const pick = pickInstance(clientX, clientY);
+      if (pick) {
+        setHover({ pick, cx: clientX, cy: clientY });
+      } else {
+        setHover(null);
+      }
+    }
+
+    function scheduleHover(clientX: number, clientY: number) {
+      pendingHover = { cx: clientX, cy: clientY };
+      if (rafHover) {
+        return;
+      }
+      rafHover = requestAnimationFrame(() => {
+        rafHover = 0;
+        if (pendingHover) {
+          const { cx, cy } = pendingHover;
+          pendingHover = null;
+          applyHover(cx, cy);
+        }
+      });
+    }
+
+    const ptr = {
+      down: false,
+      x: 0,
+      y: 0,
+      dragged: false,
+    };
+
+    function onPointerDown(e: PointerEvent) {
+      ptr.down = true;
+      ptr.x = e.clientX;
+      ptr.y = e.clientY;
+      ptr.dragged = false;
+    }
+
+    function onPointerMove(e: PointerEvent) {
+      if (ptr.down) {
+        const d = Math.hypot(e.clientX - ptr.x, e.clientY - ptr.y);
+        if (d > TAP_PX) {
+          ptr.dragged = true;
+        }
+      }
+      if (e.pointerType === "mouse") {
+        scheduleHover(e.clientX, e.clientY);
+      }
+    }
+
+    function onPointerUp(e: PointerEvent) {
+      if (ptr.down && !ptr.dragged) {
+        const pick = pickInstance(e.clientX, e.clientY);
+        if (pick) {
+          setPinned({ pick, cx: e.clientX, cy: e.clientY });
+          setHover(null);
+        } else {
+          setPinned(null);
+          if (e.pointerType === "mouse") {
+            applyHover(e.clientX, e.clientY);
+          }
+        }
+      }
+      ptr.down = false;
+      ptr.dragged = false;
+    }
+
+    function onPointerLeave() {
+      if (!pinnedRef.current) {
+        setHover(null);
+      }
+    }
+
+    const canvasEl = renderer.domElement;
+    canvasEl.addEventListener("pointerdown", onPointerDown);
+    canvasEl.addEventListener("pointermove", onPointerMove);
+    canvasEl.addEventListener("pointerup", onPointerUp);
+    canvasEl.addEventListener("pointercancel", onPointerUp);
+
+    wrap.addEventListener("pointerleave", onPointerLeave);
+
+    container.appendChild(canvasEl);
+
+    let raf = 0;
+    const tick = () => {
+      controls.update();
+      renderer.render(scene, camera);
+      raf = requestAnimationFrame(tick);
+    };
+
+    const setSize = () => {
+      const w = Math.max(container.clientWidth, 1);
+      const h = Math.max(container.clientHeight, 1);
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h, false);
+    };
+
+    setSize();
+    const ro = new ResizeObserver(() => setSize());
+    ro.observe(container);
+    tick();
+
+    return () => {
+      cancelAnimationFrame(raf);
+      cancelAnimationFrame(rafHover);
+      ro.disconnect();
+      canvasEl.removeEventListener("pointerdown", onPointerDown);
+      canvasEl.removeEventListener("pointermove", onPointerMove);
+      canvasEl.removeEventListener("pointerup", onPointerUp);
+      canvasEl.removeEventListener("pointercancel", onPointerUp);
+      wrap.removeEventListener("pointerleave", onPointerLeave);
+      controls.dispose();
+      sphereGeom.dispose();
+      sphereMat.dispose();
+      if (lineSegments) {
+        lineSegments.geometry.dispose();
+        (lineSegments.material as THREE.Material).dispose();
+      }
+      disposeGrid();
+      renderer.dispose();
+      if (canvasEl.parentNode === container) {
+        container.removeChild(canvasEl);
+      }
+    };
+  }, [lights]);
+
+  const tip = pinned ?? hover;
+
+  return (
+    <div
+      ref={wrapRef}
+      className="relative h-[min(50vh,24rem)] w-full min-h-[240px] overflow-hidden rounded-xl border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-900"
+      role="img"
+      aria-label="Three-dimensional view of light positions"
+    >
+      <div ref={canvasHostRef} className="absolute inset-0" />
+      {tip ? (
+        <div
+          className="pointer-events-none fixed z-[100] max-w-[14rem] rounded-md border border-slate-300 bg-white/95 px-2 py-1.5 text-xs text-slate-900 shadow-md dark:border-slate-600 dark:bg-slate-900/95 dark:text-slate-100"
+          style={{
+            left: tip.cx + 12,
+            top: tip.cy + 12,
+          }}
+        >
+          <div className="font-semibold">id {tip.pick.id}</div>
+          <div className="font-mono tabular-nums text-[0.7rem] leading-relaxed">
+            x {formatCoord(tip.pick.x)}
+            <br />
+            y {formatCoord(tip.pick.y)}
+            <br />
+            z {formatCoord(tip.pick.z)}
+          </div>
+        </div>
+      ) : null}
+      {lights.length === 0 ? (
+        <span className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-slate-100/80 text-sm text-slate-600 dark:bg-slate-900/80 dark:text-slate-400">
+          No lights — empty model
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+export { ModelLightsCanvas };
+export default ModelLightsCanvas;

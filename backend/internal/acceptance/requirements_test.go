@@ -223,3 +223,144 @@ func TestAcceptance_REQ007_validateCSVOnUpload(t *testing.T) {
 		t.Fatal("REQ-007 metadata must state priority Must")
 	}
 }
+
+func readmePath(t *testing.T) string {
+	t.Helper()
+	root := filepath.Join("..", "..", "..", "README.md")
+	abs, err := filepath.Abs(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return abs
+}
+
+func readREADME(t *testing.T) string {
+	t.Helper()
+	p := readmePath(t)
+	b, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatalf("read %s: %v", p, err)
+	}
+	return string(b)
+}
+
+func TestAcceptance_REQ008_singleCommandBuildAndRun(t *testing.T) {
+	doc := readRequirements(t)
+	block := requirementBlock(doc, "REQ-008")
+	if block == "" {
+		t.Fatal("requirements must contain ### REQ-008 section")
+	}
+	lower := strings.ToLower(block)
+	if !strings.Contains(lower, "readme.md") {
+		t.Fatal("REQ-008 must require README.md to document the command")
+	}
+	if !strings.Contains(lower, "go") {
+		t.Fatal("REQ-008 must mention launching the Go server")
+	}
+	if !strings.Contains(lower, "static") && !strings.Contains(lower, "export") {
+		t.Fatal("REQ-008 must mention static export or embedding the UI build")
+	}
+	if !strings.Contains(lower, "agents.md") {
+		t.Fatal("REQ-008 must reference AGENTS.md for REQ-008 awareness")
+	}
+	if !strings.Contains(lower, "second manual step") {
+		t.Fatal("REQ-008 must address the single-invocation workflow (no second manual step)")
+	}
+	if !strings.Contains(block, "| **Priority** | Must |") {
+		t.Fatal("REQ-008 metadata must state priority Must")
+	}
+	readme := readREADME(t)
+	rl := strings.ToLower(readme)
+	if !strings.Contains(rl, "scripts/run.sh") && !strings.Contains(rl, "script") {
+		t.Fatal("README should document the run script path (e.g. scripts/run.sh) per REQ-008")
+	}
+	if !strings.Contains(rl, "go") {
+		t.Fatal("README should mention the Go server as part of the documented workflow")
+	}
+}
+
+func TestAcceptance_REQ009_defaultSampleModels(t *testing.T) {
+	doc := readRequirements(t)
+	block := requirementBlock(doc, "REQ-009")
+	if block == "" {
+		t.Fatal("requirements must contain ### REQ-009 section")
+	}
+	lower := strings.ToLower(block)
+	for _, shape := range []string{"sphere", "cube", "cone"} {
+		if !strings.Contains(lower, shape) {
+			t.Fatalf("REQ-009 must mention sample shape %q", shape)
+		}
+	}
+	if !strings.Contains(block, "500") || !strings.Contains(block, "1000") {
+		t.Fatal("REQ-009 must state the 500–1000 light count band for samples")
+	}
+	if !strings.Contains(block, "0.05") || !strings.Contains(block, "0.10") {
+		t.Fatal("REQ-009 must state consecutive spacing 0.05 m and 0.10 m (5–10 cm)")
+	}
+	if !strings.Contains(lower, "surface") {
+		t.Fatal("REQ-009 must require lights on the outside surface")
+	}
+	if !strings.Contains(block, "0.03") {
+		t.Fatal("REQ-009 must state the 0.03 m surface deviation tolerance")
+	}
+	if !strings.Contains(lower, "inside") {
+		t.Fatal("REQ-009 must forbid interior placement (not inside the solid)")
+	}
+	if !strings.Contains(lower, "req-005") && !strings.Contains(lower, "req-006") {
+		t.Fatal("REQ-009 dependencies must reference REQ-005 or REQ-006")
+	}
+	if !strings.Contains(lower, "evenly") {
+		t.Fatal("REQ-009 must require even distribution over faces/surfaces")
+	}
+	if !strings.Contains(lower, "plane") {
+		t.Fatal("REQ-009 must mention face planes (cube) / base plane (cone)")
+	}
+	if !strings.Contains(lower, "edge") {
+		t.Fatal("REQ-009 must contrast face coverage with edge-only / wireframe layouts")
+	}
+	if !strings.Contains(block, "| **Priority** | Must |") {
+		t.Fatal("REQ-009 metadata must state priority Must")
+	}
+}
+
+func TestAcceptance_REQ010_threeJsModelView(t *testing.T) {
+	doc := readRequirements(t)
+	block := requirementBlock(doc, "REQ-010")
+	if block == "" {
+		t.Fatal("requirements must contain ### REQ-010 section")
+	}
+	lower := strings.ToLower(block)
+	if !strings.Contains(lower, "three.js") && !strings.Contains(lower, "three") {
+		t.Fatal("REQ-010 must require three.js")
+	}
+	if !strings.Contains(block, "0.01") {
+		t.Fatal("REQ-010 must state 0.01 m (1 cm) sphere diameter")
+	}
+	if !strings.Contains(lower, "white") {
+		t.Fatal("REQ-010 must require white spheres")
+	}
+	if !strings.Contains(lower, "every") && !strings.Contains(lower, "all") {
+		t.Fatal("REQ-010 must require every/all lights to be drawn")
+	}
+	if !strings.Contains(lower, "transparent") || !strings.Contains(lower, "thin") {
+		t.Fatal("REQ-010 must require thin transparent segments")
+	}
+	if !strings.Contains(lower, "hover") {
+		t.Fatal("REQ-010 must mention pointer hover for id and coordinates")
+	}
+	if !strings.Contains(lower, "touch") || !strings.Contains(lower, "tablet") {
+		t.Fatal("REQ-010 must address touch or tablet for coordinate discovery")
+	}
+	if !strings.Contains(lower, "direct") {
+		t.Fatal("REQ-010 must require three.js as a direct front-end dependency")
+	}
+	if !strings.Contains(lower, "manifest") && !strings.Contains(lower, "package") {
+		t.Fatal("REQ-010 must mention the Next.js package manifest for the three dependency")
+	}
+	if !strings.Contains(lower, "req-002") {
+		t.Fatal("REQ-010 dependencies or scope must reference REQ-002 for responsive UX")
+	}
+	if !strings.Contains(block, "| **Priority** | Must |") {
+		t.Fatal("REQ-010 metadata must state priority Must")
+	}
+}

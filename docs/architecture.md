@@ -1,6 +1,6 @@
 # Architecture
 
-This document defines technical structure and deployment for the product described in `docs/requirements.md` (**REQ-001–REQ-009**). It satisfies **REQ-001** (Go + Next.js + Tailwind), **REQ-002** (responsive, client-interactive UI), **REQ-003** (Raspberry Pi 4 Model B, **ARM64**, resource awareness), **REQ-004** (**one runnable executable** per release target; **no** mandatory Docker/OCI/compose packaging at this stage), **REQ-005** (wire light model shape, CSV interchange, metadata), **REQ-006** (list / view / delete / create via CSV upload), **REQ-007** (server-side CSV validation and actionable errors), **REQ-008** (single command to build UI and run the Go server locally), and **REQ-009** (default geometric sample models: sphere, cube, cone; **0.1 m** consecutive spacing; **~2 m** characteristic size).
+This document defines technical structure and deployment for the product described in `docs/requirements.md` (**REQ-001–REQ-010**). It satisfies **REQ-001** (Go + Next.js + Tailwind), **REQ-002** (responsive, client-interactive UI), **REQ-003** (Raspberry Pi 4 Model B, **ARM64**, resource awareness), **REQ-004** (**one runnable executable** per release target; **no** mandatory Docker/OCI/compose packaging at this stage), **REQ-005** (wire light model shape, CSV interchange, metadata), **REQ-006** (list / view / delete / create via CSV upload), **REQ-007** (server-side CSV validation and actionable errors), **REQ-008** (single command to build UI and run the Go server locally), **REQ-009** (default **sphere**, **cube**, **cone** samples: lights on **exterior** nominal surfaces with **even** coverage of **face planes** (**cube**) and **surface area** (**sphere** / **cone**), **not** **edge-only** or **single-curve-only** layouts; consecutive spacing **0.05–0.10 m**; **500–1000** lights each; **≤ 0.03 m** surface deviation; **~2 m** characteristic size), and **REQ-010** (**three.js** **3D** view on **model detail**: **every** light as **1 cm** **white** sphere; **all** lights drawn for **n ≤ 1000**; **thin transparent** segments for **previous/next** along **id** order; **hover** / **touch** disclosure of **id** and **coordinates**).
 
 ## Architectural resolution: REQ-004 (single binary) vs Next.js
 
@@ -28,7 +28,8 @@ This meets REQ-004 rule 1 (**no separate Node.js runtime** in the distribution) 
 | REQ-006 | **REST JSON API** for models + **Next.js** client pages (list, detail, upload, delete); **multipart** upload for CSV. |
 | REQ-007 | **Authoritative validation** in Go when ingesting CSV; **transactional** create (all-or-nothing); **400** responses with clear **error** envelope. |
 | REQ-008 | **`scripts/run.sh`** (or documented equivalent) from repo root: **`npm run release:sync`** in `web/` then **`go run ./cmd/server`** in `backend/`; **README** documents exact invocation (**§3.7**). |
-| REQ-009 | **`internal/samples`** generates three polylines in **SI meters**; **`store`** (or **`cmd/server`**) **seeds** when **`models`** row count is **0** at startup (**§3.8**). |
+| REQ-009 | **`internal/samples`** builds three **ordered** light paths on each solid’s boundary (**500 ≤ n ≤ 1000**, **0.05–0.10 m** consecutive chords, **§3.8**) with **even** placement on **faces** / **surfaces** per **§3.8**; **`store.SeedDefaultSamples`** when **`models`** empty (**§3.8**). |
+| REQ-010 | **`three`** direct; **client-only** detail: **InstancedMesh** **ø 0.01 m** **white** for **all n** lights (**no** LOD/decimation); **`LineSegments`** **i↔i+1**; **`Raycaster`** + **DOM** tooltip (**§4.7**). |
 
 **Assumed Pi context:** Raspberry Pi 4 Model B, **64-bit OS**, **ARM64** userspace. **2–8 GB RAM** — with **no Node** at runtime, **4 GB** is practical for modest traffic; **off-device** `next export` builds recommended.
 
@@ -53,7 +54,7 @@ dlm/
       config/
       httpapi/                # API mux + middleware + JSON handlers (incl. models HTTP)
       wiremodel/              # domain types, CSV parse + validation (REQ-005/007)
-      samples/                # deterministic 3D polylines: sphere, cube, cone (REQ-009)
+      samples/                # deterministic boundary sampling + id order: sphere, cube, cone (REQ-009 §3.8)
       store/                  # persistence for models (SQLite, REQ-006); SeedDefaultSamples (REQ-009)
       webdist/                # holds embedded payload (see §3.5); populated by build, not hand-edited
         placeholder.txt       # optional tiny file so empty embed works in dev before first UI build
@@ -82,7 +83,7 @@ dlm/
 - **`internal/httpapi`:** Middleware (**request ID**, **slog**, **recover**, optional **CORS**); **JSON** handlers and error envelope `{ "error": { "code", "message" } }`; **models** routes delegate to **`internal/store`** and **`internal/wiremodel`**.
 - **`internal/wiremodel`:** Parses and validates uploaded **CSV** per **§3.6**; returns structured errors for HTTP **400** responses (**REQ-007**).
 - **`internal/store`:** **SQLite** repository (see **§3.3**); opened at process start; migrations or `CREATE IF NOT EXISTS` for schema (**REQ-006**); **idempotent default seed** when no models exist (**§3.8**, **REQ-009**).
-- **`internal/samples`:** Pure functions that return **`[]wiremodel.Light`** (sequential **id**s from **0**) for the three canonical shapes; no I/O (**REQ-009**).
+- **`internal/samples`:** Pure functions that return **`[]wiremodel.Light`** (sequential **id**s from **0**) for the three canonical shapes: **on-surface** positions, **even** coverage per **§3.8**, consecutive **dᵢ** in band; no I/O (**REQ-009**).
 
 ### 3.2 HTTP surface
 
@@ -160,28 +161,52 @@ dlm/
 
 ### 3.8 Default sample models (**REQ-009**)
 
-**Units:** All coordinates in **meters**; consecutive lights (**id** **i** → **i+1**) have Euclidean distance **exactly `0.1`** (10 cm), within **floating-point tolerance** used in tests (e.g. **`1e-9`** m or **ulp**-aware assert—implementor picks one and documents it).
+**Units:** **SI meters**. Each sample returns **`[]wiremodel.Light`** with sequential **`id` 0 … n−1** (this order is the **polyline** order for **REQ-010** segment drawing).
+
+**Counts:** Each of the three samples MUST have **500 ≤ n ≤ 1000** vertices (**REQ-009** / **REQ-005**). Choose a **deterministic** **n** per shape (fixed constant or derived from a reproducible rule) so tests and seeds are stable.
+
+**Consecutive spacing:** For every **i ∈ {0,…,n−2}**, let **dᵢ** be the Euclidean distance between light **i** and **i+1**. Require **0.05 ≤ dᵢ ≤ 0.10** (5–10 cm). Tests SHOULD use a small tolerance (e.g. **`1e-3`** m) on the bounds to absorb floating-point error; document the chosen **ε**.
+
+**Surface placement (nominal solids, centered/aligned as today):**
+
+- **Nominal boundary:** Analytic surface of the intended **sphere** (**radius R = 1.0** m, diameter **2 m**, center **origin**), **axis-aligned cube** (**edge 2** m, center **origin**, faces at **±1** m), or **right circular cone** (**height 2** m, base radius **1** m, base in **z = 0** plane, apex at **(0,0,2)** — or equivalent consistent pose documented in code).
+- **Exterior only:** Each vertex MUST lie **on** the nominal boundary **or** in the **thin outer shell** allowed by requirements: **closest** distance from the point to the **nominal surface** MUST be **≤ 0.03** m, and the point MUST **not** lie in the **interior** of the solid (e.g. sphere: **‖p‖ ≥ R − δ** with **δ** tiny for float; cube: not strictly inside the **2×2×2** volume; cone: on or outside the **lateral surface + base disk** region as defined by implementor’s half-space test).
+
+**Coverage intent (REQ-009 “not edge-only”):**
+
+- **Cube:** Lights MUST be placed on **all six** exterior **square face planes**. A **wireframe** layout (vertices and **edges only**) is **not** sufficient. The **majority** of lights MUST lie in the **interior** of each face’s square (parameterized patch), not only on **edges** or **corners**—architecture sets a **quota**: at least **⌊0.85 n⌋** lights MUST lie **strictly** in the **open** face patches (each coordinate on a face is **inside** the **(−1,1)²** parameter rectangle for that face, i.e. not on the **rim** of the square in face-local **(u,v)**). The remaining lights MAY be used for **transitions** between faces or to satisfy **dᵢ** if needed. **Evenness (cube):** Partition **n** across the six faces with counts differing by **at most one** (e.g. base **q = ⌊n/6⌋**, **r = n mod 6** faces get **q+1** lights). On each face, place that many points on a **deterministic quasi-uniform 2D pattern** in **(u,v)** (e.g. **regular staggered grid**, **2D Halton** pairs, or **boustrophedon** rows) so **area** coverage is **even** within the face; document the chosen pattern in code comments.
+- **Sphere:** Lights MUST lie on **‖p‖ = R** and MUST **not** read as **concentrated on a single narrow strip** or **one 1D curve** only. **Evenness (sphere):** Use a **point set** known for **approximate equal area** per point on the sphere (e.g. **Fibonacci / golden-angle** lattice, **HEALPix-style** construction, or **subdivided icosahedron** vertices). After placement, **order** into the final polyline (below) so **REQ-010** still shows a connected path; the **underlying** set MUST pass tests that **no** hemisphere (or other fixed **cap** of bounded area) contains more than a **documented fraction** of lights (e.g. **≤ 55%** of **n** in any closed hemisphere through the center)—implementor picks caps and thresholds to match acceptance tests.
+- **Cone:** Lights MUST cover **both** the **lateral** (curved) surface **and** the **flat base disk** (**z = 0**, **ρ ≤ r**). **Evenness (cone):** Split **n** between **lateral** and **base** in proportion to **surface areas** (lateral **π r ℓ**, base **π r²** with slant height **ℓ**), rounding with a **deterministic rule** so the two counts sum to **n**. On the lateral patch, use a **(height, azimuth)** quasi-uniform grid or spiral; on the base, use a **polar** or **2D** quasi-uniform pattern in the **disk**. Same **≥ 85%** rule as the cube applies **within each part**: at least **⌊0.85 n_lat⌋** lateral lights MUST lie in the **interior** of the lateral patch (not only on the **rim** or **apex**), and at least **⌊0.85 n_base⌋** base lights in the **interior** of the **disk** (**ρ** strictly between **0** and **r**), unless **n** for that part is too small—in which case document the **degenerate** exception in tests.
+
+**Ordering vs spacing (two-step design):**
+
+Requirements demand **both** **even** **2D/area** placement **and** **consecutive** **dᵢ** in **[0.05, 0.10]**. Architecturally, treat this as:
+
+1. **Target positions:** Produce an **unordered** (or weakly ordered) multiset of **on-surface** points meeting **evenness** and **per-face/per-part quotas** above.
+2. **Path construction:** Build a **single open polyline** **P₀,…,P_{n−1}** through **exactly** those points (or through **refined** points after **subdivision**) such that every **dᵢ** lies in the band. **Allowed techniques:** (a) generate points **along** a **space-filling** or **serpentine** path on the unfolded or parameterized surface so consecutive samples are naturally **~0.075 m** apart; (b) **sort** / **chain** with **greedy nearest-neighbor** from a **fixed seed** and then **split long edges** / **merge short jumps** by inserting or removing intermediates **on the same surface**; (c) **walk** face patches in a **fixed order** (cube) with **boustrophedon** rows at **~0.075 m** step, using **short** **surface** segments across **edges** only where needed. **Subdivide** any segment longer than **0.10 m** with collinear **on-surface** inserts; **avoid** interior shortcuts that leave the boundary.
+
+**Spacing algorithm (implementor):** After the polyline exists, **verify** all **dᵢ**; adjust with **subdivision** or **local reordering** while **preserving** **evenness** tests. If **n** falls outside **[500,1000]**, **retune** step size or **pattern density** and regenerate—do **not** relax **dᵢ** or **surface** rules.
 
 **Architectural resolutions (requirements open questions):**
 
-- **Sphere vs multiple rings:** Use a **single** open polyline (or closed loop) in **3D** whose vertices lie on the **sphere surface**. Recommended approach: **radius `R = 1.0` m** (diameter **2 m**); generate vertices by walking a **space curve** on the sphere (e.g. **parametric loxodrome / approximate spiral** from south toward north) such that each step has chord length **0.1** m until the curve completes a visually clear sphere outline; **cap total lights ≤ 1000** by **stopping early** or **coarsening** only if needed (REQ-005).
+- **Open vs closed path:** **Open polyline** is the default; **REQ-010** draws segments **(i, i+1)** only, so **no** automatic **(n−1,0)** unless requirements change.
 - **User deletes samples:** **Seed only when `SELECT COUNT(*) FROM models` is 0** immediately after migrations on **process startup**. Deleting a subset does **not** re-seed during that run; if the user deletes **all** models, **next** process start seeds again.
-- **Fixed English names** (must remain **unique** vs typical user uploads): **`Sample sphere`**, **`Sample cube`**, **`Sample cone`** (adjust only if **i18n** is added later).
+- **Fixed English names:** **`Sample sphere`**, **`Sample cube`**, **`Sample cone`**.
 
-**Per-shape geometry (implement `internal/samples`):**
+**Per-shape summary (`internal/samples`):**
 
-| Shape | Characteristic size | Path / sampling |
-|-------|---------------------|-----------------|
-| **Sphere** | Diameter **2 m** (`R = 1` m) | Surface polyline as above; chord step **0.1** m. |
-| **Cube** | Edge length **2 m** | Axis-aligned cube; traverse **all 12 edges** as one continuous **3D** polyline (order implementor’s choice). Insert vertices so **consecutive** Euclidean distance is **0.1** m (interpolate along edges); total path length **24** m ⇒ **~240** segments if corners are shared—stay **≤ 1000** lights. |
-| **Cone** | Height **2 m**, right circular | Base radius **`r = 1` m** (base diameter **2 m**); path: **base circle** (circumference **2π** m) sampled at **0.1** m chords, then **slant** from base rim to **apex** (slant height **`√(r² + h²) = √5` m**) with **0.1** m steps—**concatenate** into one **id** order. Verify total lights **≤ 1000**. |
+| Shape | Characteristic size | Coverage + ordering |
+|-------|---------------------|---------------------|
+| **Sphere** | **R = 1** m | **Area-even** point set on **‖p‖ = R**; **ordered** into a polyline with **dᵢ ∈ [0.05,0.10]**; **n ∈ [500,1000]**; **hemisphere / cap** tests to block **single-strip** dominance. |
+| **Cube** | **Edge 2** m | **Six faces**, **~n/6** lights per face (±1); **interior** **(u,v)** patterns; **open polyline** visiting faces with **dᵢ** in band—**not** an **edge-only** walk. |
+| **Cone** | **h = 2** m, **r = 1** m | **Area-split** between **lateral** and **base**; **quasi-uniform** on each; **open polyline** with **dᵢ** in band covering **both** parts. |
 
 **Integration:**
 
-- After **`store.Open`** + **`migrate`**, if **model count is 0**, **`store.SeedDefaultSamples(ctx)`** (or equivalent) runs **one transaction** inserting three models and their lights using **`samples.SphereLights()`**, **`samples.CubeLights()`**, **`samples.ConeLights()`** (names as above, server **`created_at`**).
-- Samples use the **same** insert path as user CSV (reuse **`Create`-style** logic or bulk insert) so **invariants** match **REQ-005**.
+- After **`store.Open`** + **`migrate`**, if **model count is 0**, **`store.SeedDefaultSamples(ctx)`** runs **one transaction** inserting three models and lights via **`samples.SphereLights()`**, **`samples.CubeLights()`**, **`samples.ConeLights()`**.
+- Samples use the **same** persistence path as user CSV so **REQ-005** invariants hold.
 
-**Tests:** Unit tests in **`internal/samples`** assert **consecutive distance ≈ 0.1**, bounding **height** / diameter / edge within documented tolerance of **2 m**; optional integration test that **list** after fresh DB returns **three** expected names.
+**Tests:** **`internal/samples`**: assert **500 ≤ n ≤ 1000**; **0.05 − ε ≤ dᵢ ≤ 0.10 + ε** for all consecutive pairs; **surface** predicates (distance-to-nominal-surface **≤ 0.03**, not interior) per shape; characteristic **~2 m** extent within documented tolerance; **cube**: each of the **six** faces has the expected **light count** (±**1** of **⌊n/6⌋** / **⌈n/6⌉**) and **≥ ⌊0.85 n⌋** lights in **open** face interiors; **sphere**: **cap / hemisphere** bound per **§3.8**; **cone**: **both** lateral and base receive lights per **area** split, with **interior** quotas analogous to the cube where **n** per part allows. Integration: fresh DB list shows **three** expected names.
 
 ---
 
@@ -213,12 +238,42 @@ dlm/
 
 Unchanged intent: **Tailwind breakpoints**, **touch targets**, **`"use client"`** for interactivity.
 
-### 4.6 Models UI (**REQ-002**, **REQ-006**)
+### 4.6 Models UI (**REQ-002**, **REQ-006**, **REQ-010**)
 
-- **Routes (App Router):** e.g. **`/models`** (list), **`/models/new`** (upload form: **name** text input + **file** input), **`/models/[id]`** (detail: metadata + table or compact list of lights; responsive stacking on small viewports).
+- **Routes (App Router):** e.g. **`/models`** (list), **`/models/new`** (upload form: **name** text input + **file** input), **`/models/[id]`** (detail: metadata; **optional** tabular or compact list of lights for accessibility / debugging; and **§4.7** **3D** view).
 - **Client data:** **`"use client"`** pages/components call **`fetch`** with **`GET`**, **`POST`** (**`FormData`** for multipart), **`DELETE`** against **`/api/v1/models…`** on the **same origin** (**§4.3**).
 - **Feedback:** Inline / banner display of **400** / **409** **`message`** from API; loading states on list, detail, upload, and delete (**REQ-002**).
 - **Navigation:** Clear entry point from **home** or **app shell** to **models** list (**implementor** chooses IA).
+
+### 4.7 Three.js visualization on model detail (**REQ-010**)
+
+**Dependency:** Declare **`three`** in **`web/package.json`** as a **direct** dependency (satisfies REQ-010 business rule 2). Pin a **stable semver** range in lockfile; bump intentionally when upgrading. Using **`@react-three/fiber`** / **`@react-three/drei`** is **optional**—if used, **`three`** MUST still appear **directly** in **`dependencies`** (not only as a transitive peer).
+
+**Where:** The **model detail** route (**`/models/[id]`** or equivalent, e.g. **`/models/detail?id=`** for static export) MUST mount a **client-only** visualization after **`GET /api/v1/models/{id}`** returns **`lights`** (same JSON as **§3.6**). All geometry uses **world-space meters** (**REQ-005** / **REQ-009**).
+
+**SSR / static export:** **WebGL** is **browser-only**. The Three.js entry MUST run only on the client: e.g. **`"use client"`** + **`WebGLRenderer`** after mount, or **`next/dynamic`** with **`ssr: false`**. **Do not** assume **`window`**, **`document`**, or **GPU** during **Node** prerender of that subtree.
+
+#### Geometry and materials (REQ-010 rules 4–5, 7)
+
+- **Per-light marker:** Each light is a **sphere** with **diameter 0.01 m** → **`SphereGeometry`** with **radius `0.005`**. **Color:** **white** — e.g. **`MeshStandardMaterial`** or **`MeshBasicMaterial`** with **`color: 0xffffff`** (ambient + directional light in scene if using **`MeshStandardMaterial`** so spheres read as white, not flat black).
+- **Draw all lights (no omission):** For **n** lights returned by the API (**n ≤ 1000** per **REQ-005**), the scene MUST contain **exactly n** instance transforms (or **n** meshes)—**no** decimation, **no** level-of-detail that drops bulbs, **no** merging of distant lights. **`InstancedMesh.count`** MUST equal **n** when **n > 0**. Prefer **`InstancedMesh`** + **`setMatrixAt(i, …)`** for draw-call efficiency; one **`Mesh`** per light is acceptable if the UI still renders **all n** spheres.
+- **Wire polyline (previous / next along id):** Build a **`BufferGeometry`** with vertex pairs **(P_i, P_{i+1})** for **i = 0 … n−2** so each **interior** light is incident to **two** segments; endpoints have **one**. Sort **`lights`** by **`id`** ascending (API order per **§3.6**). Render with **`LineSegments`** and **`LineBasicMaterial`** with **`transparent: true`** and **`opacity`** in roughly **0.15–0.35**; **`linewidth`** > **1** is **not** portable—rely on **low alpha** for a **very thin** look. Thicker segments → **tube** meshes or **shader** lines (**future architect** pass).
+- **Framing:** Keep existing behavior: compute bounds from **sphere centers**, place **camera** / **`OrbitControls.target`** so the full model fits (reuse **`boundingFromLights`**-style logic extended to account for **0.005 m** radius margin).
+
+#### Picking, hover, and touch (REQ-010 rule 6)
+
+- **Raycasting:** Use **`THREE.Raycaster`** in **NDC** from **pointer** / **touch** **`clientX`/`clientY`** and the canvas **bounding rect**, with the **same camera** used for rendering. Test intersections against the **instanced sphere mesh** (or list of sphere meshes); for **`InstancedMesh`**, use **`Raycaster.intersectObject`** and read **`instanceId`** to map back to **`lights[i]`**.
+- **Desktop hover:** On **`pointermove`** over the canvas (throttle e.g. **rAF** or **16 ms**), raycast; if a hit, show a **DOM** overlay (e.g. absolutely positioned **`div`** or **Tailwind** panel) with **`id`**, **`x`**, **`y`**, **`z`**. Format numbers with a **fixed small precision** (e.g. **3–6** decimals) until requirements close the open question. Clear the overlay when the ray misses all spheres.
+- **Touch / tablet equivalent:** **OrbitControls** uses **one-finger drag** to rotate—**tap** ( **`pointerdown` + `pointerup`** with **minimal movement** threshold) should run the **same raycast** and **pin** the label for that light until **tap elsewhere** or **clear** control. **Implementor** MUST document the **tap-to-inspect** behavior in **UI copy** (short hint under the 3D view is enough).
+- **Conflict mitigation:** If **orbit** and **tap** compete, use a **movement threshold** (e.g. **< 10 px** = tap pick, else orbit). Optional: **`OrbitControls`** **`enableRotate`** toggled only with **modifier** — only if simpler **threshold** approach fails UX review.
+
+**Interaction (orbit, REQ-002):** Retain **`OrbitControls`** (**`three/examples/jsm/controls/OrbitControls.js`** or **addons** path) for **rotate / zoom / pan**; **touch** gestures as today.
+
+**Layout:** **WebGL canvas** in a **responsive** container (**full width**, **bounded height** via **`min-h-[…]`** / **`max` viewport height**). **`ResizeObserver`** updates **camera.aspect** and **`renderer.setSize`**.
+
+**Edge cases:** **`n === 0`:** Initialize renderer + empty scene + overlay copy; **no** spheres or segments. **`n === 1`:** One sphere; **no** segments. **WebGL unavailable:** Inline / console error acceptable per prior REQ-010 note.
+
+**Testing note:** Unit-test **pure** helpers (**segment vertex pairs**, **instance matrices**, **pick index**) in **`web/lib/`**; **manual** verify **hover** and **tap** on **mobile** + **desktop**.
 
 ---
 
@@ -383,7 +438,7 @@ sequenceDiagram
   S-->>G: Rowset
   G-->>P: 200 JSON detail
   P-->>B: 200 JSON detail
-  B-->>User: Render detail
+  B-->>User: Render detail (metadata + three.js 3D of lights, client-side)
 
   User->>B: Confirm delete
   B->>P: DELETE /api/v1/models/{id}
@@ -394,6 +449,50 @@ sequenceDiagram
   P-->>B: 204 No Content
   B-->>User: Update list / redirect
 ```
+
+### 8.5 Model detail: JSON from Go, WebGL in the browser (**REQ-010**)
+
+```mermaid
+sequenceDiagram
+  actor User as User device
+  participant B as Browser
+  participant P as Reverse proxy (optional)
+  participant G as Go binary
+  participant R as Client React + three.js
+
+  User->>B: Open model detail
+  B->>R: Mount detail route (client)
+  R->>P: GET /api/v1/models/{id}
+  P->>G: GET /api/v1/models/{id}
+  G-->>P: 200 JSON (metadata + lights)
+  P-->>R: 200 JSON (metadata + lights)
+  R->>R: Build scene, white instanced spheres, transparent line segments, OrbitControls
+  R->>R: Raycast hover or tap shows id and x y z overlay
+  R-->>User: WebGL canvas + metadata UI (same origin, no Node SSR)
+```
+
+**Boundary:** **Go** returns **numbers only**; **all** **WebGL** allocation and **draw** calls run in the **browser** on the **user device**.
+
+### 8.6 Picking: raycast → id and coordinates (**REQ-010** rule 6)
+
+```mermaid
+sequenceDiagram
+  actor User as User device
+  participant C as Canvas + three.js scene
+  participant R as THREE.Raycaster
+  participant U as DOM overlay (React)
+
+  User->>C: pointermove desktop or tap touch
+  C->>R: setFromCamera normalized device coords
+  R->>C: intersect InstancedMesh spheres
+  alt hit instanceId i
+    C->>U: show lights i id x y z
+  else no hit
+    C->>U: clear or hide label
+  end
+```
+
+**Boundary:** **No** round-trip to **Go** for hover; labels use **already-fetched** **`lights`** from **§8.5**.
 
 ---
 
@@ -420,7 +519,8 @@ sequenceDiagram
 | REQ-007 | §1, §3.3, §3.6, §8.3 |
 | REQ-008 | §1, §2, §3.1, §3.7, §3.5 (release:sync contract) |
 | REQ-009 | §1, §2, §3.1, §3.3, §3.8 |
+| REQ-010 | §1, §4.6, §4.7, §8.4–§8.6 |
 
 ---
 
-**Next step:** Invoke the **`@implementor`** agent to add **`scripts/run.sh`**, **`internal/samples`**, **`store.SeedDefaultSamples`** (or equivalent) wired from **`cmd/server`**, and update **`README.md`** with the exact **REQ-008** command. Then invoke the **`@verifier`** agent to audit, run tests, and update **`docs/traceability_matrix.md`**.
+**Next step:** Invoke the **`@implementor`** agent to (1) refactor **`internal/samples`** per **§3.8** (**500–1000** lights, **0.05–0.10 m** chords, **face/surface-even** placement **not** **edge-only**, **per-shape quotas** and **ordering** as documented), and (2) confirm **`ModelLightsCanvas`** matches **§4.7** (**all** **`n`** spheres, segments, picking). Then invoke the **`@verifier`** agent to audit, run tests, and update **`docs/traceability_matrix.md`**.

@@ -28,7 +28,7 @@ To see where time goes: `time ./scripts/run.sh` or run `time npm ci`, `time npm 
 
 ## Default samples (REQ-009)
 
-On first start with an **empty** database, the server inserts three models — **Sample sphere**, **Sample cube**, and **Sample cone** — with lights spaced about **10 cm** along 3D polylines (see `docs/architecture.md` §3.8). If you delete **all** models, the next process start seeds them again.
+On first start with an **empty** database, the server inserts three models — **Sample sphere**, **Sample cube**, and **Sample cone** — each with **500–1000** lights on the shape’s **outer surface**, consecutive spacing **5–10 cm** along the polyline (see `docs/architecture.md` §3.8). If you delete **all** models, the next process start seeds them again.
 
 ## Prerequisites
 

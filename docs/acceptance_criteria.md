@@ -172,11 +172,42 @@ Feature: Default geometric sample models (REQ-009)
     Then exactly three predefined models are visible
     And their names identify a sphere, a cube, and a cone respectively
 
-  Scenario: Consecutive lights are 10 cm apart in meters
+  Scenario: Consecutive sample lights are between 5 cm and 10 cm apart
     Parent requirement: REQ-009
     Given a default sample model with at least two lights
     When lights are ordered by id ascending
-    Then the Euclidean distance between each pair of consecutive lights is 0.1 meters
+    Then each Euclidean distance between consecutive lights is at least 0.05 meters
+    And each such distance is at most 0.10 meters
+
+  Scenario: Each sample has between 500 and 1000 lights
+    Parent requirement: REQ-009
+    Given docs/requirements.md defines REQ-005 and REQ-009
+    When each default sample model is inspected
+    Then each has at least 500 lights
+    And each has at most 1000 lights
+
+  Scenario: Sample lights lie on or near the outside surface not inside
+    Parent requirement: REQ-009
+    Given docs/requirements.md defines REQ-009
+    When the REQ-009 scope and business rules about surface placement are read
+    Then lights must be on the outside surface of the nominal solid or within 0.03 meters of it
+    And lights must not be inside the nominal solid
+
+  Scenario: Cube sample uses face planes with even distribution not edge-only
+    Parent requirement: REQ-009
+    Given docs/requirements.md defines REQ-009
+    When the REQ-009 scope and business rules about the cube are read
+    Then lights must be placed on the six nominal face planes
+    And lights must be evenly distributed over those face areas
+    And placement must not be confined to edges or vertices only
+
+  Scenario: Sphere and cone samples evenly cover surfaces not single-curve-only
+    Parent requirement: REQ-009
+    Given docs/requirements.md defines REQ-009
+    When the REQ-009 scope about sphere and cone coverage is read
+    Then the sphere must have lights evenly distributed over spherical surface area
+    And the cone must cover lateral surface and base with even distribution
+    And layouts must not be edge-only or single narrow curve only
 
   Scenario: Each sample shape is about 2 meters tall
     Parent requirement: REQ-009
@@ -191,6 +222,56 @@ Feature: Default geometric sample models (REQ-009)
     Given docs/requirements.md defines REQ-005 and REQ-009
     When each default sample model is inspected
     Then each has at most 1000 lights
+
+Feature: Three.js model view (REQ-010)
+
+  Scenario: Requirements mandate three.js for the model view
+    Parent requirement: REQ-010
+    Given docs/requirements.md exists
+    When requirement REQ-010 is read
+    Then viewing a single model must include a 3D visualization of light positions
+    And that visualization must use the three.js library as a direct front-end dependency
+
+  Scenario: REQ-010 ties the 3D view to REQ-006 and responsive UX
+    Parent requirement: REQ-010
+    Given docs/requirements.md exists
+    When REQ-010 scope, business rules, and responsive notes are read
+    Then the three.js view is required in the same model view flow as REQ-006
+    And mobile, tablet, and desktop usability expectations are stated for the 3D view
+
+  Scenario: REQ-010 requires 1 cm white spheres per light
+    Parent requirement: REQ-010
+    Given docs/requirements.md exists
+    When the REQ-010 scope and business rules are read
+    Then each light must be shown as a sphere with diameter 0.01 meters
+    And that sphere must be white
+
+  Scenario: REQ-010 requires thin transparent segments between consecutive ids
+    Parent requirement: REQ-010
+    Given docs/requirements.md exists
+    When the REQ-010 business rules about line segments are read
+    Then straight segments must connect light i to light i plus 1 for ascending ids
+    And segments must be very thin and partially transparent
+
+  Scenario: REQ-010 requires every light drawn with previous and next connectivity
+    Parent requirement: REQ-010
+    Given docs/requirements.md exists
+    When REQ-010 scope and business rules are read
+    Then every light in the model must be drawn as a 1 cm white sphere
+    And interior lights along the wire must connect to previous and next via those segments
+
+  Scenario: REQ-010 forbids omitting lights when n is at most 1000
+    Parent requirement: REQ-010
+    Given docs/requirements.md exists
+    When REQ-010 business rule about all lights drawn is read
+    Then the renderer must not skip or merge lights for performance when n is at most 1000
+
+  Scenario: REQ-010 requires hover or touch equivalent for id and coordinates
+    Parent requirement: REQ-010
+    Given docs/requirements.md exists
+    When the REQ-010 business rules and responsive notes are read
+    Then pointer hover over a light sphere must show id and x y z
+    And touch-first devices must have an equivalent to show id and coordinates
 ```
 
 ---
