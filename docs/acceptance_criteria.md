@@ -72,8 +72,83 @@ Feature: Single executable packaging without Docker
     Given docs/requirements.md exists
     When the REQ-004 business rules are read
     Then they require docs/architecture.md to be updated for a consistent single-binary model with REQ-003 and REQ-001
+
+Feature: Wire light model definition
+
+  Scenario: REQ-005 caps lights at 1000 and requires sequential ids from zero
+    Parent requirement: REQ-005
+    Given docs/requirements.md exists
+    When requirement REQ-005 is read
+    Then a model must allow at most 1000 lights
+    And light indices must be a contiguous sequence starting at 0 with no gaps or duplicates
+
+  Scenario: REQ-005 defines CSV columns and metadata
+    Parent requirement: REQ-005
+    Given docs/requirements.md exists
+    When requirement REQ-005 is read
+    Then the interchange CSV must use fields id, x, y, and z
+    And model metadata must include name and creation date
+
+Feature: Model management in the application
+
+  Scenario: REQ-006 requires list, view, delete, and CSV upload create
+    Parent requirement: REQ-006
+    Given docs/requirements.md exists
+    When requirement REQ-006 is read
+    Then the application must support listing all models
+    And the application must support viewing a single model
+    And the application must support deleting a model
+    And the application must support adding a new model by uploading a CSV file
+
+  Scenario: REQ-006 binds UI expectations to responsive device classes
+    Parent requirement: REQ-006
+    Given docs/requirements.md exists
+    When the REQ-006 responsive UX notes are read
+    Then expectations are stated for mobile, tablet, and desktop for list, detail, and upload flows
+
+Feature: CSV upload validation
+
+  Scenario: Valid minimal CSV is accepted
+    Parent requirement: REQ-007
+    Given a CSV file with header row "id,x,y,z"
+    And row "0,0,0,0"
+    When the user uploads the file to create a model
+    Then the upload validation succeeds
+    And no validation error is shown for id sequence or numeric coordinates
+
+  Scenario: Reject when id sequence is not contiguous from zero
+    Parent requirement: REQ-007
+    Given a CSV file with header row "id,x,y,z"
+    And row "0,0,0,0"
+    And row "2,1,1,1"
+    When the user uploads the file to create a model
+    Then the upload is rejected
+    And the user sees feedback that ids must be sequential starting at 0
+
+  Scenario: Reject when more than 1000 lights
+    Parent requirement: REQ-007
+    Given a CSV file with header row "id,x,y,z"
+    And the file contains 1001 data rows with ids 0 through 1000 and valid numeric coordinates
+    When the user uploads the file to create a model
+    Then the upload is rejected
+    And the user sees feedback referencing the 1000 light limit
+
+  Scenario: Reject non-numeric coordinate
+    Parent requirement: REQ-007
+    Given a CSV file with header row "id,x,y,z"
+    And row "0,not-a-number,0,0"
+    When the user uploads the file to create a model
+    Then the upload is rejected
+    And the user sees feedback indicating invalid numeric values
+
+  Scenario: Reject wrong or missing columns
+    Parent requirement: REQ-007
+    Given a CSV file with header row "idx,x,y,z"
+    When the user uploads the file to create a model
+    Then the upload is rejected
+    And the user sees feedback indicating the file format is incorrect
 ```
 
 ---
 
-**Next step:** Invoke the `@verifier` agent to audit the codebase against this document and `docs/architecture.md`, run tests, and update `docs/traceability_matrix.md`.
+**Next step:** After you approve these documents, invoke the `@architect` agent to update `docs/architecture.md` so implementation can proceed. When the feature is implemented, invoke the `@verifier` agent to audit, run tests, and update `docs/traceability_matrix.md`.

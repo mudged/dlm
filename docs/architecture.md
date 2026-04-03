@@ -1,6 +1,6 @@
 # Architecture
 
-This document defines technical structure and deployment for the product described in `docs/requirements.md` (**REQ-001–REQ-004**). It satisfies **REQ-001** (Go + Next.js + Tailwind, coordinated as defined here), **REQ-002** (responsive, client-interactive UI), **REQ-003** (Raspberry Pi 4 Model B, **ARM64**, resource awareness), and **REQ-004** (**one runnable executable** per release target; **no** mandatory Docker/OCI/compose packaging at this stage).
+This document defines technical structure and deployment for the product described in `docs/requirements.md` (**REQ-001–REQ-007**). It satisfies **REQ-001** (Go + Next.js + Tailwind), **REQ-002** (responsive, client-interactive UI), **REQ-003** (Raspberry Pi 4 Model B, **ARM64**, resource awareness), **REQ-004** (**one runnable executable** per release target; **no** mandatory Docker/OCI/compose packaging at this stage), **REQ-005** (wire light model shape, CSV interchange, metadata), **REQ-006** (list / view / delete / create via CSV upload), and **REQ-007** (server-side CSV validation and actionable errors).
 
 ## Architectural resolution: REQ-004 (single binary) vs Next.js
 
@@ -24,6 +24,9 @@ This meets REQ-004 rule 1 (**no separate Node.js runtime** in the distribution) 
 | REQ-002 | **Mobile-first** Tailwind, **Client Components** for interactivity; **`fetch('/api/v1/…')`** from the browser to the same Go origin. |
 | REQ-003 | Primary release target **linux/arm64** (Pi 4B, 64-bit OS); document **CPU/RAM**; **one** long-lived app process. |
 | REQ-004 | **One executable file** per release target; assets **embedded** (or generated inside the process); **Docker/compose not** the canonical install path. |
+| REQ-005 | **Domain types** + **CSV** contract; **metadata** (**name**, **creation instant**) stored with each model; coordinates as **float64** in Go/API JSON. |
+| REQ-006 | **REST JSON API** for models + **Next.js** client pages (list, detail, upload, delete); **multipart** upload for CSV. |
+| REQ-007 | **Authoritative validation** in Go when ingesting CSV; **transactional** create (all-or-nothing); **400** responses with clear **error** envelope. |
 
 **Assumed Pi context:** Raspberry Pi 4 Model B, **64-bit OS**, **ARM64** userspace. **2–8 GB RAM** — with **no Node** at runtime, **4 GB** is practical for modest traffic; **off-device** `next export` builds recommended.
 
@@ -44,7 +47,9 @@ dlm/
       server/                 # main() — single binary entry
     internal/
       config/
-      httpapi/                # API mux + middleware + JSON handlers
+      httpapi/                # API mux + middleware + JSON handlers (incl. models HTTP)
+      wiremodel/              # domain types, CSV parse + validation (REQ-005/007)
+      store/                  # persistence for models (SQLite, REQ-006)
       webdist/                # holds embedded payload (see §3.5); populated by build, not hand-edited
         placeholder.txt       # optional tiny file so empty embed works in dev before first UI build
     web/                      # symlink or copy strategy avoided — UI source stays ../web from repo root
@@ -69,22 +74,41 @@ dlm/
 
 - **Module path:** `example.com/dlm/backend` (or successor); unchanged conceptually.
 - **`cmd/server`:** Load config; construct **`http.Server`**; mount **API sub-router** and **static file server** from **`embed`**; graceful **SIGINT/SIGTERM** shutdown.
-- **`internal/config`:** **Env-based** listen address, timeouts, optional **CORS** (primarily for **dev** when UI dev server uses another origin); production **same-origin** reduces CORS.
-- **`internal/httpapi`:** Middleware (**request ID**, **slog**, **recover**, optional **CORS**); **JSON** handlers and error envelope `{ "error": { "code", "message" } }`.
+- **`internal/config`:** **Env-based** listen address, timeouts, optional **CORS** (primarily for **dev** when UI dev server uses another origin); production **same-origin** reduces CORS; **SQLite** path via **`DLM_DB_PATH`** and/or **`DLM_DATA_DIR`** (**§3.3**).
+- **`internal/httpapi`:** Middleware (**request ID**, **slog**, **recover**, optional **CORS**); **JSON** handlers and error envelope `{ "error": { "code", "message" } }`; **models** routes delegate to **`internal/store`** and **`internal/wiremodel`**.
+- **`internal/wiremodel`:** Parses and validates uploaded **CSV** per **§3.6**; returns structured errors for HTTP **400** responses (**REQ-007**).
+- **`internal/store`:** **SQLite** repository (see **§3.3**); opened at process start; migrations or `CREATE IF NOT EXISTS` for schema (**REQ-006**).
 
 ### 3.2 HTTP surface
 
 | Kind | Path | Purpose |
 |------|------|--------|
 | API | `GET /health` | Liveness; **no auth**. |
-| API | `/api/v1/*` | Versioned **JSON API**. |
+| API | `GET /api/v1/models` | List models (**metadata** + **light_count**). **REQ-006** |
+| API | `POST /api/v1/models` | Create model: **`multipart/form-data`** with **`name`** (string) + **`file`** (CSV). **REQ-006/007** |
+| API | `GET /api/v1/models/{id}` | Model **metadata** + ordered **lights** `{ id, x, y, z }[]`. **REQ-006** |
+| API | `DELETE /api/v1/models/{id}` | Delete model (**204** / **404**). **REQ-006** |
+| API | `/api/v1/*` | Other versioned **JSON** endpoints as the product grows. |
 | Static | `/`, `/*.html`, **`/_next/**`**, other export assets | **Next static export** tree from embed; **SPA / HTML5** fallback policy: serve **`index.html`** for unmatched **non-API** GET if needed (implementor defines exact fallback rules). |
 
 **Ordering:** Register **API** routes **before** static/`NotFound` handling so `/api/v1` is never swallowed by UI fallback.
 
-### 3.3 Persistence
+### 3.3 Persistence (**REQ-006**)
 
-Reserved **`internal/store`** only; no DB in current REQs.
+- **Engine:** **SQLite** accessed from the **same Go process** (prefer a **pure Go** driver such as **`modernc.org/sqlite`** to avoid **cgo** cross-compile friction on **linux/arm64**).
+- **Location:** Configurable path via environment (e.g. **`DLM_DB_PATH`**), defaulting to a file under an application **data directory** (e.g. **`DLM_DATA_DIR`** + `dlm.db`). The DB file is **runtime state**, not embedded in the binary; creating/opening it at startup satisfies **REQ-004** (no extra shipped daemon).
+- **Schema (logical):**
+  - **`models`:** `id` (TEXT UUID primary key), `name` (TEXT **NOT NULL**, **UNIQUE**), `created_at` (TEXT **RFC3339 UTC**).
+  - **`lights`:** `model_id` (TEXT FK → `models.id`), `idx` (INTEGER light index), `x`, `y`, `z` (REAL), primary key **`(model_id, idx)`**.
+- **Transactions:** **`POST /api/v1/models`** MUST parse+validate CSV, then insert **`models`** + all **`lights`** in **one transaction**; rollback on any validation failure so **no partial model** is stored (**REQ-007**).
+- **Migrations:** Implementor MAY use a minimal migration hook or `CREATE TABLE IF NOT EXISTS` at startup; document schema version if evolved.
+
+**Architectural resolutions (requirements open questions):**
+
+- **Model name uniqueness:** **UNIQUE** on `models.name` so the list UI stays unambiguous; duplicate names return **409** with a clear message (product may relax later if requirements change).
+- **Creation date:** Set by the **server** at successful create time, stored and exposed as **UTC RFC3339** (no client clock trust).
+- **Upload naming:** **`name`** is a **required** multipart field (non-empty after trim); **not** inferred from filename alone.
+- **Empty model:** **Allowed**: CSV may contain **only** the header row (**0** lights); still creates a model row with **light_count = 0**.
 
 ### 3.4 Build and cross-compile (release artifact)
 
@@ -99,6 +123,23 @@ Reserved **`internal/store`** only; no DB in current REQs.
 - **Mechanism:** `//go:embed` on a package (e.g. **`internal/webdist`**), embedding the **full** `out/` tree from **`next export`** (path names preserved: **`_next/static/...`**).
 - **Build contract:** A **documented** step (**Make**, `task`, or **CI** script) runs **`npm ci && npm run build`** in `web/` (with **`output: 'export'`**), then **syncs** `web/out/` → `backend/internal/webdist/` (or `backend/web/build/`).
 - **`embed` empty-dir issue:** Repository may keep a **small placeholder** file under `webdist/` so **`go test ./...`** works **before** the first UI bake; release builds **replace** the directory contents with the real export.
+
+### 3.6 CSV interchange and validation (**REQ-005**, **REQ-007**)
+
+- **Encoding:** **UTF-8** text; parse with Go **`encoding/csv`**.
+- **Delimiter:** Comma (`,`). **RFC 4180** quoting rules SHOULD be supported so numeric fields may be quoted.
+- **Header row:** **Required** first record; must be **exactly** the four fields **`id`**, **`x`**, **`y`**, **`z`** in that order (case-sensitive, no extra columns). Wrong or missing header → **400** with **format** error (matches acceptance scenario for `idx,x,y,z`).
+- **Data rows:** Each row provides one light; **`id`** must parse as an integer; **`x`**, **`y`**, **`z`** must parse as **finite** floating-point numbers (reject **NaN** / **Inf**).
+- **Row count:** After the header, **0 ≤ n ≤ 1000** data rows; **n > 1000** → **400** referencing the cap.
+- **Id sequence:** Let **n** be the number of data rows. Sorting rows by **`id`**, the multiset of ids MUST equal **`{0,1,…,n−1}`** exactly once each (contiguous from **0**, no gaps, no duplicates). Implementor MAY require rows to appear sorted by **`id`** ascending for simpler validation, or accept any order and validate the set—behavior MUST match tests derived from **`docs/acceptance_criteria.md`**.
+- **Authoritative checks:** All rules above are enforced **in Go** on upload; the UI MAY add client-side hints but MUST NOT trust them for security or integrity.
+
+**JSON API shapes (illustrative):**
+
+- **List item:** `{ "id": "<uuid>", "name": "…", "created_at": "<RFC3339>", "light_count": <int> }`
+- **Detail:** same metadata plus `"lights": [ { "id": 0, "x": 0, "y": 0, "z": 0 }, … ]` ordered by **`id`** ascending.
+
+**HTTP errors:** Use existing **`{ "error": { "code", "message" } }`** envelope; optional **`details`** field for row/column hints (**REQ-007**). **409 Conflict** for duplicate **`name`**.
 
 ---
 
@@ -130,6 +171,13 @@ Reserved **`internal/store`** only; no DB in current REQs.
 
 Unchanged intent: **Tailwind breakpoints**, **touch targets**, **`"use client"`** for interactivity.
 
+### 4.6 Models UI (**REQ-002**, **REQ-006**)
+
+- **Routes (App Router):** e.g. **`/models`** (list), **`/models/new`** (upload form: **name** text input + **file** input), **`/models/[id]`** (detail: metadata + table or compact list of lights; responsive stacking on small viewports).
+- **Client data:** **`"use client"`** pages/components call **`fetch`** with **`GET`**, **`POST`** (**`FormData`** for multipart), **`DELETE`** against **`/api/v1/models…`** on the **same origin** (**§4.3**).
+- **Feedback:** Inline / banner display of **400** / **409** **`message`** from API; loading states on list, detail, upload, and delete (**REQ-002**).
+- **Navigation:** Clear entry point from **home** or **app shell** to **models** list (**implementor** chooses IA).
+
 ---
 
 ## 5. UI ↔ API coordination (single process)
@@ -138,7 +186,7 @@ Unchanged intent: **Tailwind breakpoints**, **touch targets**, **`"use client"`*
 
 1. User opens **`https://host/`** (or `http://host:8080/`).
 2. **Go** serves **`index.html`** and **JS/CSS** from embed.
-3. React hydrates; components call **`fetch('/api/v1/status')`** (relative) → **same Go server**.
+3. React hydrates; components call **`fetch('/api/v1/…')`** (e.g. **models** endpoints, **`/api/v1/status`** if present) → **same Go server**.
 4. Optional **Caddy/nginx** terminates TLS and proxies **everything** to **one** Go port.
 
 **No** path-based split between Node and Go inside the product.
@@ -191,7 +239,7 @@ flowchart TB
   B -->|"HTTPS or HTTP"| P
   P -->|"all paths -> one upstream"| G
   B -.->|"Dev: direct to Go :8080"| G
-  G -.->|"Future"| DB[(Store - not in current REQs)]
+  G --> DB[(SQLite models + lights)]
 ```
 
 ---
@@ -236,6 +284,75 @@ sequenceDiagram
   B-->>User: Updated UI (client state)
 ```
 
+### 8.3 Create model (multipart CSV upload)
+
+```mermaid
+sequenceDiagram
+  actor User as User device
+  participant B as Browser
+  participant P as Reverse proxy (optional)
+  participant G as Go binary
+  participant S as SQLite store
+
+  User->>B: Submit name + CSV file
+  B->>P: POST /api/v1/models (multipart)
+  P->>G: POST /api/v1/models (multipart)
+  G->>G: Parse CSV + validate (wiremodel)
+  alt validation failure
+    G-->>P: 400 JSON error
+    P-->>B: 400 JSON error
+    B-->>User: Show actionable message
+  else duplicate name
+    G-->>P: 409 JSON error
+    P-->>B: 409 JSON error
+    B-->>User: Show conflict message
+  else success
+    G->>S: BEGIN; insert model + lights; COMMIT
+    S-->>G: OK
+    G-->>P: 201 JSON (id, metadata, light_count)
+    P-->>B: 201 JSON
+    B-->>User: Navigate or refresh list
+  end
+```
+
+### 8.4 List, view, and delete models
+
+```mermaid
+sequenceDiagram
+  actor User as User device
+  participant B as Browser
+  participant P as Reverse proxy (optional)
+  participant G as Go binary
+  participant S as SQLite store
+
+  User->>B: Open models list
+  B->>P: GET /api/v1/models
+  P->>G: GET /api/v1/models
+  G->>S: Query model summaries
+  S-->>G: Rows
+  G-->>P: 200 JSON array
+  P-->>B: 200 JSON array
+  B-->>User: Render responsive list
+
+  User->>B: Select model
+  B->>P: GET /api/v1/models/{id}
+  P->>G: GET /api/v1/models/{id}
+  G->>S: Load model + lights
+  S-->>G: Rowset
+  G-->>P: 200 JSON detail
+  P-->>B: 200 JSON detail
+  B-->>User: Render detail
+
+  User->>B: Confirm delete
+  B->>P: DELETE /api/v1/models/{id}
+  P->>G: DELETE /api/v1/models/{id}
+  G->>S: Delete model (cascade lights)
+  S-->>G: OK
+  G-->>P: 204 No Content
+  P-->>B: 204 No Content
+  B-->>User: Update list / redirect
+```
+
 ---
 
 ## 9. Security notes (baseline)
@@ -243,6 +360,8 @@ sequenceDiagram
 - Prefer **same-origin** in production to minimize **CORS** surface.
 - **Secrets** via env only; **no** secrets baked into client bundles beyond **public** constants.
 - **No** mandatory **container** trust boundary from the product’s perspective (REQ-004).
+- **Upload limits:** Enforce a **maximum request body size** on **`POST /api/v1/models`** (e.g. **`http.MaxBytesReader`** or server limit) large enough for **1000** CSV rows but small enough to bound **memory** and **DoS** risk on the Pi.
+- **SQLite file:** Treat **`DLM_DB_PATH`** as **persistent** storage on the Pi (e.g. SD card or USB); operators should **back up** the DB file with normal file backup practices.
 
 ---
 
@@ -253,8 +372,11 @@ sequenceDiagram
 | REQ-001 | §1–§5, §7–§8 |
 | REQ-002 | §1, §4, §5, §8 |
 | REQ-003 | §1, §3.4, §6, §7 |
-| REQ-004 | §1 (resolution), §3.4–§3.5, §4.1–§4.2, §5–§6 |
+| REQ-004 | §1 (resolution), §3.3–§3.5, §4.1–§4.2, §5–§6 |
+| REQ-005 | §1, §3.1, §3.6 |
+| REQ-006 | §1, §3.1–§3.3, §3.2, §4.3, §4.6, §7–§8 |
+| REQ-007 | §1, §3.3, §3.6, §8.3 |
 
 ---
 
-**Next step:** Invoke the **`@verifier`** agent to confirm the implementation matches this document, run **`go test ./...`** and **`npm run release:sync`** + **`go build`** as needed, then update **`docs/traceability_matrix.md`**.
+**Next step:** Invoke the **`@implementor`** agent to implement **`internal/wiremodel`**, **`internal/store`**, HTTP handlers, and **`web/`** models pages per this document and **`docs/acceptance_criteria.md`**. When the feature is done, invoke the **`@verifier`** agent to audit, run tests, and update **`docs/traceability_matrix.md`**.

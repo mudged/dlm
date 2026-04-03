@@ -164,3 +164,128 @@ As an operator, I want the product **packaged as a single executable file** per 
 - Whether **full Next.js SSR** must be preserved inside one binary or whether a **static export + client hydration** pattern controlled by architecture is acceptable if UX acceptance (REQ-002) is still met.
 
 ---
+
+### REQ-005 — Wire light model (data shape, CSV, metadata)
+
+| Field | Value |
+|-------|-------|
+| **ID** | REQ-005 |
+| **Title** | Wire light model (data shape, CSV, metadata) |
+| **Priority** | Must |
+| **Actor(s)** | End user; operator |
+
+**User story**
+
+As a user, I want a **model** to represent a configuration of lights on a wire with clear structure and a standard file format, so that I can author, exchange, and reason about layouts consistently.
+
+**Scope**
+
+- In scope: A model contains **up to 1000** lights; each light has a **sequential index** starting at **0** and a position in **3D space** (**x**, **y**, **z** coordinates). A model is representable as a **CSV** file with columns **id**, **x**, **y**, **z** (where **id** is the light index). Each model has **metadata** including a **name** and **creation date**.
+- Out of scope: Physical wire topology beyond “lights on a wire” as a conceptual grouping; animation, color, or brightness per light; import formats other than the defined CSV unless added later.
+
+**Business rules**
+
+1. A model MUST NOT describe more than **1000** lights.
+2. Light indices MUST be **non-negative integers** forming a **contiguous sequence** starting at **0** (i.e. for *n* lights, indices **0** through **n − 1** with **no gaps** and **no duplicates**).
+3. Coordinates **x**, **y**, and **z** MUST be **real numbers** (finite; architecture may fix representation and precision).
+4. The interchange CSV MUST use the field names **id**, **x**, **y**, **z** (column order and delimiter as specified in acceptance criteria).
+5. Model metadata MUST include **name** and **creation date** (storage format and timezone policy deferred to architecture).
+
+**Responsive / UX notes** *(when UI is involved)*
+
+- Mobile: N/A for this data-definition requirement; see REQ-006.
+- Tablet: N/A
+- Desktop: N/A
+
+**Dependencies**
+
+- REQ-001
+
+**Open questions**
+
+- Whether model **names** must be **unique** in the system.
+- Preferred **timezone** and precision for **creation date**.
+
+---
+
+### REQ-006 — List, view, delete, and create models via CSV upload
+
+| Field | Value |
+|-------|-------|
+| **ID** | REQ-006 |
+| **Title** | List, view, delete, and create models via CSV upload |
+| **Priority** | Must |
+| **Actor(s)** | End user |
+
+**User story**
+
+As a user, I want to **list** all models, **open** one to inspect it, **delete** models I no longer need, and **add** new models by **uploading** a CSV file, so that I can manage my light configurations end-to-end from the application.
+
+**Scope**
+
+- In scope: User-facing flows (and backing behavior per architecture) to **list** all stored models, **view** details of a selected model (including its lights and metadata as appropriate), **delete** an existing model, and **create** a new model by **uploading** a CSV in the format defined under REQ-005.
+- Out of scope: Bulk export, editing lights in-place after import, versioning, and sharing links unless added later.
+
+**Business rules**
+
+1. The application MUST expose a way to see **all** models the user may access (subject to any future auth).
+2. The application MUST allow **viewing** a single model’s content (lights and metadata) after selection.
+3. The application MUST allow **deleting** a model such that it no longer appears in listings and is removed per persistence rules in architecture.
+4. The application MUST allow **creating** a model by **uploading** a CSV file; successful creation MUST persist the model and its metadata (name and creation date supplied or derived per architecture—e.g. user-provided name at upload time).
+
+**Responsive / UX notes** *(when UI is involved)*
+
+- Mobile: List and detail usable without horizontal scrolling for primary content; upload control reachable and labeled clearly.
+- Tablet: List and detail use space efficiently; upload remains obvious in the create flow.
+- Desktop: Efficient browsing of lists and details; keyboard-accessible actions where controls exist.
+
+**Dependencies**
+
+- REQ-001, REQ-002, REQ-005
+
+**Open questions**
+
+- Whether **name** is entered in the UI at upload time or derived from the **filename**.
+
+---
+
+### REQ-007 — Validate CSV on model upload
+
+| Field | Value |
+|-------|-------|
+| **ID** | REQ-007 |
+| **Title** | Validate CSV on model upload |
+| **Priority** | Must |
+| **Actor(s)** | End user |
+
+**User story**
+
+As a user, when I upload a CSV to create a model, I want the system to **reject invalid files** with clear feedback, so that only **well-formed** data with **correct** ids and values enters the system.
+
+**Scope**
+
+- In scope: **Validation** of uploaded CSV for **correct structure** (expected columns, parseable rows) and **correct values**: **sequential** **id** values per REQ-005, valid numeric **x**, **y**, **z**, and respect of the **1000**-light maximum.
+- Out of scope: Linting coordinate ranges (e.g. unit cubes); duplicate-row detection beyond id rules unless specified in scenarios.
+
+**Business rules**
+
+1. On upload, the system MUST verify the file is **CSV** with the required columns **id**, **x**, **y**, **z** (and acceptable header/row rules in acceptance criteria).
+2. The system MUST reject uploads where **id** values are not **integers** forming a **contiguous sequence** from **0** through **n − 1** for the row count **n**, or where **n** exceeds **1000**.
+3. The system MUST reject uploads where **x**, **y**, or **z** cannot be interpreted as **finite** real numbers.
+4. On rejection, the user MUST receive **actionable** feedback (e.g. error indicating row/column or rule violated); no partial model MUST be persisted for that failed upload.
+
+**Responsive / UX notes** *(when UI is involved)*
+
+- Mobile: Error messages readable without truncation of the primary explanation.
+- Tablet: Same as mobile.
+- Desktop: Errors visible near the upload action or in a consistent notification region.
+
+**Dependencies**
+
+- REQ-005, REQ-006
+
+**Open questions**
+
+- Whether **empty** models (**n = 0**) are allowed.
+
+---
