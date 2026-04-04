@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -26,6 +27,12 @@ var ErrDuplicateName = errors.New("model name already exists")
 
 // ErrInvalidLightIndex is returned when a light id is not part of the model.
 var ErrInvalidLightIndex = errors.New("light index out of range")
+
+// ErrBatchEmptyIDs is returned when a batch patch has no ids.
+var ErrBatchEmptyIDs = errors.New("batch ids must be non-empty")
+
+// ErrBatchDuplicateIDs is returned when the same light id appears more than once in a batch.
+var ErrBatchDuplicateIDs = errors.New("duplicate light ids in batch")
 
 // Default light state for new rows (REQ-011 / architecture §3.9).
 const (
@@ -513,4 +520,99 @@ func (s *Store) PatchLightState(ctx context.Context, modelID string, lightID int
 		return nil, err
 	}
 	return &LightStateDTO{ID: lightID, On: on, Color: color, BrightnessPct: brightness}, nil
+}
+
+// BatchPatchLightStates applies the same partial update to many lights in one transaction (REQ-013 / architecture §3.10).
+// ids may be in any order; returned states are sorted by id ascending. Duplicate ids yield ErrBatchDuplicateIDs.
+func (s *Store) BatchPatchLightStates(ctx context.Context, modelID string, ids []int, patch LightStatePatch) ([]LightStateDTO, error) {
+	if len(ids) == 0 {
+		return nil, ErrBatchEmptyIDs
+	}
+	if patch.On == nil && patch.Color == nil && patch.BrightnessPct == nil {
+		return nil, fmt.Errorf("batch patch requires at least one of on, color, brightness_pct")
+	}
+	seen := make(map[int]struct{}, len(ids))
+	for _, id := range ids {
+		if _, dup := seen[id]; dup {
+			return nil, ErrBatchDuplicateIDs
+		}
+		seen[id] = struct{}{}
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var modelCount int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM models WHERE id = ?`, modelID).Scan(&modelCount); err != nil {
+		return nil, err
+	}
+	if modelCount == 0 {
+		return nil, ErrNotFound
+	}
+
+	var lightCount int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM lights WHERE model_id = ?`, modelID).Scan(&lightCount); err != nil {
+		return nil, err
+	}
+
+	sorted := slices.Clone(ids)
+	slices.Sort(sorted)
+
+	out := make([]LightStateDTO, 0, len(sorted))
+	for _, lightID := range sorted {
+		if lightID < 0 || lightID >= lightCount {
+			return nil, ErrInvalidLightIndex
+		}
+
+		row := tx.QueryRowContext(ctx, `
+			SELECT "on", color, brightness_pct FROM lights WHERE model_id = ? AND idx = ?
+		`, modelID, lightID)
+		var onInt int
+		var color string
+		var brightness float64
+		if err := row.Scan(&onInt, &color, &brightness); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil, ErrInvalidLightIndex
+			}
+			return nil, err
+		}
+		on := onInt != 0
+
+		if patch.On != nil {
+			on = *patch.On
+		}
+		if patch.Color != nil {
+			c, err := ValidateColor(*patch.Color)
+			if err != nil {
+				return nil, err
+			}
+			color = c
+		}
+		if patch.BrightnessPct != nil {
+			if err := ValidateBrightnessPct(*patch.BrightnessPct); err != nil {
+				return nil, err
+			}
+			brightness = *patch.BrightnessPct
+		}
+
+		if _, err := tx.ExecContext(ctx, `
+			UPDATE lights SET "on" = ?, color = ?, brightness_pct = ? WHERE model_id = ? AND idx = ?
+		`, boolToInt(on), color, brightness, modelID, lightID); err != nil {
+			return nil, err
+		}
+		out = append(out, LightStateDTO{
+			ID:            lightID,
+			On:            on,
+			Color:         color,
+			BrightnessPct: brightness,
+		})
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return out, nil
 }

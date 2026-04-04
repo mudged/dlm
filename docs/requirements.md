@@ -510,3 +510,49 @@ As a user viewing a model, I want the **3D visualization** to **match** each lig
 - Whether **hover**/**tap** must display **brightness** and **colour** in addition to **id**/**coordinates**.
 
 ---
+
+### REQ-013 — Model view: multi-select light settings and paged light list
+
+| Field | Value |
+|-------|-------|
+| **ID** | REQ-013 |
+| **Title** | Model view: multi-select light settings and paged light list |
+| **Priority** | Must |
+| **Actor(s)** | End user |
+
+**User story**
+
+As a user **viewing** a model, I want to **select multiple lights** and **apply the same settings** to all of them at once, and I want the **list of lights** to be **paginated** with control over **how many lights appear per page** and a way to **jump to a specific light by its id**, so that I can manage large models without scrolling through thousands of rows and can batch-update state efficiently.
+
+**Scope**
+
+- In scope: On the **model view** (**REQ-006**), a **list** (or equivalent tabular presentation) of the model’s lights that is **paged** (only one **page** of lights shown at a time). Controls to **change the page size** (number of lights per page) from **presets** or an agreed control pattern. A **“go to light”** (or equivalent) control that accepts a light **id** (**REQ-005**) and navigates the list to the **page** that contains that id, with **clear feedback** if the id is **invalid** or **out of range** for the model. **Multi-select** of lights **on the current page** (and, if architecture supports it, **across pages** via retained selection—see open questions) plus a **bulk apply** action that sets **on/off**, **hex colour**, and **brightness** (**REQ-011**) **to the same values** for **every selected** light; successful updates MUST **persist** per **REQ-011**.
+- Out of scope: New state fields beyond **REQ-011**; reordering lights; deleting lights from the model; export of selection.
+
+**Business rules**
+
+1. The model view MUST include a **paginated** light list when the model has **more than one** light; for a **single** light, pagination MAY be omitted or trivial (architecture).
+2. The user MUST be able to **change how many lights** are shown **per page** using at least **three** distinct positive page-size choices within **1** and **1000** (inclusive), documented or labeled in the UI (exact values deferred to architecture).
+3. The user MUST be able to **jump** to the page containing a given light **id** by entering or choosing that **id**; if the id is **not** an integer in **0 … n − 1** for the model’s light count **n**, the system MUST **not** change page silently and MUST show **actionable** feedback.
+4. The user MUST be able to **select multiple lights** (multi-select) from the list using **pointer** and **keyboard**-friendly patterns on desktop and an **equivalent** on **touch** (**REQ-002**), e.g. checkboxes or a documented multi-select gesture.
+5. When **one or more** lights are selected, the user MUST be able to **apply** settings (**on/off**, **hex colour**, **brightness** per **REQ-011**) so that **each selected** light receives the **same** applied values; validation rules for colour and brightness MUST match **REQ-011**.
+6. After a **successful** bulk apply, **REQ-012** applies: the **3D view** and list MUST reflect updated state within the same **timeliness** expectations as single-light updates (**no indefinite staleness** after success).
+7. Pagination and multi-select MUST remain **usable** on **mobile**, **tablet**, and **desktop** (**REQ-002**): primary controls reachable, readable labels, and no reliance on **hover-only** affordances for essential actions.
+
+**Responsive / UX notes** *(when UI is involved)*
+
+- Mobile: Page size and “go to id” controls usable without horizontal scrolling for primary content; multi-select via touch-friendly controls; bulk apply clearly labeled.
+- Tablet: Same as mobile; orientation changes handled where applicable.
+- Desktop: Keyboard navigation where applicable; multi-select with checkboxes or shift-range if architecture provides it.
+
+**Dependencies**
+
+- REQ-002, REQ-006, REQ-011, REQ-012
+
+**Open questions**
+
+- Whether **selection** is **per-page only** or MUST **persist** when the user changes pages (cross-page bulk apply).
+- Whether **REQ-011** needs an explicit **batch** HTTP operation for performance; until then, repeated per-light updates MAY satisfy rule **5** if UX meets timeliness (**rule 6**).
+- Exact **preset** page sizes and default page size.
+
+---

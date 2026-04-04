@@ -11,6 +11,7 @@ import (
 )
 
 const maxLightPatchBytes = 8192
+const maxLightBatchPatchBytes = 65536
 
 type jsonLightStatePatch struct {
 	On            *bool    `json:"on"`
@@ -129,4 +130,74 @@ func parseLightPathID(s string) (int, bool) {
 		return 0, false
 	}
 	return n, true
+}
+
+type jsonBatchLightStatePatch struct {
+	Ids             []int    `json:"ids"`
+	On              *bool    `json:"on"`
+	Color           *string  `json:"color"`
+	BrightnessPct   *float64 `json:"brightness_pct"`
+}
+
+func (a *apiDeps) patchLightStatesBatch(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPatch {
+		writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	modelID := r.PathValue("id")
+	if modelID == "" {
+		writeAPIError(w, http.StatusBadRequest, "bad_request", "missing model id")
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxLightBatchPatchBytes)
+	var body jsonBatchLightStatePatch
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeAPIError(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
+		return
+	}
+	if body.Ids == nil || len(body.Ids) == 0 {
+		writeAPIError(w, http.StatusBadRequest, "validation_failed", "ids must be a non-empty array")
+		return
+	}
+
+	patch := store.LightStatePatch{
+		On:            body.On,
+		Color:         body.Color,
+		BrightnessPct: body.BrightnessPct,
+	}
+	if patch.On == nil && patch.Color == nil && patch.BrightnessPct == nil {
+		writeAPIError(w, http.StatusBadRequest, "validation_failed", "at least one of on, color, brightness_pct is required")
+		return
+	}
+
+	states, err := a.store.BatchPatchLightStates(r.Context(), modelID, body.Ids, patch)
+	if errors.Is(err, store.ErrNotFound) {
+		writeAPIError(w, http.StatusNotFound, "not_found", "model not found")
+		return
+	}
+	if errors.Is(err, store.ErrBatchEmptyIDs) {
+		writeAPIError(w, http.StatusBadRequest, "validation_failed", err.Error())
+		return
+	}
+	if errors.Is(err, store.ErrBatchDuplicateIDs) {
+		writeAPIError(w, http.StatusBadRequest, "validation_failed", "duplicate light ids in batch")
+		return
+	}
+	if errors.Is(err, store.ErrInvalidLightIndex) {
+		writeAPIError(w, http.StatusBadRequest, "validation_failed", "one or more light ids are out of range for this model")
+		return
+	}
+	if err != nil {
+		msg := err.Error()
+		if strings.Contains(strings.ToLower(msg), "color") || strings.Contains(strings.ToLower(msg), "brightness") {
+			writeAPIError(w, http.StatusBadRequest, "validation_failed", msg)
+			return
+		}
+		writeAPIError(w, http.StatusInternalServerError, "internal_error", "could not update light states")
+		return
+	}
+	if states == nil {
+		states = []store.LightStateDTO{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"states": states})
 }

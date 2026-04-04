@@ -346,6 +346,45 @@ Feature: Visualization reflects light state (REQ-012)
     Given docs/requirements.md defines REQ-011 and REQ-012
     When the REQ-012 business rule about missing stored state is read
     Then lights without stored state must use the REQ-011 default and still render per on and off rules
+
+Feature: Model view light list pagination and bulk settings (REQ-013)
+
+  Scenario: REQ-013 requires paginated light list and page size control
+    Parent requirement: REQ-013
+    Given docs/requirements.md defines REQ-013
+    When the REQ-013 scope and business rules are read
+    Then the model view must include a paginated list of lights when the model has more than one light
+    And the user must be able to change how many lights are shown per page with at least three distinct choices between 1 and 1000 inclusive
+
+  Scenario: REQ-013 requires jump to light by id with validation
+    Parent requirement: REQ-013
+    Given docs/requirements.md defines REQ-013
+    When the REQ-013 business rules about jumping by id are read
+    Then the user must be able to navigate to the page containing a given light id
+    And invalid or out of range ids must not change the page silently
+    And the user must receive actionable feedback for invalid or out of range ids
+
+  Scenario: REQ-013 requires multi-select and bulk apply of REQ-011 fields
+    Parent requirement: REQ-013
+    Given docs/requirements.md defines REQ-011 and REQ-013
+    When the REQ-013 business rules about multi-select are read
+    Then the user must be able to select multiple lights from the list
+    And pointer keyboard and touch-equivalent patterns must be addressed per REQ-002
+    And the user must be able to apply the same on off hex colour and brightness to every selected light
+    And validation for colour and brightness must match REQ-011
+
+  Scenario: REQ-013 binds bulk updates to visualization timeliness
+    Parent requirement: REQ-013
+    Given docs/requirements.md defines REQ-012 and REQ-013
+    When the REQ-013 business rule about successful bulk apply is read
+    Then after a successful bulk apply the 3D view and list must reflect updated state without indefinite staleness
+
+  Scenario: REQ-013 ties pagination and multi-select to responsive UX
+    Parent requirement: REQ-013
+    Given docs/requirements.md defines REQ-002 and REQ-013
+    When the REQ-013 responsive UX notes are read
+    Then pagination and multi-select must remain usable on mobile tablet and desktop
+    And essential actions must not rely on hover-only affordances
 ```
 
 ---

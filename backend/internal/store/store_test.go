@@ -151,3 +151,55 @@ func TestStore_LightStateListPatch(t *testing.T) {
 		t.Fatalf("want ErrInvalidLightIndex, got %v", err)
 	}
 }
+
+func TestStore_BatchPatchLightStates(t *testing.T) {
+	ctx := context.Background()
+	s := testDB(t)
+	sum, err := s.Create(ctx, "batchy", []wiremodel.Light{
+		{ID: 0, X: 0, Y: 0, Z: 0},
+		{ID: 1, X: 1, Y: 0, Z: 0},
+		{ID: 2, X: 2, Y: 0, Z: 0},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = s.BatchPatchLightStates(ctx, sum.ID, nil, LightStatePatch{On: ptrBool(false)})
+	if err != ErrBatchEmptyIDs {
+		t.Fatalf("empty ids: want ErrBatchEmptyIDs, got %v", err)
+	}
+
+	_, err = s.BatchPatchLightStates(ctx, sum.ID, []int{0, 0}, LightStatePatch{On: ptrBool(false)})
+	if err != ErrBatchDuplicateIDs {
+		t.Fatalf("dup ids: want ErrBatchDuplicateIDs, got %v", err)
+	}
+
+	_, err = s.BatchPatchLightStates(ctx, sum.ID, []int{0}, LightStatePatch{})
+	if err == nil {
+		t.Fatal("empty patch fields: want error")
+	}
+
+	_, err = s.BatchPatchLightStates(ctx, sum.ID, []int{99}, LightStatePatch{On: ptrBool(false)})
+	if err != ErrInvalidLightIndex {
+		t.Fatalf("out of range: want ErrInvalidLightIndex, got %v", err)
+	}
+
+	f := false
+	states, err := s.BatchPatchLightStates(ctx, sum.ID, []int{2, 0}, LightStatePatch{On: &f})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(states) != 2 || states[0].ID != 0 || states[1].ID != 2 {
+		t.Fatalf("want sorted ids 0,2 got %+v", states)
+	}
+	if states[0].On || states[1].On {
+		t.Fatalf("expected both off %+v", states)
+	}
+
+	one, err := s.GetLightState(ctx, sum.ID, 1)
+	if err != nil || !one.On {
+		t.Fatalf("light 1 should be unchanged %+v", one)
+	}
+}
+
+func ptrBool(b bool) *bool { return &b }

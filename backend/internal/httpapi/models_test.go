@@ -270,4 +270,29 @@ func TestModels_lightStateEndpoints(t *testing.T) {
 	if len(detail.Lights) != 2 || detail.Lights[0].On || detail.Lights[0].Color != "#00aaff" {
 		t.Fatalf("detail lights[0] %+v", detail.Lights[0])
 	}
+
+	batchBody := `{"ids":[0,1],"on":true,"color":"#112233"}`
+	req, err = http.NewRequest(http.MethodPatch, srv.URL+"/api/v1/models/"+sum.ID+"/lights/state/batch", strings.NewReader(batchBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	res, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(res.Body)
+		t.Fatalf("batch patch status %d %s", res.StatusCode, b)
+	}
+	var batchOut struct {
+		States []store.LightStateDTO `json:"states"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&batchOut); err != nil {
+		t.Fatal(err)
+	}
+	if len(batchOut.States) != 2 || batchOut.States[0].ID != 0 || batchOut.States[0].Color != "#112233" {
+		t.Fatalf("batch states %+v", batchOut.States)
+	}
 }

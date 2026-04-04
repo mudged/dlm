@@ -454,3 +454,65 @@ func TestAcceptance_REQ012_visualizationReflectsLightState(t *testing.T) {
 		t.Fatal("REQ-012 metadata must state priority Must")
 	}
 }
+
+func TestAcceptance_REQ013_modelViewPaginationAndBulkSettings(t *testing.T) {
+	doc := readRequirements(t)
+	block := requirementBlock(doc, "REQ-013")
+	if block == "" {
+		t.Fatal("requirements must contain ### REQ-013 section")
+	}
+	lower := strings.ToLower(block)
+	if !strings.Contains(lower, "paginat") {
+		t.Fatal("REQ-013 must require a paginated light list")
+	}
+	if !strings.Contains(lower, "multi-select") || !strings.Contains(lower, "select multiple") {
+		t.Fatal("REQ-013 must require multi-select or selecting multiple lights")
+	}
+	if !strings.Contains(lower, "page size") || !strings.Contains(lower, "three") {
+		t.Fatal("REQ-013 must require at least three page-size choices")
+	}
+	if !strings.Contains(lower, "1000") {
+		t.Fatal("REQ-013 must bound page size within 1 and 1000")
+	}
+	if !strings.Contains(lower, "jump") || !strings.Contains(lower, "id") {
+		t.Fatal("REQ-013 must require jumping to a light by id")
+	}
+	if !strings.Contains(lower, "feedback") {
+		t.Fatal("REQ-013 must require feedback for invalid or out-of-range ids")
+	}
+	if !strings.Contains(lower, "req-005") {
+		t.Fatal("REQ-013 must reference REQ-005 for light id semantics")
+	}
+	if !strings.Contains(lower, "bulk") || !strings.Contains(lower, "apply") {
+		t.Fatal("REQ-013 must require bulk or apply of settings to selected lights")
+	}
+	if !strings.Contains(lower, "req-011") {
+		t.Fatal("REQ-013 must reference REQ-011 for on/off, colour, and brightness")
+	}
+	if !strings.Contains(lower, "persist") {
+		t.Fatal("REQ-013 must require persistence per REQ-011 for successful updates")
+	}
+	if !strings.Contains(lower, "req-012") {
+		t.Fatal("REQ-013 must reference REQ-012 for 3D view and list timeliness after bulk apply")
+	}
+	for _, kw := range []string{"mobile", "tablet", "desktop"} {
+		if !strings.Contains(lower, kw) {
+			t.Fatalf("REQ-013 responsive notes must mention %q", kw)
+		}
+	}
+	if !strings.Contains(lower, "req-002") {
+		t.Fatal("REQ-013 must reference REQ-002 for responsive / touch / keyboard patterns")
+	}
+	if !strings.Contains(lower, "checkbox") {
+		t.Fatal("REQ-013 must mention checkboxes or an equivalent multi-select affordance")
+	}
+	if !strings.Contains(lower, "hover-only") && !strings.Contains(lower, "hover only") {
+		t.Fatal("REQ-013 must forbid hover-only affordances for essential actions")
+	}
+	if !strings.Contains(lower, "req-006") {
+		t.Fatal("REQ-013 dependencies or scope must reference REQ-006 (model view)")
+	}
+	if !strings.Contains(block, "| **Priority** | Must |") {
+		t.Fatal("REQ-013 metadata must state priority Must")
+	}
+}
