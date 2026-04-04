@@ -49,3 +49,39 @@ If a template file is missing, add it before strict compliance with “MUST use 
 The agent files were aligned with this stack and deployment target: **Maven / Vert.x / Java** references in the architect role were replaced with **Go module layout, Next.js + Tailwind structure, and Raspberry Pi 4 deployment** planning. The requirements role no longer refers only to “Java.”
 
 When editing `.github/agents/*.agent.md`, keep frontmatter valid, preserve the handoff at the end of each workflow, and update this file if the pipeline or document paths change.
+
+## Cursor Cloud specific instructions
+
+### System dependencies
+
+- **Go ≥ 1.25** is required (`go.mod` declares `go 1.25.0`). The VM update script installs Go 1.25.x automatically. Verify with `go version`.
+- **Node.js LTS** (22.x) and **npm** are pre-installed and sufficient.
+
+### Key commands (see `README.md` for full table)
+
+| Task | Command |
+|------|---------|
+| Install frontend deps | `cd web && npm ci` |
+| Download Go deps | `cd backend && go mod download` |
+| Frontend lint | `cd web && npm run lint` |
+| Frontend tests | `cd web && npm test` |
+| Go tests | `cd backend && go test ./...` |
+| Build + run (REQ-008) | `./scripts/run.sh` from repo root |
+| Dev: Go server only | `cd backend && go run ./cmd/server` (serves on `:8080`) |
+| Dev: Next.js hot-reload | `cd web && npm run dev` (`:3000`, proxies API to `:8080`) |
+
+### Running the app
+
+1. Build the frontend static export and copy it into the Go embed tree: `cd web && npm run release:sync`
+2. Start the Go server: `cd backend && go run ./cmd/server`
+3. The app is at `http://127.0.0.1:8080/`
+
+Alternatively, `./scripts/run.sh` does both steps (plus `npm ci` if `node_modules` is missing).
+
+### Gotchas
+
+- **`go.mod` says `go 1.25.0`** — the default system Go (1.22) will refuse to build. The update script installs Go 1.25.x to `/usr/local/go`. Ensure `/usr/local/go/bin` is on `PATH`.
+- **No external services** — SQLite is embedded (pure Go, no CGO). Database file auto-creates at `data/dlm.db`. No Docker, Redis, or Postgres needed.
+- **Sample data** — on first start with an empty DB, 3 sample models (sphere, cube, cone) are auto-seeded. Deleting all models and restarting re-seeds them.
+- **CSV upload field name** — the `POST /api/v1/models` endpoint expects the CSV file under field name `file` (not `csv`), and the CSV header must be exactly `id,x,y,z`.
+- **`next build`** is the slow step (~30–120 s). The `.next/` cache speeds up subsequent builds. Use `DLM_SKIP_NPM_CI=1 ./scripts/run.sh` to skip `npm ci` on repeat runs.
