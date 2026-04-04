@@ -1,37 +1,12 @@
-import Link from "next/link";
 import { StatusOnMount } from "@/components/StatusOnMount";
 import { StatusRefresh } from "@/components/StatusRefresh";
 
 export default function HomePage() {
   return (
-    <main className="mx-auto flex max-w-3xl flex-col gap-8 px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
-      <nav className="text-sm">
-        <Link
-          href="/models"
-          className="font-medium text-sky-700 underline-offset-4 hover:underline dark:text-sky-400"
-        >
-          Light models
-        </Link>
-        <span className="text-slate-400"> · </span>
-        <Link
-          href="/scenes"
-          className="font-medium text-sky-700 underline-offset-4 hover:underline dark:text-sky-400"
-        >
-          Scenes
-        </Link>
-        <span className="text-slate-400"> · </span>
-        <Link
-          href="/options"
-          className="font-medium text-sky-700 underline-offset-4 hover:underline dark:text-sky-400"
-        >
-          Options
-        </Link>
-        <span className="text-slate-400"> · </span>
-        <span className="text-slate-500">CSV upload & 3D layouts</span>
-      </nav>
+    <div className="mx-auto flex max-w-3xl flex-col gap-8 px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
       <header className="space-y-2">
         <p className="text-sm font-semibold uppercase tracking-wide text-sky-700 dark:text-sky-400">
-          DLM
+          Welcome
         </p>
         <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
           Domestic Light & Magic
@@ -67,8 +42,9 @@ export default function HomePage() {
 
       <footer className="text-center text-xs text-slate-500 dark:text-slate-500 sm:text-left">
         Layout reflows at <code className="font-mono">sm</code> and{" "}
-        <code className="font-mono">md</code> breakpoints (Tailwind).
+        <code className="font-mono">md</code> breakpoints (Tailwind). Use the
+        menu for Models, Scenes, and Options.
       </footer>
-    </main>
+    </div>
   );
 }

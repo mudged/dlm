@@ -1,5 +1,10 @@
 "use client";
 
+import {
+  faEye,
+  faTrash,
+  faUpload,
+} from "@fortawesome/free-solid-svg-icons";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useState } from "react";
@@ -8,9 +13,9 @@ import type { ModelSummary } from "@/lib/models";
 
 function ModelsListFallback() {
   return (
-    <main className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
+    <div className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
       <p className="text-sm text-slate-500">Loading…</p>
-    </main>
+    </div>
   );
 }
 
@@ -95,30 +100,7 @@ function ModelsListInner() {
   }
 
   return (
-    <main className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
-      <nav className="flex flex-wrap gap-x-2 gap-y-1 text-sm">
-        <Link
-          href="/"
-          className="text-sky-700 underline-offset-4 hover:underline dark:text-sky-400"
-        >
-          Home
-        </Link>
-        <span className="text-slate-400">·</span>
-        <Link
-          href="/scenes"
-          className="text-sky-700 underline-offset-4 hover:underline dark:text-sky-400"
-        >
-          Scenes
-        </Link>
-        <span className="text-slate-400">·</span>
-        <Link
-          href="/options"
-          className="text-sky-700 underline-offset-4 hover:underline dark:text-sky-400"
-        >
-          Options
-        </Link>
-      </nav>
-
+    <div className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
@@ -134,6 +116,7 @@ function ModelsListInner() {
         </div>
         <Button
           type="button"
+          icon={faUpload}
           className="w-full sm:w-auto"
           onClick={() => router.push("/models/new")}
         >
@@ -194,6 +177,7 @@ function ModelsListInner() {
               <div className="flex shrink-0 gap-2">
                 <Button
                   type="button"
+                  icon={faEye}
                   className="min-h-11 bg-slate-600 dark:bg-slate-600"
                   onClick={() =>
                     router.push(
@@ -205,6 +189,7 @@ function ModelsListInner() {
                 </Button>
                 <Button
                   type="button"
+                  icon={faTrash}
                   className="min-h-11 bg-red-800 hover:bg-red-700 dark:bg-red-900 dark:hover:bg-red-800"
                   disabled={busyId === m.id}
                   onClick={() => void remove(m.id)}
@@ -216,7 +201,7 @@ function ModelsListInner() {
           ))}
         </ul>
       )}
-    </main>
+    </div>
   );
 }
 

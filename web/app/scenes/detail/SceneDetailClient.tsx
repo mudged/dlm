@@ -1,5 +1,13 @@
 "use client";
 
+import {
+  faArrowsRotate,
+  faCheck,
+  faPlus,
+  faRightFromBracket,
+  faRotate,
+  faTrash,
+} from "@fortawesome/free-solid-svg-icons";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -207,6 +215,7 @@ export function SceneDetailClient() {
           </h2>
           <Button
             type="button"
+            icon={faArrowsRotate}
             className="h-9 w-full px-3 py-0 text-sm sm:w-auto"
             onClick={() => setCameraResetVersion((v) => v + 1)}
           >
@@ -242,6 +251,7 @@ export function SceneDetailClient() {
                 </Link>
                 <Button
                   type="button"
+                  icon={faRightFromBracket}
                   className="min-h-11 bg-red-800 hover:bg-red-700 dark:bg-red-900 dark:hover:bg-red-800"
                   disabled={busy}
                   onClick={() => void onRemoveModel(it.model_id)}
@@ -296,6 +306,7 @@ export function SceneDetailClient() {
           </label>
           <Button
             type="button"
+            icon={faPlus}
             className="min-h-11 w-full sm:w-auto"
             disabled={busy || !addModelId}
             onClick={() => void onAddModel()}
@@ -308,6 +319,7 @@ export function SceneDetailClient() {
       <div className="flex flex-wrap gap-2">
         <Button
           type="button"
+          icon={faRotate}
           className="min-h-11 bg-slate-600 dark:bg-slate-600"
           disabled={busy}
           onClick={() => void load()}
@@ -316,6 +328,7 @@ export function SceneDetailClient() {
         </Button>
         <Button
           type="button"
+          icon={faTrash}
           className="min-h-11 bg-red-900 hover:bg-red-800 dark:bg-red-950 dark:hover:bg-red-900"
           disabled={busy}
           onClick={() => void onDeleteScene()}
@@ -386,6 +399,7 @@ function PlacementEditor({
       </label>
       <Button
         type="button"
+        icon={faCheck}
         className="h-9 px-3 text-xs"
         disabled={disabled}
         onClick={() => onApply(ox, oy, oz)}

@@ -1,5 +1,6 @@
 "use client";
 
+import { faRotate } from "@fortawesome/free-solid-svg-icons";
 import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/Button";
 
@@ -37,7 +38,12 @@ export function StatusRefresh() {
         Manual refresh (same-origin API; dev uses Next rewrite)
       </p>
       <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
-        <Button onClick={onRefresh} disabled={loading} aria-busy={loading}>
+        <Button
+          icon={faRotate}
+          onClick={onRefresh}
+          disabled={loading}
+          aria-busy={loading}
+        >
           {loading ? "Loading…" : "Refresh API status"}
         </Button>
         {error ? (

@@ -1,9 +1,10 @@
 "use client";
 
-import Link from "next/link";
+import { faUpload, faXmark } from "@fortawesome/free-solid-svg-icons";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
+import { ButtonLink } from "@/components/ui/ButtonLink";
 
 export default function NewModelPage() {
   const router = useRouter();
@@ -54,34 +55,7 @@ export default function NewModelPage() {
   }
 
   return (
-    <main className="mx-auto flex max-w-lg flex-col gap-6 px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
-      <nav className="flex flex-wrap gap-3 text-sm">
-        <Link
-          href="/"
-          className="text-sky-700 underline-offset-4 hover:underline dark:text-sky-400"
-        >
-          Home
-        </Link>
-        <Link
-          href="/models"
-          className="text-sky-700 underline-offset-4 hover:underline dark:text-sky-400"
-        >
-          Models
-        </Link>
-        <Link
-          href="/scenes"
-          className="text-sky-700 underline-offset-4 hover:underline dark:text-sky-400"
-        >
-          Scenes
-        </Link>
-        <Link
-          href="/options"
-          className="text-sky-700 underline-offset-4 hover:underline dark:text-sky-400"
-        >
-          Options
-        </Link>
-      </nav>
-
+    <div className="mx-auto flex max-w-lg flex-col gap-6 px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
       <header>
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
           Upload model
@@ -135,18 +109,23 @@ export default function NewModelPage() {
         ) : null}
 
         <div className="flex flex-col gap-2 sm:flex-row">
-          <Button type="submit" disabled={submitting} className="w-full sm:w-auto">
+          <Button
+            type="submit"
+            icon={faUpload}
+            disabled={submitting}
+            className="w-full sm:w-auto"
+          >
             {submitting ? "Uploading…" : "Upload"}
           </Button>
-          <Button
-            type="button"
-            className="w-full bg-slate-500 hover:bg-slate-600 dark:bg-slate-600 dark:hover:bg-slate-500 sm:ml-2 sm:w-auto"
-            onClick={() => router.push("/models")}
+          <ButtonLink
+            href="/models"
+            icon={faXmark}
+            className="w-full sm:ml-2 sm:w-auto"
           >
             Cancel
-          </Button>
+          </ButtonLink>
         </div>
       </form>
-    </main>
+    </div>
   );
 }

@@ -640,3 +640,74 @@ func TestAcceptance_REQ017_optionsFactoryResetWithConfirmation(t *testing.T) {
 		t.Fatal("REQ-017 metadata must state priority Must")
 	}
 }
+
+func TestAcceptance_REQ018_applicationShellThemesNavAndFontAwesome(t *testing.T) {
+	doc := readRequirements(t)
+	block := requirementBlock(doc, "REQ-018")
+	if block == "" {
+		t.Fatal("requirements must contain ### REQ-018 section")
+	}
+	lower := strings.ToLower(block)
+	if !strings.Contains(lower, "light") || !strings.Contains(lower, "dark") {
+		t.Fatal("REQ-018 must require both light and dark themes")
+	}
+	if !strings.Contains(lower, "theme") {
+		t.Fatal("REQ-018 must use the term theme(s) for UI modes")
+	}
+	if !strings.Contains(lower, "white") {
+		t.Fatal("REQ-018 must require white or white-equivalent background for light mode")
+	}
+	if !strings.Contains(lower, "grey") && !strings.Contains(lower, "gray") {
+		t.Fatal("REQ-018 must require dark grey (or gray) background for dark mode")
+	}
+	if !strings.Contains(lower, "burger") && !strings.Contains(lower, "hamburger") {
+		t.Fatal("REQ-018 must require a burger or hamburger control for the menu")
+	}
+	if !strings.Contains(lower, "left") {
+		t.Fatal("REQ-018 must place primary navigation on the left")
+	}
+	if !strings.Contains(lower, "collaps") {
+		t.Fatal("REQ-018 must require a collapsible navigation region")
+	}
+	if !strings.Contains(lower, "domestic light & magic") {
+		t.Fatal("REQ-018 must require the exact application title Domestic Light & Magic")
+	}
+	if !strings.Contains(lower, "font awesome") {
+		t.Fatal("REQ-018 must name Font Awesome for logo and buttons")
+	}
+	if !strings.Contains(lower, "lightbulb") {
+		t.Fatal("REQ-018 must specify the lightbulb icon for the logo")
+	}
+	if !strings.Contains(lower, "regular") {
+		t.Fatal("REQ-018 must specify classic/regular style for the lightbulb logo")
+	}
+	if !strings.Contains(lower, "fontawesome.com") {
+		t.Fatal("REQ-018 must reference the Font Awesome catalog URL for the lightbulb icon")
+	}
+	if !strings.Contains(lower, "button") {
+		t.Fatal("REQ-018 must require Font Awesome icons on buttons")
+	}
+	if !strings.Contains(lower, "req-001") {
+		t.Fatal("REQ-018 must list REQ-001 in dependencies")
+	}
+	if !strings.Contains(lower, "req-002") {
+		t.Fatal("REQ-018 must reference REQ-002 for responsive and non-hover-only use")
+	}
+	for _, kw := range []string{"mobile", "tablet", "desktop"} {
+		if !strings.Contains(lower, kw) {
+			t.Fatalf("REQ-018 responsive notes must mention %q", kw)
+		}
+	}
+	if !strings.Contains(lower, "hover-only") && !strings.Contains(lower, "hover only") {
+		t.Fatal("REQ-018 must forbid hover-only requirements for menu or theme switching")
+	}
+	if !strings.Contains(lower, "touch") {
+		t.Fatal("REQ-018 must require touch usability for the burger/menu (REQ-002 tie)")
+	}
+	if !strings.Contains(lower, "architecture") {
+		t.Fatal("REQ-018 must defer some placement or tokens to architecture")
+	}
+	if !strings.Contains(block, "| **Priority** | Must |") {
+		t.Fatal("REQ-018 metadata must state priority Must")
+	}
+}

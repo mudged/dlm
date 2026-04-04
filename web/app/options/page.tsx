@@ -1,6 +1,10 @@
 "use client";
 
-import Link from "next/link";
+import {
+  faBan,
+  faTriangleExclamation,
+  faTrash,
+} from "@fortawesome/free-solid-svg-icons";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
@@ -53,28 +57,7 @@ export default function OptionsPage() {
   }
 
   return (
-    <main className="mx-auto flex max-w-lg flex-col gap-6 px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
-      <nav className="flex flex-wrap gap-3 text-sm">
-        <Link
-          href="/"
-          className="text-sky-700 underline-offset-4 hover:underline dark:text-sky-400"
-        >
-          Home
-        </Link>
-        <Link
-          href="/models"
-          className="text-sky-700 underline-offset-4 hover:underline dark:text-sky-400"
-        >
-          Models
-        </Link>
-        <Link
-          href="/scenes"
-          className="text-sky-700 underline-offset-4 hover:underline dark:text-sky-400"
-        >
-          Scenes
-        </Link>
-      </nav>
-
+    <div className="mx-auto flex max-w-lg flex-col gap-6 px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
       <header className="space-y-2">
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
           Options
@@ -100,6 +83,7 @@ export default function OptionsPage() {
         </p>
         <Button
           type="button"
+          icon={faTriangleExclamation}
           className="mt-4 min-h-11 w-full bg-red-800 hover:bg-red-700 dark:bg-red-900 dark:hover:bg-red-800 sm:w-auto"
           onClick={openDialog}
         >
@@ -137,6 +121,7 @@ export default function OptionsPage() {
         <div className="flex flex-col-reverse gap-2 border-t border-slate-200 px-4 py-3 sm:flex-row sm:justify-end dark:border-slate-700">
           <Button
             type="button"
+            icon={faBan}
             className="min-h-11 w-full bg-slate-500 hover:bg-slate-600 dark:bg-slate-600 sm:w-auto"
             disabled={busy}
             onClick={closeDialog}
@@ -145,6 +130,7 @@ export default function OptionsPage() {
           </Button>
           <Button
             type="button"
+            icon={faTrash}
             className="min-h-11 w-full bg-red-800 hover:bg-red-700 dark:bg-red-900 sm:w-auto"
             disabled={busy}
             onClick={() => void confirmFactoryReset()}
@@ -153,6 +139,6 @@ export default function OptionsPage() {
           </Button>
         </div>
       </dialog>
-    </main>
+    </div>
   );
 }

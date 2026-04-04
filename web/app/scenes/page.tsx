@@ -1,5 +1,6 @@
 "use client";
 
+import { faFolderOpen, faPlus } from "@fortawesome/free-solid-svg-icons";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -27,30 +28,7 @@ export default function ScenesListPage() {
   }, [load]);
 
   return (
-    <main className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
-      <nav className="text-sm">
-        <Link
-          href="/"
-          className="text-sky-700 underline-offset-4 hover:underline dark:text-sky-400"
-        >
-          Home
-        </Link>
-        <span className="text-slate-400"> · </span>
-        <Link
-          href="/models"
-          className="text-sky-700 underline-offset-4 hover:underline dark:text-sky-400"
-        >
-          Models
-        </Link>
-        <span className="text-slate-400"> · </span>
-        <Link
-          href="/options"
-          className="text-sky-700 underline-offset-4 hover:underline dark:text-sky-400"
-        >
-          Options
-        </Link>
-      </nav>
-
+    <div className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
@@ -63,6 +41,7 @@ export default function ScenesListPage() {
         </div>
         <Button
           type="button"
+          icon={faPlus}
           className="w-full sm:w-auto"
           onClick={() => router.push("/scenes/new")}
         >
@@ -113,6 +92,7 @@ export default function ScenesListPage() {
               </div>
               <Button
                 type="button"
+                icon={faFolderOpen}
                 className="min-h-11 w-full sm:w-auto"
                 onClick={() =>
                   router.push(`/scenes/detail?id=${encodeURIComponent(s.id)}`)
@@ -124,6 +104,6 @@ export default function ScenesListPage() {
           ))}
         </ul>
       )}
-    </main>
+    </div>
   );
 }

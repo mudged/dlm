@@ -735,3 +735,89 @@ As a user, I want an **Options** area that includes **factory reset**, so that I
 - **Post-reset** **navigation** (**stay** **on** **page** vs **redirect** **to** **model** **list**).
 
 ---
+
+### REQ-018 — Application shell: themes, collapsible navigation, branding, and Font Awesome controls
+
+| Field | Value |
+|-------|-------|
+| **ID** | REQ-018 |
+| **Title** | Application shell: themes, collapsible navigation, branding, and Font Awesome controls |
+| **Priority** | Must |
+| **Actor(s)** | End user |
+
+**User story**
+
+As a user, I want a **consistent application shell** with **light and dark themes**, a **collapsible left navigation** opened from a **burger** control, **clear branding** (**title** and **logo**), and **buttons that use Font Awesome icons**, so that the product is **readable**, **navigable on small screens**, and **visually coherent** across device classes.
+
+**Scope**
+
+- In scope: **Two** UI **themes**—**light** and **dark**—that the user can rely on for **page-level** chrome and primary content areas (exact component scope per architecture, but **global** theme semantics below apply). **Light** theme: **white** (or **white-equivalent**) **background** for the main shell and **dark** **foreground** text for primary reading. **Dark** theme: **dark grey** **background** for the main shell and **white** **foreground** text for primary reading. **Primary navigation** lives in a **left** **column** **panel** that **collapses** and **expands**; a **burger** (**hamburger**) **button** **toggles** that panel. The **application title** shown in the shell MUST be the exact string **`Domestic Light & Magic`**. The **application logo** MUST be the **Font Awesome** **classic** **regular** **lightbulb** icon as catalogued at [Font Awesome: lightbulb (classic, regular)](https://fontawesome.com/icons/lightbulb?f=classic&s=regular) (e.g. **`fa-regular fa-lightbulb`** in Font Awesome’s conventional class naming, or **equivalent** for the **same** **style** and **glyph** in the **version** the project adopts). **Buttons** in the UI (see business rules) MUST **display** a **Font Awesome** icon as part of their **visible** affordance (icons MAY pair with text labels where clarity requires it). **Licensing** and **delivery** of Font Awesome assets (Kit, npm package, or **embedded** SVG per architecture) MUST comply with **Font Awesome** **license** **terms** for the chosen **tier**.
+- Out of scope: **Per-control** custom colours that **break** theme **contrast** **intentionally**; **non-button** **decorative** **illustrations** **outside** the **logo** and **button** **icon** rules unless a later requirement adds them; **animation** of the **burger** icon beyond **toggle** **state** **feedback** unless architecture specifies it.
+
+**Business rules**
+
+1. **Default** **vs** **override:** On **first** **load** **or** **until** **the** **user** **sets** **an** **explicit** **theme** **preference**, the **application** **MUST** **follow** **the** **user**’s **system** **(or** **user** **agent**)** **default** **for** **light** **vs** **dark** **appearance**—e.g. **`prefers-color-scheme`** **where** **the** **platform** **exposes** **it**. **After** **the** **user** **manually** **chooses** **light** **or** **dark**, **that** **choice** **MUST** **persist** **across** **sessions** **per** **architecture** **and** **override** **the** **system** **signal** **until** **the** **user** **changes** **it** **again** **(or** **a** **documented** **reset** **path** **exists**)**. **Where** **no** **system** **scheme** **is** **available**, **architecture** **defines** **a** **fallback** **(e.g.** **light**)**. The **product** **MUST** **still** **expose** **both** **themes** **and** **a** **discoverable** **way** **to** **switch** **between** **them** (**REQ-002**); **manual** **switching** **MUST** **not** **depend** **on** **hover-only** **affordances**.
+2. In **light** theme, the **main** **application** **background** (shell / page canvas behind primary content) MUST be **white** or **substantially** **white**, and **primary** **body**/**chrome** **text** MUST be **dark** so **normal** reading meets **legible** contrast against that background (exact tokens in architecture).
+3. In **dark** theme, the **main** **application** **background** MUST be **dark** **grey** (**not** **pure** **black** as the **only** mandated colour—architecture picks a specific **grey**), and **primary** **body**/**chrome** **text** MUST be **white** or **near-white** for **legible** contrast.
+4. **Primary** **navigation** MUST be presented in a **left** **side** **menu** **region** that **collapses** to **hidden** or **icon-only**/**minimal** form and **expands** to show **navigation** **labels** **and** **destinations** per architecture; a **burger** **button** MUST **toggle** **collapse**/**expand** and MUST remain **usable** on **touch** **devices** (**REQ-002**).
+5. The **visible** **application** **title** in the shell (e.g. header or adjacent branding) MUST read **`Domestic Light & Magic`** exactly (including **`&`** and spacing).
+6. The **application** **logo** MUST use the **Font Awesome** **classic** **regular** **lightbulb** icon identified at [fontawesome.com/icons/lightbulb?f=classic&s=regular](https://fontawesome.com/icons/lightbulb?f=classic&s=regular); it MUST **read** as the **product** **mark** **alongside** the **title** per architecture (size and placement responsive per **REQ-002**).
+7. **Buttons** (**`<button>`** **elements** and **button-styled** **controls** used for **actions**—e.g. **submit**, **cancel**, **delete**, **nav** **affordances** **styled** as **buttons**, **toolbar** **actions**) MUST include a **Font Awesome** icon in their **visible** UI (same **family**/**kit** as the **logo** unless architecture documents **why** a **split** is **impossible**). **Pure** **text** **links** **without** **button** **styling**, **text** **inputs**, and **native** **file** **inputs** are **exempt**; **icon-only** **buttons** are **allowed** if **accessible** **names** are **provided** (**REQ-002**).
+8. Theme **colours**, **collapsible** **nav**, **branding**, and **button** **icons** MUST remain **usable** on **mobile**, **tablet**, and **desktop** (**REQ-002**): **no** **hover-only** **requirement** to **open** the **menu** or **switch** **theme**.
+
+**Responsive / UX notes** *(when UI is involved)*
+
+- Mobile: **Burger** **control** **reachable** **without** **horizontal** **scroll**; **expanded** **menu** **does** **not** **trap** **focus** **without** **a** **close** **path**; **theme** **toggle** **reachable**.
+- Tablet: **Same** as **mobile**; **orientation** **changes** **keep** **branding** **and** **burger** **discoverable**.
+- Desktop: **Collapsible** **nav** **may** **default** **expanded** **at** **wide** **widths** per **architecture** but **burger** **still** **collapses**/**expands**; **title** **and** **logo** **remain** **visible** in **header** **or** **equivalent**.
+
+**Dependencies**
+
+- REQ-001, REQ-002
+
+**Open questions**
+
+- **Exact** **hex** or **design-token** values for **dark** **grey** **background** and **dark** **text** in **light** **mode**.
+- Whether **every** **destructive** or **primary** **modal** **action** **must** **reuse** the **same** **icon** **rules** when **implemented** as **links** **styled** **as** **buttons** vs **native** **buttons** (clarify **“button”** **scope** during **architecture**).
+
+---
+
+### REQ-019 — Three.js model and scene views: fixed dark-grey viewport
+
+| Field | Value |
+|-------|-------|
+| **ID** | REQ-019 |
+| **Title** | Three.js model and scene views: fixed dark-grey viewport |
+| **Priority** | Must |
+| **Actor(s)** | End user |
+
+**User story**
+
+As a user **viewing** a **model** or a **scene** in **three.js**, I want the **3D** **viewport** **always** **shown** **on** **a** **dark** **grey** **backdrop**, **whether** **the** **rest** **of** **the** **app** **is** **in** **light** **or** **dark** **mode**, so that **lights**, **wire** **segments**, and **labels** **stay** **easy** **to** **see**.
+
+**Scope**
+
+- In scope: The **WebGL** **rendering** **surface** **(scene** **background** **and** **any** **architectural** **match** **for** **margins** **/** **letterboxing** **inside** **the** **same** **visual** **frame** **as** **the** **canvas**)** **for** **(a)** **single-model** **detail** **(**REQ-010**)** **and** **(b)** **scene** **composite** **detail** **(**REQ-015**)** **MUST** **use** **a** **dark** **grey** **(not** **white** **or** **near-white**)** **regardless** **of** **whether** **REQ-018** **shell** **theme** **is** **light** **or** **dark**. **The** **same** **dark-grey** **policy** **applies** **in** **both** **UI** **themes** **so** **contrast** **with** **REQ-010**/**012** **sphere** **and** **segment** **colours** **remains** **stable**. **Exact** **colour** **or** **design** **token** **is** **deferred** **to** **architecture** **(must** **read** **clearly** **as** **dark** **grey** **to** **users**)**.
+- Out of scope: **Changing** **REQ-010**/**012** **segment** **or** **default** **sphere** **colours** **unless** **architecture** **shows** **a** **contrast** **defect** **on** **the** **chosen** **grey**; **non-three.js** **UI** **panels** **(tables,** **forms**)** **which** **follow** **REQ-018** **shell** **tokens**; **export** **of** **screenshots**.
+
+**Business rules**
+
+1. **Model** **detail** **three.js** **(**REQ-010**)** **and** **scene** **detail** **three.js** **(**REQ-015**)** **MUST** **clear** **/** **fill** **the** **3D** **view** **with** **a** **dark** **grey** **background** **in** **light** **shell** **mode** **and** **in** **dark** **shell** **mode** **(**REQ-018**)**.
+2. **Grid** **helpers**, **axes**, **or** **other** **non-data** **scene** **chrome** **in** **those** **views** **MUST** **remain** **subordinate** **to** **the** **lights** **and** **wires** **(**REQ-010**/** **REQ-012**)**; **architecture** **tunes** **helper** **contrast** **against** **the** **fixed** **dark-grey** **viewport**.
+3. **REQ-002** **still** **requires** **the** **3D** **viewport** **and** **its** **controls** **(e.g.** **orbit,** **reset** **camera**)** **to** **be** **usable** **on** **mobile,** **tablet,** **and** **desktop** **without** **hover-only** **essential** **steps**.
+
+**Responsive / UX notes** *(when UI is involved)*
+
+- Mobile: **Canvas** **area** **reads** **as** **dark** **grey**; **touch** **orbit** **and** **pick** **behaviour** **unchanged** **from** **REQ-010**/**015**.
+- Tablet: **Same** **as** **mobile**; **orientation** **changes** **do** **not** **switch** **the** **viewport** **to** **a** **light** **background**.
+- Desktop: **Same** **policy**; **shell** **chrome** **may** **still** **toggle** **light**/**dark** **per** **REQ-018** **without** **changing** **the** **three.js** **backdrop** **policy**.
+
+**Dependencies**
+
+- REQ-002, REQ-010, REQ-015, REQ-018
+
+**Open questions**
+
+- **Whether** **the** **fixed** **three.js** **grey** **should** **match** **a** **single** **token** **shared** **with** **REQ-018** **dark** **shell** **or** **a** **dedicated** **“viz** **grey”** **token**.
+
+---

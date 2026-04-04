@@ -14,6 +14,7 @@ import {
   buildWireSegmentPositions,
   SPHERE_RADIUS_M,
 } from "@/lib/wireSegments";
+import { VIZ_VIEWPORT_BG, VIZ_VIEWPORT_BG_CSS } from "@/lib/vizViewport";
 
 type Props = {
   items: SceneItem[];
@@ -65,32 +66,22 @@ function lightBrightness(L: Light): number {
 }
 
 function sceneBackgroundColor(): THREE.Color {
-  if (typeof window === "undefined") {
-    return new THREE.Color(0xf1f5f9);
-  }
-  return new THREE.Color(
-    window.matchMedia("(prefers-color-scheme: dark)").matches
-      ? 0x0f172a
-      : 0xf1f5f9,
-  );
+  return new THREE.Color(VIZ_VIEWPORT_BG);
 }
 
 function createSubtleGridHelper(
   size: number,
   divisions: number,
 ): THREE.GridHelper {
-  const dark =
-    typeof window !== "undefined" &&
-    window.matchMedia("(prefers-color-scheme: dark)").matches;
-  const centerLine = dark ? 0x2c3b4f : 0xd2dae3;
-  const gridLine = dark ? 0x1b2638 : 0xebeef2;
+  const centerLine = 0x2c3b4f;
+  const gridLine = 0x1b2638;
   const grid = new THREE.GridHelper(size, divisions, centerLine, gridLine);
   const mats = grid.material;
   const list = Array.isArray(mats) ? mats : [mats];
   for (const m of list) {
     if (m instanceof THREE.LineBasicMaterial) {
       m.transparent = true;
-      m.opacity = dark ? 0.38 : 0.55;
+      m.opacity = 0.38;
       m.depthWrite = false;
     }
   }
@@ -189,6 +180,7 @@ export default function SceneLightsCanvas({
 
     const camera = new THREE.PerspectiveCamera(55, 1, 0.001, 1e7);
     const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setClearColor(VIZ_VIEWPORT_BG, 1);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
     const controls = new OrbitControls(camera, renderer.domElement);
@@ -535,7 +527,8 @@ export default function SceneLightsCanvas({
   return (
     <div
       ref={wrapRef}
-      className="relative h-[min(50vh,24rem)] w-full min-h-[240px] overflow-hidden rounded-xl border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-900"
+      className="relative h-[min(50vh,24rem)] w-full min-h-[240px] overflow-hidden rounded-xl border border-slate-600/40"
+      style={{ backgroundColor: VIZ_VIEWPORT_BG_CSS }}
       role="img"
       aria-label="Three-dimensional scene view of placed models"
     >
@@ -575,7 +568,7 @@ export default function SceneLightsCanvas({
         </div>
       ) : null}
       {totalLights === 0 ? (
-        <span className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-slate-100/80 text-sm text-slate-600 dark:bg-slate-900/80 dark:text-slate-400">
+        <span className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-black/35 text-sm text-slate-300">
           No lights in this scene
         </span>
       ) : null}

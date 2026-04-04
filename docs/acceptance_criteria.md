@@ -566,6 +566,60 @@ Feature: Options factory reset with confirmation (REQ-017)
     Given docs/requirements.md defines REQ-002 and REQ-017
     When the REQ-017 business rule about REQ-002 is read
     Then opening Options starting factory reset and confirming or canceling must not require hover-only essential steps
+
+Feature: Application shell themes navigation branding and Font Awesome (REQ-018)
+
+  Scenario: REQ-018 mandates light and dark themes with specified surfaces
+    Parent requirement: REQ-018
+    Given docs/requirements.md defines REQ-018
+    When requirement REQ-018 is read
+    Then the product must expose both light and dark themes with a discoverable way to switch between them
+    And light theme must use a white or white-equivalent main application background with dark primary text
+    And dark theme must use a dark grey main application background with white or near-white primary text
+
+  Scenario: REQ-018 requires collapsible left navigation toggled by a burger control
+    Parent requirement: REQ-018
+    Given docs/requirements.md defines REQ-002 and REQ-018
+    When the REQ-018 scope and business rules about navigation are read
+    Then primary navigation must be in a left region that collapses and expands
+    And a burger button must toggle collapse and expand
+    And the menu and burger must remain usable on touch devices per REQ-002
+
+  Scenario: REQ-018 fixes application title and Font Awesome regular lightbulb logo
+    Parent requirement: REQ-018
+    Given docs/requirements.md defines REQ-018
+    When the REQ-018 business rules about branding are read
+    Then the visible application title must be exactly Domestic Light & Magic
+    And the application logo must use the Font Awesome classic regular lightbulb icon as linked from Font Awesome lightbulb classic regular
+
+  Scenario: REQ-018 requires Font Awesome icons on buttons
+    Parent requirement: REQ-018
+    Given docs/requirements.md defines REQ-018
+    When the REQ-018 business rule about buttons is read
+    Then button elements and button-styled action controls must show a Font Awesome icon in the visible UI
+    And essential theme navigation and menu actions must not rely on hover-only steps per REQ-002
+
+  Scenario: REQ-018 defaults theme to system preference until user overrides
+    Parent requirement: REQ-018
+    Given docs/requirements.md defines REQ-018
+    When the REQ-018 business rule 1 about default versus override is read
+    Then on first load the application must follow the user's system light versus dark preference where available for example prefers-color-scheme
+    And after the user manually chooses light or dark that choice must persist across sessions and override the system signal until the user changes it again or a documented reset path exists
+
+Feature: Three.js fixed dark-grey viewport (REQ-019)
+
+  Scenario: REQ-019 requires dark-grey three.js backdrop for model and scene in both shell themes
+    Parent requirement: REQ-019
+    Given docs/requirements.md defines REQ-010 REQ-015 REQ-018 and REQ-019
+    When the REQ-019 scope and business rules are read
+    Then the WebGL rendering surface for single-model detail and scene composite detail must use a dark grey background not white or near-white
+    And that policy must apply when REQ-018 shell theme is light and when it is dark
+
+  Scenario: REQ-019 keeps three.js viewport responsive per REQ-002
+    Parent requirement: REQ-019
+    Given docs/requirements.md defines REQ-002 and REQ-019
+    When the REQ-019 business rule 3 and responsive notes are read
+    Then the 3D viewport and its controls must remain usable on mobile tablet and desktop without hover-only essential steps
 ```
 
 ---

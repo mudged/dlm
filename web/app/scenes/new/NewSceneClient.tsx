@@ -1,9 +1,16 @@
 "use client";
 
-import Link from "next/link";
+import {
+  faArrowDown,
+  faArrowUp,
+  faCheck,
+  faPlus,
+  faXmark,
+} from "@fortawesome/free-solid-svg-icons";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
+import { ButtonLink } from "@/components/ui/ButtonLink";
 import type { ModelSummary } from "@/lib/models";
 import { createScene } from "@/lib/scenes";
 
@@ -156,27 +163,30 @@ export function NewSceneClient() {
               </select>
             </label>
             <div className="flex flex-wrap gap-1">
-              <button
+              <Button
                 type="button"
-                className="inline-flex min-h-9 min-w-11 items-center justify-center rounded-lg border border-slate-300 bg-white px-2 text-xs font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-40 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
+                icon={faArrowUp}
+                className="min-h-9 min-w-11 !bg-white !text-slate-800 hover:!bg-slate-50 dark:!bg-slate-900 dark:!text-slate-100 dark:hover:!bg-slate-800 border border-slate-300 px-2 py-1 text-xs disabled:opacity-40 dark:border-slate-600"
                 disabled={i === 0}
                 onClick={() => moveRow(i, i - 1)}
               >
                 Up
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
-                className="inline-flex min-h-9 min-w-11 items-center justify-center rounded-lg border border-slate-300 bg-white px-2 text-xs font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-40 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
+                icon={faArrowDown}
+                className="min-h-9 min-w-11 !bg-white !text-slate-800 hover:!bg-slate-50 dark:!bg-slate-900 dark:!text-slate-100 dark:hover:!bg-slate-800 border border-slate-300 px-2 py-1 text-xs disabled:opacity-40 dark:border-slate-600"
                 disabled={i === rows.length - 1}
                 onClick={() => moveRow(i, i + 1)}
               >
                 Down
-              </button>
+              </Button>
             </div>
           </div>
         ))}
         <Button
           type="button"
+          icon={faPlus}
           className="min-h-11 w-full bg-slate-600 hover:bg-slate-500 dark:bg-slate-600 dark:hover:bg-slate-500 sm:w-auto"
           onClick={addRow}
         >
@@ -187,18 +197,16 @@ export function NewSceneClient() {
       <div className="flex flex-wrap gap-2">
         <Button
           type="button"
+          icon={faCheck}
           className="min-h-11"
           disabled={busy}
           onClick={() => void submit()}
         >
           {busy ? "Creating…" : "Create scene"}
         </Button>
-        <Link
-          href="/scenes"
-          className="inline-flex min-h-11 items-center rounded-lg border border-slate-300 px-4 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
-        >
+        <ButtonLink href="/scenes" icon={faXmark} className="min-h-11">
           Cancel
-        </Link>
+        </ButtonLink>
       </div>
     </div>
   );

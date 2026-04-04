@@ -1,6 +1,6 @@
 # Architecture
 
-This document defines technical structure and deployment for the product described in `docs/requirements.md` (**REQ-001–REQ-017**). It satisfies **REQ-001** (Go + Next.js + Tailwind), **REQ-002** (responsive, client-interactive UI), **REQ-003** (Raspberry Pi 4 Model B, **ARM64**, resource awareness), **REQ-004** (**one runnable executable** per release target; **no** mandatory Docker/OCI/compose packaging at this stage), **REQ-005** (wire light **chain** model: **CSV** interchange, **metadata**, **at most two** logical neighbors per light by **consecutive id**—**endpoints** have **one**), **REQ-006** (list / view / delete / create via CSV upload; **delete blocked** with **409** when the model is **referenced** by **one or more** **scenes**, with an **actionable** **error** payload), **REQ-007** (server-side CSV validation and actionable errors), **REQ-008** (single command to build UI and run the Go server locally), **REQ-009** (default **sphere**, **cube**, **cone** samples: lights on **exterior** nominal surfaces with **even** coverage of **face planes** (**cube**) and **surface area** (**sphere** / **cone**), **not** **edge-only** or **single-curve-only** layouts; consecutive spacing **0.05–0.10 m**; **500–1000** lights each; **≤ 0.03 m** surface deviation; **~2 m** characteristic size), **REQ-010** (**three.js** **3D** view on **model detail**: **every** light as **2 cm** sphere; **all** lights drawn for **n ≤ 1000**; **wire** segments **only** between **consecutive** **ids**; segments **`#D0D0D0`** at **85% transparency** (**15% opacity**), **subtler** than spheres; **hover** / **touch** disclosure of **id** and **coordinates**), **REQ-011** (**REST** **read/write** of per-light **on/off**, **hex** **#RRGGBB** colour, **brightness** **0–100%**, persisted in **SQLite**), **REQ-012** (**3D** **spheres** reflect state: **on** = **opaque** **filled** **colour** × **brightness**; **off** = **`#D0D0D0`** at **85% transparency** matching segments; **timely** UI sync after **writes**), **REQ-013** (**model detail**: **paginated** light **list** with **page-size** control and **go to id**; **multi-select** and **bulk apply** via **batch** **PATCH**), **REQ-014** (**default** all lights **off**, **`#FFFFFF`**, **100%** brightness on create/seed; **reset** control + **authoritative** API to restore that state for **all** lights in **one** action), **REQ-015** (**scenes**: **named** **composite** **3D** **space**; **create** with **≥ 1** **model** **and** **server-computed** **integer** **offsets** **(no** **client-supplied** **offsets** **on** **create)**; **canonical** **`lights.x/y/z`** **unchanged** **by** **scenes**; **derived** **`sx/sy/sz`** **=** **canonical** **+** **offset** **for** **API**/**UI** **in** **scene** **context**; **non-negative** **containment** **+** **≥ 1 m** **margin** **beyond** **max** **extent** **per** **axis**; **three.js** **composite** **view** **reusing** **REQ-010**/**012** **per** **model**; **add**/**remove**/**optional** **placement** **edit** **after** **create**; **last** **model** **→** **confirm** **then** **delete** **scene**; **+X** **default** **for** **models** **added** **after** **create**), **REQ-016** (**camera reset** on **model** and **scene** **three.js** views: **client-only** restore of **default** **framing**; **no** **persisted** **data** **changes**), and **REQ-017** (**Options** **UI** with **factory reset**: **confirmed** **wipe** of **all** **SQLite** **application** **data** **then** **re-seed** **§3.8** **samples** **to** **match** **fresh** **install**).
+This document defines technical structure and deployment for the product described in `docs/requirements.md` (**REQ-001–REQ-019**). It satisfies **REQ-001** (Go + Next.js + Tailwind), **REQ-002** (responsive, client-interactive UI), **REQ-003** (Raspberry Pi 4 Model B, **ARM64**, resource awareness), **REQ-004** (**one runnable executable** per release target; **no** mandatory Docker/OCI/compose packaging at this stage), **REQ-005** (wire light **chain** model: **CSV** interchange, **metadata**, **at most two** logical neighbors per light by **consecutive id**—**endpoints** have **one**), **REQ-006** (list / view / delete / create via CSV upload; **delete blocked** with **409** when the model is **referenced** by **one or more** **scenes**, with an **actionable** **error** payload), **REQ-007** (server-side CSV validation and actionable errors), **REQ-008** (single command to build UI and run the Go server locally), **REQ-009** (default **sphere**, **cube**, **cone** samples: lights on **exterior** nominal surfaces with **even** coverage of **face planes** (**cube**) and **surface area** (**sphere** / **cone**), **not** **edge-only** or **single-curve-only** layouts; consecutive spacing **0.05–0.10 m**; **500–1000** lights each; **≤ 0.03 m** surface deviation; **~2 m** characteristic size), **REQ-010** (**three.js** **3D** view on **model detail**: **every** light as **2 cm** sphere; **all** lights drawn for **n ≤ 1000**; **wire** segments **only** between **consecutive** **ids**; segments **`#D0D0D0`** at **85% transparency** (**15% opacity**), **subtler** than spheres; **hover** / **touch** disclosure of **id** and **coordinates**), **REQ-011** (**REST** **read/write** of per-light **on/off**, **hex** **#RRGGBB** colour, **brightness** **0–100%**, persisted in **SQLite**), **REQ-012** (**3D** **spheres** reflect state: **on** = **opaque** **filled** **colour** × **brightness**; **off** = **`#D0D0D0`** at **85% transparency** matching segments; **timely** UI sync after **writes**), **REQ-013** (**model detail**: **paginated** light **list** with **page-size** control and **go to id**; **multi-select** and **bulk apply** via **batch** **PATCH**), **REQ-014** (**default** all lights **off**, **`#FFFFFF`**, **100%** brightness on create/seed; **reset** control + **authoritative** API to restore that state for **all** lights in **one** action), **REQ-015** (**scenes**: **named** **composite** **3D** **space**; **create** with **≥ 1** **model** **and** **server-computed** **integer** **offsets** **(no** **client-supplied** **offsets** **on** **create)**; **canonical** **`lights.x/y/z`** **unchanged** **by** **scenes**; **derived** **`sx/sy/sz`** **=** **canonical** **+** **offset** **for** **API**/**UI** **in** **scene** **context**; **non-negative** **containment** **+** **≥ 1 m** **margin** **beyond** **max** **extent** **per** **axis**; **three.js** **composite** **view** **reusing** **REQ-010**/**012** **per** **model**; **add**/**remove**/**optional** **placement** **edit** **after** **create**; **last** **model** **→** **confirm** **then** **delete** **scene**; **+X** **default** **for** **models** **added** **after** **create**), **REQ-016** (**camera reset** on **model** and **scene** **three.js** views: **client-only** restore of **default** **framing**; **no** **persisted** **data** **changes**), **REQ-017** (**Options** **UI** with **factory reset**: **confirmed** **wipe** of **all** **SQLite** **application** **data** **then** **re-seed** **§3.8** **samples** **to** **match** **fresh** **install**), **REQ-018** (**application** **shell**: **light**/**dark** **themes** (**white**/dark **grey** **surfaces**, **dark**/ **white** **primary** **text**); **collapsible** **left** **nav** **with** **burger** **toggle**; **branding** **title** **`Domestic Light & Magic`** **+** **Font Awesome** **classic** **regular** **lightbulb** **logo**; **Font Awesome** **icons** **on** **action** **buttons** **throughout** **the** **UI** **per** **§4.11**; **default** **theme** **follows** **`prefers-color-scheme`** **until** **the** **user** **overrides** **with** **a** **persisted** **choice**), and **REQ-019** (**model** **and** **scene** **three.js** **views**; **fixed** **dark-grey** **WebGL** **backdrop** **in** **both** **shell** **themes**; **§4.7** **and** **§4.9**).
 
 ## Architectural resolution: REQ-004 (single binary) vs Next.js
 
@@ -37,6 +37,8 @@ This meets REQ-004 rule 1 (**no separate Node.js runtime** in the distribution) 
 | REQ-015 | **`scenes`** + **`scene_models`** (**§3.12**); **`POST /scenes`** **computes** **all** **offsets** **from** **ordered** **`model_id`** **list**; **`GET /models/{id}`** **unchanged** **(canonical** **coords)**; **`GET /scenes/{id}`** **returns** **`x,y,z`** **+** **`sx,sy,sz`** (**§3.13**); **composite** **three.js** **§4.9**; **409** **`model_in_scenes`** (**§3.2**, **§8.4**). |
 | REQ-016 | **§4.7** / **§4.9**: **`Reset camera`** **control** **re-applies** **`applyDefaultFraming`** **(same** **pure** **function** **as** **initial** **load** **from** **current** **bounds**)**; **`OrbitControls`** **target** **+** **camera** **position** **+** **`update()`**; **does** **not** **call** **API**. **§4.10** **IA** **optional** **link** **only**—**primary** **placement** **adjacent** **to** **viewport**. |
 | REQ-017 | **`POST /api/v1/system/factory-reset`** (**§3.2**, **§3.14**); **`store.FactoryReset`** **transaction** **then** **`SeedDefaultSamples`**; **Options** **route** **§4.10** **+** **modal** **before** **POST**; **post-success** **navigate** **`/models`** **+** **success** **message** (**architectural** **default** **for** **REQ-017** **open** **question**). |
+| REQ-018 | **§4.11**: **Tailwind** **`dark:`** **variant** on **`html`** (**add**/**remove** **`class="dark"`** **or** **`data-theme="dark"`** **per** **Tailwind** **v4**/**v3** **config**); **before** **any** **stored** **user** **choice**, **derive** **initial** **light**/**dark** **from** **`window.matchMedia('(prefers-color-scheme: dark)')`** **(or** **equivalent**)** **when** **available**; **fallback** **to** **light** **if** **the** **platform** **does** **not** **expose** **a** **scheme**; **after** **the** **user** **toggles** **theme**, **persist** **`light`** **or** **`dark`** **in** **`localStorage`** **key** **`dlm-theme`** **and** **re-apply** **on** **load** **before** **first** **paint** **(inline** **blocking** **script** **in** **`layout`** **recommended** **to** **avoid** **flash**)** **so** **the** **persisted** **value** **overrides** **`prefers-color-scheme`** **until** **cleared** **or** **changed**; **shell** **tokens**: **light** **`bg-white`** **+** **`text-gray-900`**; **dark** **`bg-gray-900`** **+** **`text-white`** (**dark** **grey** **background**, **not** **mandating** **`#000`**); **`AppShell`**: **header** **(burger,** **`faLightbulb`** **regular** **logo,** **exact** **title** **`Domestic Light & Magic`**, **theme** **toggle** **with** **icons)** **+** **collapsible** **left** **`<aside>`** **nav** **+** **`main`**; **Font Awesome** **Free** **`@fortawesome/fontawesome-svg-core`**, **`@fortawesome/react-fontawesome`**, **`@fortawesome/free-regular-svg-icons`**, **`@fortawesome/free-solid-svg-icons`**; **buttons** **and** **button-styled** **controls** **include** **a** **visible** **Font Awesome** **icon** **+** **accessible** **name**. |
+| REQ-019 | **§4.7**, **§4.9**: **`ModelLightsCanvas`** **/** **`SceneLightsCanvas`** **set** **a** **fixed** **dark-grey** **clear** **/** **scene** **background** **and** **matching** **letterbox** **wrapper** **(see** **§4.7** **viewport** **subsection**)** **independent** **of** **`html`** **`dark`** **class**; **does** **not** **replace** **REQ-018** **shell** **tokens** **for** **`main`** **chrome**. |
 
 **Assumed Pi context:** Raspberry Pi 4 Model B, **64-bit OS**, **ARM64** userspace. **2–8 GB RAM** — with **no Node** at runtime, **4 GB** is practical for modest traffic; **off-device** `next export` builds recommended.
 
@@ -67,7 +69,7 @@ dlm/
         placeholder.txt       # optional tiny file so empty embed works in dev before first UI build
   web/                        # Next.js + Tailwind (source only for runtime; sibling of backend/)
     app/
-    components/
+    components/               # incl. AppShell, theme toggle, nav (REQ-018 §4.11); ModelLightsCanvas / SceneLightsCanvas (REQ-019 viz backdrop §4.7–§4.9)
     lib/
   docs/
 ```
@@ -423,9 +425,9 @@ Unchanged intent: **Tailwind breakpoints**, **touch targets**, **`"use client"`*
 - **Routes (App Router):** e.g. **`/models`** (list), **`/models/new`** (upload form: **name** text input + **file** input), **`/models/[id]`** (detail: metadata; **§4.8** **paginated** light **table** + **§4.7** **3D** view; per-light or bulk controls per **REQ-011** / **REQ-013**; **Reset lights** **button** calling **`POST …/lights/state/reset`** per **§3.11** (**REQ-014**), **reachable** on **mobile** / **tablet** / **desktop** without **hover-only** use). **Model** **delete** **control:** on **`409`** **`model_in_scenes`**, **show** **`error.message`** **and** **`details.scenes`** (names/links to **`/scenes/{id}`**) per **§3.13**.
 - **Client data:** **`"use client"`** pages/components call **`fetch`** with **`GET`**, **`POST`** (**`FormData`** for multipart), **`DELETE`**, and **`PATCH`** (**JSON**) against **`/api/v1/models…`** on the **same origin** (**§4.3**).
 - **Feedback:** Inline / banner display of **400** / **409** **`message`** from API; loading states on list, detail, upload, and delete (**REQ-002**).
-- **Navigation:** Clear entry point from **home** or **app shell** to **models** list (**implementor** chooses IA); **add** **§4.10** **Options** **link** **from** **the** **same** **shell** (**REQ-017**).
+- **Navigation:** **Primary** **IA** **is** **the** **collapsible** **left** **nav** **in** **§4.11** (**Models**, **Scenes**, **Options**, **home** **`/`** **if** **distinct**); **no** **hover-only** **paths** **to** **these** **destinations** (**REQ-002**, **REQ-018**).
 
-### 4.7 Three.js visualization on model detail (**REQ-010**, **REQ-012**, **REQ-016**)
+### 4.7 Three.js visualization on model detail (**REQ-010**, **REQ-012**, **REQ-016**, **REQ-019**)
 
 **Dependency:** Declare **`three`** in **`web/package.json`** as a **direct** dependency (satisfies REQ-010 business rule 2). Pin a **stable semver** range in lockfile; bump intentionally when upgrading. Using **`@react-three/fiber`** / **`@react-three/drei`** is **optional**—if used, **`three`** MUST still appear **directly** in **`dependencies`** (not only as a transitive peer).
 
@@ -466,6 +468,8 @@ Unchanged intent: **Tailwind breakpoints**, **touch targets**, **`"use client"`*
 
 **Layout:** **WebGL canvas** in a **responsive** container (**full width**, **bounded height** via **`min-h-[…]`** / **`max` viewport height**). **`ResizeObserver`** updates **camera.aspect** and **`renderer.setSize`**.
 
+**Viewport background (REQ-019):** **Independently** **of** **REQ-018** **shell** **light**/**dark**, **set** **`scene.background`** **and** **`WebGLRenderer.setClearColor`** **(same** **RGB)** **to** **one** **fixed** **dark** **grey** **that** **reads** **clearly** **as** **grey** **(not** **white** **or** **near-white**)**—** **architecture** **default** **`#262626`** **(≈** **Tailwind** **`neutral-800`**)**, **centralized** **as** **a** **named** **constant** **e.g.** **`VIZ_VIEWPORT_BG`** **in** **`web/lib/`** **so** **model** **and** **scene** **canvases** **stay** **aligned**. **If** **the** **canvas** **is** **letterboxed** **inside** **a** **wrapper**, **style** **that** **wrapper** **(and** **any** **padding** **region** **inside** **the** **same** **visual** **frame** **as** **the** **WebGL** **element**)** **with** **the** **same** **hex** **so** **light** **shell** **mode** **does** **not** **show** **white** **margins** **around** **the** **3D** **view**. **Do** **not** **tie** **this** **colour** **to** **`html`** **`dark`** **or** **to** **shell** **`bg-white`**/**`bg-gray-900`** **tokens**.
+
 **Edge cases:** **`n === 0`:** Initialize renderer + empty scene + overlay copy; **no** spheres or segments. **`n === 1`:** One sphere; **no** segments. **WebGL unavailable:** Inline / console error acceptable per prior REQ-010 note.
 
 **Testing note:** Unit-test **pure** helpers (**hex** + **brightness** → **THREE.Color**, **segment** **vertex** **pairs**, **instance** **matrices**, **pick** **index**) in **`web/lib/`**; **manual** verify **on/off** **appearance**, **PATCH** **refresh**, **hover** and **tap** on **mobile** + **desktop**.
@@ -493,11 +497,11 @@ Unchanged intent: **Tailwind breakpoints**, **touch targets**, **`"use client"`*
 
 **Accessibility / responsive:** Table **MAY** **stack** as **cards** on **narrow** **viewports**; **checkboxes** and **bulk** **panel** remain **reachable** **without** **hover-only** **affordances** (**REQ-013** rule 7).
 
-### 4.9 Scenes UI and composite three.js (**REQ-015**, **REQ-010**, **REQ-012**, **REQ-016**)
+### 4.9 Scenes UI and composite three.js (**REQ-015**, **REQ-010**, **REQ-012**, **REQ-016**, **REQ-019**)
 
 - **Routes:** **`/scenes`** (list), **`/scenes/new`** (**create** **flow**: **scene** **name** + **ordered** **multi-select** **of** **≥ 1** **model** **—** **no** **per-row** **offset** **inputs**; **submit** **`POST /api/v1/scenes`** **with** **`models`** **in** **that** **order** **and** **let** **the** **server** **compute** **offsets** **per** **§3.12**), **`/scenes/[id]`** (**detail** **composite** **view** **+** **optional** **offset** **editing** **via** **`PATCH …/models/{modelId}`** **after** **create**).
 - **Data:** **`GET /api/v1/scenes`**, **`POST /api/v1/scenes`**, **`GET /api/v1/scenes/{id}`**, **`POST …/models`**, **`PATCH …/models/{modelId}`**, **`DELETE …/models/{modelId}`**, **`DELETE /api/v1/scenes/{id}`** per **§3.13**. **On** **`409`** **`scene_last_model`**, **show** **modal** **copy** **that** **removing** **the** **last** **model** **deletes** **the** **entire** **scene**; **on** **confirm**, **`DELETE /api/v1/scenes/{id}`** **then** **redirect** **to** **`/scenes`**.
-- **Composite** **three.js:** **Refactor** **or** **duplicate** **§4.7** **patterns** **into** **a** **`SceneLightsCanvas`** **(or** **extend** **`ModelLightsCanvas`**) **that** **accepts** **`items[]`**: **for** **each** **model**, **build** **the** **same** **2** **cm** **spheres** **and** **`#D0D0D0`** **`opacity`** **0.15** **segments** **between** **consecutive** **`id`** **only** **within** **that** **model**, **using** **`sx`, `sy`, `sz`** **from** **API** **(or** **client-composed** **positions** **identical** **to** **server** **rules**). **No** **segments** **between** **models**. **Per-light** **state** **materials** **match** **§4.7** (**REQ-012**). **Picking** **must** **identify** **which** **model** **and** **which** **light** **id** **for** **hover**/**tap** **(show** **scene** **coordinates** **and** **model** **id** **+** **light** **`id`** **as** **needed**).
+- **Composite** **three.js:** **Refactor** **or** **duplicate** **§4.7** **patterns** **into** **a** **`SceneLightsCanvas`** **(or** **extend** **`ModelLightsCanvas`**) **that** **accepts** **`items[]`**: **for** **each** **model**, **build** **the** **same** **2** **cm** **spheres** **and** **`#D0D0D0`** **`opacity`** **0.15** **segments** **between** **consecutive** **`id`** **only** **within** **that** **model**, **using** **`sx`, `sy`, `sz`** **from** **API** **(or** **client-composed** **positions** **identical** **to** **server** **rules**). **No** **segments** **between** **models**. **Per-light** **state** **materials** **match** **§4.7** (**REQ-012**). **Apply** **the** **same** **REQ-019** **fixed** **dark-grey** **viewport** **treatment** **as** **§4.7** **(scene** **background** **+** **renderer** **clear** **+** **letterbox** **wrapper**)**. **Picking** **must** **identify** **which** **model** **and** **which** **light** **id** **for** **hover**/**tap** **(show** **scene** **coordinates** **and** **model** **id** **+** **light** **`id`** **as** **needed**).
 - **Framing (REQ-016):** **Fit** **camera** **to** **§3.12** **AABB** **`[0,0,0]`** **–** **`(Mmax+1)`** **per** **axis** **plus** **marker** **radius** **margin** **using** **the** **same** **`applyDefaultFraming`** **pattern** **as** **§4.7** **but** **with** **bounds** **derived** **from** **scene-space** **positions** **`(sx,sy,sz)`** **for** **all** **lights**. **A** **“Reset camera”** **control** **on** **the** **scene** **canvas** **re-invokes** **that** **same** **fit** **(no** **API** **call**)**.**
 - **Add** **model** **control:** **calls** **`POST …/scenes/{id}/models`** **without** **offsets** **to** **get** **default** **+X** **placement** **or** **with** **explicit** **integers** **after** **user** **edit**. **Placement** **inputs** **validate** **≥ 0** **client-side** **for** **fast** **feedback**; **authoritative** **errors** **from** **API** **400**.
 - **REQ-002:** **Same** **touch**/**pointer** **expectations** **as** **model** **detail**; **no** **hover-only** **blocking** **flows** **for** **add**/**remove**/**confirm**.
@@ -506,7 +510,7 @@ Unchanged intent: **Tailwind breakpoints**, **touch targets**, **`"use client"`*
 
 **Route:** **`/options`** **(App Router)** **or** **equivalent** **single** **page** **with** **`<h1>Options</h1>`** **(or** **product** **title** **+** **“Options”**)** **and** **a** **short** **explanation** **that** **this** **area** **holds** **destructive** **maintenance** **actions**.
 
-**Information architecture:** **Expose** **“Options”** **in** **the** **global** **nav** **/** **header** **next** **to** **Models** **and** **Scenes** **(or** **under** **a** **“More”** **menu** **on** **narrow** **viewports** **with** **the** **same** **label** **visible** **after** **open**)**—** **REQ-002** **touch** **targets**.
+**Information architecture:** **“Options”** **lives** **in** **the** **same** **collapsible** **left** **navigation** **as** **Models** **and** **Scenes** (**§4.11**); **when** **the** **aside** **is** **collapsed** **on** **mobile**, **open** **it** **with** **the** **burger** **to** **reach** **all** **three** **(REQ-002**, **REQ-018**).
 
 **Factory reset row:** **Primary** **button** **or** **destructive-styled** **control** **labeled** **Factory reset** **(or** **Reset all data**)** **opens** **a** **native** **`<dialog>`** **or** **modal** **with:**
 - **Title** **e.g.** **“Erase all data?”**
@@ -521,6 +525,78 @@ Unchanged intent: **Tailwind breakpoints**, **touch targets**, **`"use client"`*
 **REQ-017** **typed** **phrase** **(e.g.** **type** **RESET**)**:** **Not** **required** **for** **MVP** **per** **this** **architecture** **(optional** **hardening** **later**)**.**
 
 **Accessibility:** **Modal** **must** **trap** **focus** **or** **use** **native** **`dialog`** **with** **visible** **Cancel**/**Confirm**; **Escape** **cancels** **if** **the** **implementor** **enables** **it** **(recommended).**
+
+### 4.11 Application shell, themes, navigation, and Font Awesome (**REQ-018**)
+
+**Goal:** One **client-side** **shell** wraps **all** **App Router** **pages** (**`web/app/layout.tsx`** **mounts** **`AppShell`** **as** **`"use client"`** **wrapper** **or** **layout** **composition** **that** **does** **not** **break** **static** **export**): **branding**, **theme**, **burger**/**aside**, **and** **icon** **conventions** **stay** **consistent** **across** **models**, **scenes**, **and** **options**.
+
+#### Layout structure
+
+- **Top** **header** **(full** **width,** **sticky** **optional):**
+  - **Burger** **`<button>`** **(left):** **toggles** **`navOpen`** **state**; **icon** **`faBars`** **(solid)** **or** **equivalent** **from** **the** **same** **Font Awesome** **Free** **kit**.
+  - **Branding** **(after** **burger):** **`FontAwesomeIcon`** **with** **`faLightbulb`** **from** **`@fortawesome/free-regular-svg-icons`** — **same** **glyph** **as** [Font Awesome lightbulb classic regular](https://fontawesome.com/icons/lightbulb?f=classic&s=regular). **Adjacent** **visible** **title** **text** **must** **be** **exactly** **`Domestic Light & Magic`** **(REQ-018** **rule** **5**)**.**
+  - **Theme** **toggle** **`<button>`** **(right** **or** **next** **to** **branding** **per** **space):** **icons** **`faSun`**/**`faMoon`** **(solid)** **or** **one** **icon** **that** **flips** **with** **`aria-pressed`**; **toggle** **between** **light** **and** **dark** **modes**.
+- **Left** **`<aside>`** **(primary** **navigation):**
+  - **When** **expanded:** **vertical** **list** **of** **`next/link`** **entries** **(or** **buttons** **that** **`router.push`**) **for** **`/`** **(home),** **`/models`**, **`/scenes`**, **`/options`** — **each** **row** **is** **a** **button-styled** **control** **with** **a** **Font Awesome** **icon** **+** **label** **(REQ-018** **rule** **7**)**.**
+  - **When** **collapsed** **(narrow** **viewport):** **aside** **is** **off-screen** **or** **`hidden`** **except** **as** **an** **overlay** **drawer** **(full-height** **`fixed`** **panel** **`z-index`** **above** **`main`**) **opened** **by** **burger**; **tapping** **a** **backdrop** **or** **a** **close** **control** **dismisses** **the** **drawer** **(REQ-018** **responsive** **notes** — **no** **focus** **trap** **without** **escape**)**.**
+  - **When** **collapsed** **(wide** **desktop):** **optional** **pattern** **—** **narrow** **rail** **(icons** **only)** **vs** **full** **labels**; **burger** **still** **toggles** **between** **those** **two** **widths** **so** **REQ-018** **“collapsible** **left** **menu”** **is** **satisfied** **even** **if** **default** **is** **expanded** **at** **`lg+`**.**
+- **`<main>`** **fills** **remaining** **width** **with** **page** **content**; **apply** **shell** **background**/**text** **tokens** **here** **per** **REQ-018**. **three.js** **viewports** **(REQ-019)** **do** **not** **inherit** **shell** **background** **for** **the** **WebGL** **clear** **/** **scene** **fill**:** **they** **use** **the** **fixed** **dark-grey** **policy** **in** **§4.7** **regardless** **of** **light**/**dark** **shell**.
+
+#### Theming (Tailwind)
+
+- **Mechanism:** **Enable** **Tailwind** **`darkMode: 'class'`** **(v3)** **or** **the** **v4** **equivalent** **so** **light** **=** **absence** **of** **`dark`** **on** **`<html>`**, **dark** **=** **`class="dark"`** **on** **`<html>`** **(set** **from** **a** **small** **client** **effect** **on** **mount** **+** **on** **toggle**)**.**
+- **Initial** **vs** **persisted** **(REQ-018** **rule** **1**)**:** **On** **load**, **if** **`localStorage`** **`dlm-theme`** **is** **`light`** **or** **`dark`**, **apply** **that** **value** **and** **ignore** **`prefers-color-scheme`** **for** **the** **shell**. **If** **the** **key** **is** **absent** **or** **invalid**, **read** **`window.matchMedia('(prefers-color-scheme: dark)')`** **(or** **equivalent**)** **and** **apply** **`dark`** **when** **it** **matches**, **else** **`light`** **when** **the** **API** **exists** **but** **does** **not** **match** **dark**; **if** **no** **media-query** **signal** **is** **available**, **default** **shell** **to** **`light`**. **When** **the** **user** **presses** **the** **theme** **toggle**, **write** **`dlm-theme`** **to** **`light`** **or** **`dark`** **and** **update** **`<html>`** **immediately**. **Optional** **product** **enhancement** **(not** **required** **by** **REQ-018**)**:** **a** **third** **“Use** **system**” **control** **that** **removes** **`dlm-theme`** **and** **re-subscribes** **to** **`prefers-color-scheme`** **changes**.
+- **Tokens** **(implement** **via** **Tailwind** **`bg-*`**, **`text-*`**, **`border-*`** **with** **`dark:`** **variants):**
+  - **Light:** **`bg-white`** **(or** **`bg-neutral-50`**) **for** **shell** **+** **`main`**; **`text-gray-900`** **(or** **`text-neutral-900`**) **for** **primary** **reading** **text** **and** **nav** **labels**.
+  - **Dark:** **`bg-gray-900`** **for** **shell** **+** **`main`** **—** **dark** **grey** **background** **per** **REQ-018** **(not** **`#000`** **as** **the** **only** **choice**)**; **`text-white`** **for** **primary** **text**. **Cards**/**panels** **inside** **`main`** **MAY** **use** **`bg-gray-800`** **for** **elevation** **contrast** **against** **`bg-gray-900`** **(architecture** **allows** **one** **step** **lighter** **grey** **for** **nested** **surfaces**)**.**
+- **Contrast:** **Keep** **WCAG-minded** **pairings** **for** **shell** **body** **text** **vs** **surface** **(REQ-018**)**. **three.js** **backdrop** **is** **governed** **by** **REQ-019** **(§4.7**)** **and** **is** **not** **required** **to** **match** **shell** **grey**; **pick** **helper**/**grid** **colours** **that** **stay** **visible** **on** **`VIZ_VIEWPORT_BG`** **without** **competing** **with** **lights** **and** **segments**.
+
+#### Font Awesome (delivery and licensing)
+
+- **Packages** **(npm,** **bundled** **into** **static** **export**)**:** **`@fortawesome/fontawesome-svg-core`**, **`@fortawesome/react-fontawesome`**, **`@fortawesome/free-regular-svg-icons`** **(contains** **`faLightbulb`**), **`@fortawesome/free-solid-svg-icons`** **(e.g.** **`faBars`**, **`faSun`**, **`faMoon`**, **`faTrash`**, **`faUpload`**, **`faPlus`)**. **Pin** **versions** **in** **`package-lock.json`**; **respect** **[Font Awesome Free license](https://fontawesome.com/license/free)** **(attribution** **in** **`README`** **or** **About** **if** **required** **by** **license** **at** **ship** **time**)**.**
+- **Alternative** **not** **preferred** **for** **MVP:** **Kit** **script** **tag** **from** **CDN** **—** **adds** **runtime** **network** **dependency** **and** **complicates** **offline**/**Pi** **use**; **SVG-in-JS** **tree-shaking** **above** **is** **the** **default** **architecture**.
+- **Button** **rule** **(REQ-018** **rule** **7**)**:** **Every** **`<button>`** **used** **for** **actions** **(submit,** **delete,** **cancel,** **reset,** **camera** **reset,** **pagination,** **bulk** **apply,** **modal** **confirm/cancel,** **factory** **reset,** **go** **to** **id,** **etc.**)** **MUST** **render** **a** **`<FontAwesomeIcon`** **`icon={…}`** **`/>`** **before** **or** **after** **the** **visible** **label** **(consistent** **placement** **per** **component** **family**)**. **Exempt:** **native** **form** **fields** **(`<input>`**, **`<textarea>`**, **`<select>`**, **`type="file"`**) **and** **plain** **text** **links** **without** **button** **styling**. **Button-styled** **links** **`className`** **matching** **primary**/**secondary** **button** **treatment** **MUST** **also** **include** **an** **icon**. **Icon-only** **buttons** **MUST** **have** **`aria-label`** **or** **visually** **hidden** **text**.
+
+#### Interaction with existing sections
+
+- **§4.6–§4.9:** **Replace** **ad-hoc** **page** **headers** **with** **reliance** **on** **`AppShell`** **title** **area** **where** **redundant**; **page** **`<h1>`** **MAY** **remain** **for** **route** **topic** **(e.g.** **“Models”)** **below** **the** **global** **brand** **strip** **or** **omit** **if** **the** **nav** **already** **disambiguates** **(implementor** **chooses** **minimal** **duplication**)**.**
+- **§4.7** **/§4.9** **“Reset** **camera”** **and** **other** **toolbar** **buttons:** **each** **gets** **a** **Font Awesome** **icon** **per** **above**.
+
+#### Static export note
+
+- **Font Awesome** **SVG** **icons** **are** **pure** **React** **+** **tree-shaken** **JS** — **compatible** **with** **`output: 'export'`**; **no** **server** **runtime** **required**.
+
+```mermaid
+sequenceDiagram
+  actor User as User device
+  participant Inline as Inline layout script
+  participant LS as localStorage
+  participant MQ as prefers-color-scheme media query
+  participant Root as html element
+  participant Shell as AppShell (React client)
+
+  User->>Inline: Parse HTML first paint
+  Inline->>LS: getItem dlm-theme
+  alt dlm-theme is light or dark
+    LS-->>Inline: stored value
+    Inline->>Root: apply dark class or omit for light per stored value
+  else missing or invalid
+    Inline->>MQ: prefers-color-scheme dark query
+    MQ-->>Inline: matches or not
+    Inline->>Root: dark class if dark matches else light shell
+  end
+  User->>Shell: React hydration
+  Shell-->>User: Shell matches html class from inline script
+
+  User->>Shell: Toggle theme
+  Shell->>Root: classList toggle dark
+  Shell->>LS: setItem dlm-theme light or dark
+  Shell-->>User: Shell and main surfaces update via Tailwind dark variants
+
+  User->>Shell: Tap burger
+  Shell->>Shell: setNavOpen true or false
+  Shell-->>User: Aside drawer or rail expands or collapses
+```
 
 ---
 
@@ -610,6 +686,8 @@ sequenceDiagram
   P-->>B: Assets
   B-->>User: Hydrated responsive UI
 ```
+
+**REQ-018** **(shell** **theme**)**:** **Before** **first** **paint**, **an** **inline** **script** **in** **`web/app/layout.tsx`** **(or** **equivalent**)** **MUST** **read** **`localStorage`** **`dlm-theme`** **and** **fall** **back** **to** **`prefers-color-scheme`** **when** **the** **key** **is** **absent**/**invalid**, **then** **set** **`html`** **`class`** **per** **§4.11** **so** **the** **document** **does** **not** **flash** **the** **wrong** **shell** **theme**.
 
 ### 8.2 Client calls JSON API (same origin)
 
@@ -705,7 +783,7 @@ sequenceDiagram
   end
 ```
 
-### 8.5 Model detail: JSON from Go, WebGL in the browser (**REQ-010**, **REQ-012**)
+### 8.5 Model detail: JSON from Go, WebGL in the browser (**REQ-010**, **REQ-012**, **REQ-019**)
 
 ```mermaid
 sequenceDiagram
@@ -721,7 +799,8 @@ sequenceDiagram
   P->>G: GET /api/v1/models/{id}
   G-->>P: 200 JSON (metadata + lights with on color brightness_pct)
   P-->>R: 200 JSON (metadata + lights with on color brightness_pct)
-  R->>R: Build scene, opaque filled on-spheres vs D0D0D0 15 percent opacity off-spheres, D0D0D0 15 percent opacity segments between consecutive ids, OrbitControls
+  R->>R: Build scene, fixed dark-grey scene background and renderer clear per REQ-019 independent of shell theme
+  R->>R: Opaque filled on-spheres vs D0D0D0 15 percent opacity off-spheres, D0D0D0 15 percent opacity segments between consecutive ids, OrbitControls
   R->>R: Raycast hover or tap shows id and x y z overlay
   R-->>User: WebGL canvas + metadata UI (same origin, no Node SSR)
 ```
@@ -868,7 +947,7 @@ sequenceDiagram
   end
 ```
 
-### 8.11 Load scene detail and render composite WebGL (**REQ-015**)
+### 8.11 Load scene detail and render composite WebGL (**REQ-015**, **REQ-019**)
 
 ```mermaid
 sequenceDiagram
@@ -887,6 +966,7 @@ sequenceDiagram
   G-->>P: 200 JSON items with scene-space positions
   P-->>R: 200 JSON
   R->>R: Build composite scene: per-model spheres and chain segments only within each model
+  R->>R: Apply same REQ-019 fixed dark-grey viewport as model detail §4.7
   R-->>User: WebGL canvas + add remove placement controls
 ```
 
@@ -999,7 +1079,9 @@ sequenceDiagram
 | REQ-015 | §1, §3.1, §3.2, §3.12–§3.13, §4.6, §4.9, §7 (DB), §8.10–§8.12 |
 | REQ-016 | §1, §4.7, §4.9, §8.14 |
 | REQ-017 | §1, §3.2, §3.14, §4.6, §4.10, §8.13, §9 |
+| REQ-018 | §1, §2, §4.5, §4.6, §4.7, §4.9, §4.10, §4.11, §8.1 (inline theme + hydration), §10 |
+| REQ-019 | §1, §4.7, §4.9, §4.11 (contrast note), §8.5, §8.11, §10 |
 
 ---
 
-**Next step:** Invoke **`@implementor`** **to** **add** **`POST /api/v1/system/factory-reset`** **(**§3.14**)** **and** **`store.FactoryReset`**, **the** **`/options`** **page** **with** **confirmation** **modal** **(**§4.10**)** **,** **and** **“Reset camera”** **on** **model** **and** **scene** **canvases** **(**§4.7**, **§4.9**)** **using** **`applyDefaultFraming`**. **Then** invoke **`@verifier`** **to** **audit**, **run** **tests**, **and** **update** **`docs/traceability_matrix.md`**.
+**Next step:** Invoke **`@implementor`** **to** **align** **code** **with** **§4.11** **(REQ-018**:** **`prefers-color-scheme`** **default**, **`localStorage`** **`dlm-theme`** **override**)** **and** **§4.7**/**§4.9** **(REQ-019**:** **`VIZ_VIEWPORT_BG`** **/** **equivalent** **on** **`ModelLightsCanvas`** **and** **`SceneLightsCanvas`**)**, **plus** **any** **remaining** **`AppShell`**, **Font Awesome**, **nav**, **`POST /api/v1/system/factory-reset`** **(**§3.14**)**, **`/options`** **(**§4.10**)**, **and** **“Reset camera”** **(**§4.7**, **§4.9**)** **gaps**. **Then** invoke **`@verifier`** **to** **audit**, **run** **tests**, **and** **update** **`docs/traceability_matrix.md`**.

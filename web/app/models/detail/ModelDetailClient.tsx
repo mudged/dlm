@@ -1,5 +1,16 @@
 "use client";
 
+import {
+  faArrowLeft,
+  faArrowRight,
+  faArrowsRotate,
+  faCheck,
+  faCheckDouble,
+  faChevronLeft,
+  faChevronRight,
+  faRotate,
+  faXmark,
+} from "@fortawesome/free-solid-svg-icons";
 import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -164,6 +175,7 @@ function LightStateEditor({
       </label>
       <Button
         type="button"
+        icon={faCheck}
         className="h-8 px-2 py-0 text-xs"
         disabled={saving}
         onClick={() => void save()}
@@ -303,6 +315,7 @@ function BulkLightStatePanel({
         </label>
         <Button
           type="button"
+          icon={faCheckDouble}
           className="h-8 px-2 py-0 text-xs"
           disabled={saving}
           onClick={() => void apply()}
@@ -582,6 +595,7 @@ export function ModelDetailClient() {
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:justify-end">
             <Button
               type="button"
+              icon={faArrowsRotate}
               className="h-9 w-full shrink-0 px-3 py-0 text-sm sm:w-auto"
               onClick={() => setCameraResetVersion((v) => v + 1)}
             >
@@ -589,6 +603,7 @@ export function ModelDetailClient() {
             </Button>
             <Button
               type="button"
+              icon={faRotate}
               className="h-9 w-full shrink-0 px-3 py-0 text-sm sm:w-auto"
               disabled={resetting}
               onClick={() => void resetAllLights()}
@@ -660,6 +675,7 @@ export function ModelDetailClient() {
               <div className="flex flex-wrap items-center gap-2">
                 <Button
                   type="button"
+                  icon={faChevronLeft}
                   className="h-8 px-2 py-0 text-xs"
                   disabled={pageClamped <= 1}
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
@@ -671,6 +687,7 @@ export function ModelDetailClient() {
                 </span>
                 <Button
                   type="button"
+                  icon={faChevronRight}
                   className="h-8 px-2 py-0 text-xs"
                   disabled={pageClamped >= totalPages}
                   onClick={() =>
@@ -701,13 +718,18 @@ export function ModelDetailClient() {
                     aria-invalid={goToIdErr ? true : undefined}
                   />
                 </label>
-                <Button type="submit" className="h-8 px-2 py-0 text-xs sm:ml-1">
+                <Button
+                  type="submit"
+                  icon={faArrowRight}
+                  className="h-8 px-2 py-0 text-xs sm:ml-1"
+                >
                   Go
                 </Button>
               </form>
               {selectedIds.length > 0 ? (
                 <Button
                   type="button"
+                  icon={faXmark}
                   className="h-8 min-h-0 min-w-0 bg-slate-200 px-2 py-0 text-xs text-slate-900 hover:bg-slate-300 dark:bg-slate-700 dark:text-slate-100 dark:hover:bg-slate-600"
                   onClick={() => {
                     setSelectedIds([]);
@@ -793,6 +815,7 @@ export function ModelDetailClient() {
       <div className="flex flex-col gap-2 sm:flex-row">
         <Button
           type="button"
+          icon={faArrowLeft}
           className="w-full bg-slate-600 dark:bg-slate-600 sm:w-auto"
           onClick={() => router.push("/models")}
         >
