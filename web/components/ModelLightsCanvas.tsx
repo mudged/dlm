@@ -5,7 +5,10 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { boundingFromLights } from "@/lib/lightBounds";
 import type { Light } from "@/lib/models";
-import { colorFromHexAndBrightness } from "@/lib/lightAppearance";
+import {
+  colorFromHexAndBrightness,
+  normalizeLightHex,
+} from "@/lib/lightAppearance";
 import {
   buildWireSegmentPositions,
   SPHERE_RADIUS_M,
@@ -13,6 +16,8 @@ import {
 
 type Props = {
   lights: Light[];
+  /** When set, orbit position/target are restored across `lights` updates with the same key (e.g. model id). */
+  cameraPersistenceKey?: string;
 };
 
 type PickData = {
@@ -60,9 +65,16 @@ function formatCoord(n: number): string {
   return n.toFixed(HOVER_DECIMALS);
 }
 
-function ModelLightsCanvas({ lights }: Props) {
+type SavedOrbit = {
+  key: string;
+  position: THREE.Vector3;
+  target: THREE.Vector3;
+};
+
+function ModelLightsCanvas({ lights, cameraPersistenceKey }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasHostRef = useRef<HTMLDivElement>(null);
+  const orbitRef = useRef<SavedOrbit | null>(null);
   const [pinned, setPinned] = useState<TooltipState | null>(null);
   const [hover, setHover] = useState<TooltipState | null>(null);
   const pinnedRef = useRef<TooltipState | null>(null);
@@ -100,11 +112,26 @@ function ModelLightsCanvas({ lights }: Props) {
     const [cx, cy, cz] = center;
     const framedDim = maxDim + margin;
     const target = new THREE.Vector3(cx, cy, cz);
-    controls.target.copy(target);
 
-    const dist = Math.max(framedDim * 1.8, 0.5);
-    camera.position.set(cx + dist * 0.85, cy + dist * 0.55, cz + dist * 0.85);
-    camera.lookAt(target);
+    const saved =
+      cameraPersistenceKey !== undefined
+        ? orbitRef.current
+        : null;
+    const restoreOrbit =
+      saved !== null &&
+      cameraPersistenceKey !== undefined &&
+      saved.key === cameraPersistenceKey;
+
+    if (restoreOrbit) {
+      camera.position.copy(saved.position);
+      controls.target.copy(saved.target);
+      camera.lookAt(controls.target);
+    } else {
+      controls.target.copy(target);
+      const dist = Math.max(framedDim * 1.8, 0.5);
+      camera.position.set(cx + dist * 0.85, cy + dist * 0.55, cz + dist * 0.85);
+      camera.lookAt(target);
+    }
     controls.update();
 
     const gridSize = Math.max(framedDim * 2.5, 1);
@@ -128,7 +155,21 @@ function ModelLightsCanvas({ lights }: Props) {
     scene.add(dir);
 
     const sphereGeom = new THREE.SphereGeometry(SPHERE_RADIUS_M, 20, 16);
-    const matOn = new THREE.MeshBasicMaterial({ vertexColors: true });
+    /** Per-(hex, brightness) materials; shared across lights with identical appearance (§4.7 option B). */
+    const onMaterialCache = new Map<string, THREE.MeshBasicMaterial>();
+    function basicMaterialForLight(L: Light): THREE.MeshBasicMaterial {
+      const key = `${normalizeLightHex(lightColor(L))}:${lightBrightness(L)}`;
+      let m = onMaterialCache.get(key);
+      if (!m) {
+        const col = colorFromHexAndBrightness(
+          lightColor(L),
+          lightBrightness(L),
+        );
+        m = new THREE.MeshBasicMaterial({ color: col });
+        onMaterialCache.set(key, m);
+      }
+      return m;
+    }
     const matOff = new THREE.MeshBasicMaterial({
       color: 0xffffff,
       wireframe: true,
@@ -147,33 +188,20 @@ function ModelLightsCanvas({ lights }: Props) {
       }
     }
 
-    let instOn: THREE.InstancedMesh | null = null;
+    const onMeshes: THREE.Mesh[] = [];
     let instOff: THREE.InstancedMesh | null = null;
     const dummy = new THREE.Object3D();
 
     if (onSortedIdx.length > 0) {
-      const c = onSortedIdx.length;
-      instOn = new THREE.InstancedMesh(sphereGeom, matOn, c);
-      instOn.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-      instOn.instanceColor = new THREE.InstancedBufferAttribute(
-        new Float32Array(c * 3),
-        3,
-      );
-      instOn.instanceColor.setUsage(THREE.DynamicDrawUsage);
-      for (let j = 0; j < c; j++) {
-        const L = sorted[onSortedIdx[j]!];
-        dummy.position.set(L.x, L.y, L.z);
-        dummy.updateMatrix();
-        instOn.setMatrixAt(j, dummy.matrix);
-        const col = colorFromHexAndBrightness(
-          lightColor(L),
-          lightBrightness(L),
-        );
-        instOn.instanceColor!.setXYZ(j, col.r, col.g, col.b);
+      for (let j = 0; j < onSortedIdx.length; j++) {
+        const si = onSortedIdx[j]!;
+        const L = sorted[si]!;
+        const mesh = new THREE.Mesh(sphereGeom, basicMaterialForLight(L));
+        mesh.position.set(L.x, L.y, L.z);
+        mesh.userData.sortedIdx = si;
+        scene.add(mesh);
+        onMeshes.push(mesh);
       }
-      instOn.instanceMatrix.needsUpdate = true;
-      instOn.instanceColor.needsUpdate = true;
-      scene.add(instOn);
     }
 
     if (offSortedIdx.length > 0) {
@@ -190,10 +218,7 @@ function ModelLightsCanvas({ lights }: Props) {
       scene.add(instOff);
     }
 
-    const pickTargets: THREE.InstancedMesh[] = [];
-    if (instOn) {
-      pickTargets.push(instOn);
-    }
+    const pickTargets: THREE.Object3D[] = [...onMeshes];
     if (instOff) {
       pickTargets.push(instOff);
     }
@@ -227,15 +252,18 @@ function ModelLightsCanvas({ lights }: Props) {
       raycaster.setFromCamera(ndc, camera);
       const hits = raycaster.intersectObjects(pickTargets, false);
       const hit = hits[0];
-      const j = hit?.instanceId;
-      if (hit === undefined || j === undefined) {
+      if (hit === undefined) {
         return null;
       }
-      let si: number;
-      if (hit.object === instOn) {
-        si = onSortedIdx[j]!;
-      } else {
-        si = offSortedIdx[j]!;
+      let si: number | undefined;
+      const fromUser = hit.object.userData.sortedIdx;
+      if (typeof fromUser === "number") {
+        si = fromUser;
+      } else if (hit.object === instOff && hit.instanceId !== undefined) {
+        si = offSortedIdx[hit.instanceId]!;
+      }
+      if (si === undefined) {
+        return null;
       }
       const L = sorted[si]!;
       return {
@@ -359,6 +387,15 @@ function ModelLightsCanvas({ lights }: Props) {
     tick();
 
     return () => {
+      if (cameraPersistenceKey !== undefined) {
+        orbitRef.current = {
+          key: cameraPersistenceKey,
+          position: camera.position.clone(),
+          target: controls.target.clone(),
+        };
+      } else {
+        orbitRef.current = null;
+      }
       cancelAnimationFrame(raf);
       cancelAnimationFrame(rafHover);
       ro.disconnect();
@@ -369,7 +406,10 @@ function ModelLightsCanvas({ lights }: Props) {
       wrap.removeEventListener("pointerleave", onPointerLeave);
       controls.dispose();
       sphereGeom.dispose();
-      matOn.dispose();
+      for (const m of onMaterialCache.values()) {
+        m.dispose();
+      }
+      onMaterialCache.clear();
       matOff.dispose();
       if (lineSegments) {
         lineSegments.geometry.dispose();
@@ -381,7 +421,7 @@ function ModelLightsCanvas({ lights }: Props) {
         container.removeChild(canvasEl);
       }
     };
-  }, [lights]);
+  }, [lights, cameraPersistenceKey]);
 
   const tip = pinned ?? hover;
 

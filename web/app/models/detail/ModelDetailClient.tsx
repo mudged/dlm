@@ -543,7 +543,10 @@ export function ModelDetailClient() {
           coordinates (desktop). Tap a sphere to pin the label; tap empty space
           to clear (touch and mouse).
         </p>
-        <ModelLightsCanvas lights={model.lights} />
+        <ModelLightsCanvas
+          lights={model.lights}
+          cameraPersistenceKey={model.id}
+        />
       </section>
 
       {model.lights.length === 0 ? (
