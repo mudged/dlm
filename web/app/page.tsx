@@ -20,6 +20,13 @@ export default function HomePage() {
           Scenes
         </Link>
         <span className="text-slate-400"> · </span>
+        <Link
+          href="/options"
+          className="font-medium text-sky-700 underline-offset-4 hover:underline dark:text-sky-400"
+        >
+          Options
+        </Link>
+        <span className="text-slate-400"> · </span>
         <span className="text-slate-500">CSV upload & 3D layouts</span>
       </nav>
       <header className="space-y-2">

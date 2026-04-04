@@ -277,21 +277,8 @@ func (s *Store) tableColumns(ctx context.Context, table string) (map[string]bool
 	return out, rows.Err()
 }
 
-// SeedDefaultSamples inserts the three REQ-009 geometric samples when the models table is empty.
-func (s *Store) SeedDefaultSamples(ctx context.Context) error {
-	var n int
-	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM models`).Scan(&n); err != nil {
-		return err
-	}
-	if n > 0 {
-		return nil
-	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback() }()
-
+// seedThreeCanonicalSamplesTx inserts the three REQ-009 samples inside an existing transaction (REQ-017 factory reset).
+func (s *Store) seedThreeCanonicalSamplesTx(ctx context.Context, tx *sql.Tx) error {
 	seed := []struct {
 		name   string
 		lights []wiremodel.Light
@@ -315,6 +302,50 @@ func (s *Store) SeedDefaultSamples(ctx context.Context) error {
 				return err
 			}
 		}
+	}
+	return nil
+}
+
+// SeedDefaultSamples inserts the three REQ-009 geometric samples when the models table is empty.
+func (s *Store) SeedDefaultSamples(ctx context.Context) error {
+	var n int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM models`).Scan(&n); err != nil {
+		return err
+	}
+	if n > 0 {
+		return nil
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := s.seedThreeCanonicalSamplesTx(ctx, tx); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// FactoryReset deletes all scenes, models, and lights, then re-seeds the three default samples (REQ-017 / architecture §3.14).
+func (s *Store) FactoryReset(ctx context.Context) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	// scene_models rows CASCADE when scenes are removed (FK on scene_id).
+	if _, err := tx.ExecContext(ctx, `DELETE FROM scenes`); err != nil {
+		return fmt.Errorf("factory reset delete scenes: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM lights`); err != nil {
+		return fmt.Errorf("factory reset delete lights: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM models`); err != nil {
+		return fmt.Errorf("factory reset delete models: %w", err)
+	}
+	if err := s.seedThreeCanonicalSamplesTx(ctx, tx); err != nil {
+		return fmt.Errorf("factory reset seed samples: %w", err)
 	}
 	return tx.Commit()
 }

@@ -1,6 +1,6 @@
 # Architecture
 
-This document defines technical structure and deployment for the product described in `docs/requirements.md` (**REQ-001–REQ-015**). It satisfies **REQ-001** (Go + Next.js + Tailwind), **REQ-002** (responsive, client-interactive UI), **REQ-003** (Raspberry Pi 4 Model B, **ARM64**, resource awareness), **REQ-004** (**one runnable executable** per release target; **no** mandatory Docker/OCI/compose packaging at this stage), **REQ-005** (wire light **chain** model: **CSV** interchange, **metadata**, **at most two** logical neighbors per light by **consecutive id**—**endpoints** have **one**), **REQ-006** (list / view / delete / create via CSV upload; **delete blocked** with **409** when the model is **referenced** by **one or more** **scenes**, with an **actionable** **error** payload), **REQ-007** (server-side CSV validation and actionable errors), **REQ-008** (single command to build UI and run the Go server locally), **REQ-009** (default **sphere**, **cube**, **cone** samples: lights on **exterior** nominal surfaces with **even** coverage of **face planes** (**cube**) and **surface area** (**sphere** / **cone**), **not** **edge-only** or **single-curve-only** layouts; consecutive spacing **0.05–0.10 m**; **500–1000** lights each; **≤ 0.03 m** surface deviation; **~2 m** characteristic size), **REQ-010** (**three.js** **3D** view on **model detail**: **every** light as **2 cm** sphere; **all** lights drawn for **n ≤ 1000**; **wire** segments **only** between **consecutive** **ids**; segments **`#D0D0D0`** at **85% transparency** (**15% opacity**), **subtler** than spheres; **hover** / **touch** disclosure of **id** and **coordinates**), **REQ-011** (**REST** **read/write** of per-light **on/off**, **hex** **#RRGGBB** colour, **brightness** **0–100%**, persisted in **SQLite**), **REQ-012** (**3D** **spheres** reflect state: **on** = **opaque** **filled** **colour** × **brightness**; **off** = **`#D0D0D0`** at **85% transparency** matching segments; **timely** UI sync after **writes**), **REQ-013** (**model detail**: **paginated** light **list** with **page-size** control and **go to id**; **multi-select** and **bulk apply** via **batch** **PATCH**), **REQ-014** (**default** all lights **off**, **`#FFFFFF`**, **100%** brightness on create/seed; **reset** control + **authoritative** API to restore that state for **all** lights in **one** action), and **REQ-015** (**scenes**: **named** **composite** **3D** **space**; **create** with **≥ 1** **model** **and** **server-computed** **integer** **offsets** **(no** **client-supplied** **offsets** **on** **create)**; **canonical** **`lights.x/y/z`** **unchanged** **by** **scenes**; **derived** **`sx/sy/sz`** **=** **canonical** **+** **offset** **for** **API**/**UI** **in** **scene** **context**; **non-negative** **containment** **+** **≥ 1 m** **margin** **beyond** **max** **extent** **per** **axis**; **three.js** **composite** **view** **reusing** **REQ-010**/**012** **per** **model**; **add**/**remove**/**optional** **placement** **edit** **after** **create**; **last** **model** **→** **confirm** **then** **delete** **scene**; **+X** **default** **for** **models** **added** **after** **create**).
+This document defines technical structure and deployment for the product described in `docs/requirements.md` (**REQ-001–REQ-017**). It satisfies **REQ-001** (Go + Next.js + Tailwind), **REQ-002** (responsive, client-interactive UI), **REQ-003** (Raspberry Pi 4 Model B, **ARM64**, resource awareness), **REQ-004** (**one runnable executable** per release target; **no** mandatory Docker/OCI/compose packaging at this stage), **REQ-005** (wire light **chain** model: **CSV** interchange, **metadata**, **at most two** logical neighbors per light by **consecutive id**—**endpoints** have **one**), **REQ-006** (list / view / delete / create via CSV upload; **delete blocked** with **409** when the model is **referenced** by **one or more** **scenes**, with an **actionable** **error** payload), **REQ-007** (server-side CSV validation and actionable errors), **REQ-008** (single command to build UI and run the Go server locally), **REQ-009** (default **sphere**, **cube**, **cone** samples: lights on **exterior** nominal surfaces with **even** coverage of **face planes** (**cube**) and **surface area** (**sphere** / **cone**), **not** **edge-only** or **single-curve-only** layouts; consecutive spacing **0.05–0.10 m**; **500–1000** lights each; **≤ 0.03 m** surface deviation; **~2 m** characteristic size), **REQ-010** (**three.js** **3D** view on **model detail**: **every** light as **2 cm** sphere; **all** lights drawn for **n ≤ 1000**; **wire** segments **only** between **consecutive** **ids**; segments **`#D0D0D0`** at **85% transparency** (**15% opacity**), **subtler** than spheres; **hover** / **touch** disclosure of **id** and **coordinates**), **REQ-011** (**REST** **read/write** of per-light **on/off**, **hex** **#RRGGBB** colour, **brightness** **0–100%**, persisted in **SQLite**), **REQ-012** (**3D** **spheres** reflect state: **on** = **opaque** **filled** **colour** × **brightness**; **off** = **`#D0D0D0`** at **85% transparency** matching segments; **timely** UI sync after **writes**), **REQ-013** (**model detail**: **paginated** light **list** with **page-size** control and **go to id**; **multi-select** and **bulk apply** via **batch** **PATCH**), **REQ-014** (**default** all lights **off**, **`#FFFFFF`**, **100%** brightness on create/seed; **reset** control + **authoritative** API to restore that state for **all** lights in **one** action), **REQ-015** (**scenes**: **named** **composite** **3D** **space**; **create** with **≥ 1** **model** **and** **server-computed** **integer** **offsets** **(no** **client-supplied** **offsets** **on** **create)**; **canonical** **`lights.x/y/z`** **unchanged** **by** **scenes**; **derived** **`sx/sy/sz`** **=** **canonical** **+** **offset** **for** **API**/**UI** **in** **scene** **context**; **non-negative** **containment** **+** **≥ 1 m** **margin** **beyond** **max** **extent** **per** **axis**; **three.js** **composite** **view** **reusing** **REQ-010**/**012** **per** **model**; **add**/**remove**/**optional** **placement** **edit** **after** **create**; **last** **model** **→** **confirm** **then** **delete** **scene**; **+X** **default** **for** **models** **added** **after** **create**), **REQ-016** (**camera reset** on **model** and **scene** **three.js** views: **client-only** restore of **default** **framing**; **no** **persisted** **data** **changes**), and **REQ-017** (**Options** **UI** with **factory reset**: **confirmed** **wipe** of **all** **SQLite** **application** **data** **then** **re-seed** **§3.8** **samples** **to** **match** **fresh** **install**).
 
 ## Architectural resolution: REQ-004 (single binary) vs Next.js
 
@@ -35,6 +35,8 @@ This meets REQ-004 rule 1 (**no separate Node.js runtime** in the distribution) 
 | REQ-013 | **Model detail** **light table**: **client-side** **pagination** over **`GET` detail** payload; **page size** presets **25 / 50 / 100** (default **50**); **go to id** computes target page + **inline validation**; **checkbox** multi-select with **optional** **Shift+click** range on **current page**; **selection** **retained** across pages in **React state** (**`Set<number>`**) until **clear** or **navigate away**; **bulk apply** calls **`PATCH …/lights/state/batch`** (**§3.10**); **list** and **three.js** updated from **response** (**§4.8**, **§8.8**). |
 | REQ-014 | **Insert defaults** **on=false**, **`color="#ffffff"`**, **`brightness_pct=100`** (**§3.9**); **`POST …/lights/state/reset`** (**§3.11**); **model detail** **Reset** button (non–hover-only) calls reset then merges **`states`** into **UI** + **§4.7** (**§4.6**, **§8.9**). |
 | REQ-015 | **`scenes`** + **`scene_models`** (**§3.12**); **`POST /scenes`** **computes** **all** **offsets** **from** **ordered** **`model_id`** **list**; **`GET /models/{id}`** **unchanged** **(canonical** **coords)**; **`GET /scenes/{id}`** **returns** **`x,y,z`** **+** **`sx,sy,sz`** (**§3.13**); **composite** **three.js** **§4.9**; **409** **`model_in_scenes`** (**§3.2**, **§8.4**). |
+| REQ-016 | **§4.7** / **§4.9**: **`Reset camera`** **control** **re-applies** **`applyDefaultFraming`** **(same** **pure** **function** **as** **initial** **load** **from** **current** **bounds**)**; **`OrbitControls`** **target** **+** **camera** **position** **+** **`update()`**; **does** **not** **call** **API**. **§4.10** **IA** **optional** **link** **only**—**primary** **placement** **adjacent** **to** **viewport**. |
+| REQ-017 | **`POST /api/v1/system/factory-reset`** (**§3.2**, **§3.14**); **`store.FactoryReset`** **transaction** **then** **`SeedDefaultSamples`**; **Options** **route** **§4.10** **+** **modal** **before** **POST**; **post-success** **navigate** **`/models`** **+** **success** **message** (**architectural** **default** **for** **REQ-017** **open** **question**). |
 
 **Assumed Pi context:** Raspberry Pi 4 Model B, **64-bit OS**, **ARM64** userspace. **2–8 GB RAM** — with **no Node** at runtime, **4 GB** is practical for modest traffic; **off-device** `next export` builds recommended.
 
@@ -111,6 +113,7 @@ dlm/
 | API | `PATCH /api/v1/models/{id}/lights/{lightId}/state` | **Partial** update of **`on`**, **`color`**, **`brightness_pct`** (JSON body; omitted fields unchanged). **200** returns the **full** **updated** **state** object. **REQ-011** |
 | API | `PATCH /api/v1/models/{id}/lights/state/batch` | **Atomic** partial update of **many** lights: JSON body **`{ "ids": [<int>, …], "on"?, "color"?, "brightness_pct"? }`** with **at least one** of **`on`**, **`color`**, **`brightness_pct`** present; **omitted** fields **unchanged** per row. **200** returns **`{ "states": [ { "id", "on", "color", "brightness_pct" }, … ] }`** sorted by **`id`**. **400** if **`ids`** empty, duplicate ids, any id **∉ [0, n−1]**, or merged values invalid. **REQ-013** (**§3.10**). |
 | API | `POST /api/v1/models/{id}/lights/state/reset` | **REQ-014:** **no** body (or empty **JSON** object). **One** **transaction** sets **every** light in the model to **`on=false`**, **`color="#ffffff"`**, **`brightness_pct=100`**. **200** returns **`{ "states": [ … ] }`** for **all** **n** lights, **`id`** ascending. **404** if model missing. |
+| API | `POST /api/v1/system/factory-reset` | **REQ-017:** **no** body (or **`{}`**). **One** **transaction** **deletes** **all** **`scene_models`**, **`scenes`**, **`lights`**, **`models`** **rows** **in** **FK-safe** **order**, **then** **inserts** **the** **three** **default** **samples** **via** **the** **same** **logic** **as** **`SeedDefaultSamples`** (**§3.8**, **§3.14**). **200** **`{ "ok": true }`**. **500** **only** **on** **unexpected** **store** **failure** **(no** **partial** **wipe** **visible** **after** **commit**)**. **Register** **before** **any** **`{id}`** **catch-alls** **so** **`system`** **is** **not** **parsed** **as** **an** **id**. |
 | API | `/api/v1/*` | Other versioned **JSON** endpoints as the product grows. |
 | Static | `/`, `/*.html`, **`/_next/**`**, other export assets | **Next static export** tree from embed; **SPA / HTML5** fallback policy: serve **`index.html`** for unmatched **non-API** GET if needed (implementor defines exact fallback rules). |
 
@@ -365,6 +368,26 @@ Requirements demand **both** **even** **2D/area** placement **and** **consecutiv
 
 **Light state in scene view:** **Same** **persistence** **as** **model** **detail**; **composite** **view** **uses** **`GET /api/v1/scenes/{id}`** **payload** **or** **parallel** **`PATCH`** **to** **`/models/{id}/lights/…`** **after** **pick** **model**+**light** **(implementor** **chooses** **simplest** **consistent** **with** **REQ-012** **timeliness**)**.** **Recommended:** **scene** **detail** **response** **includes** **current** **state**; **per-light** **PATCH** **from** **scene** **page** **reuses** **existing** **endpoints** **by** **`model_id`** **+** **`lightId`** **then** **merge** **into** **local** **state** **for** **that** **model’s** **group** **in** **three.js**.
 
+### 3.14 Factory reset (**REQ-017**)
+
+**Purpose:** **Atomically** return the **SQLite** **database** to the **same** **logical** **state** **as** **first** **startup** **with** **an** **empty** **`models`** **table** **after** **migrations** (**REQ-009** **three** **samples** **only**; **REQ-014** **defaults** **on** **inserted** **lights**).
+
+**Store API (conceptual):** **`FactoryReset(ctx) error`** **in** **`internal/store`:**
+
+1. **`BEGIN IMMEDIATE`**.
+2. **`DELETE FROM scene_models`** **(order** **deletes** **to** **satisfy** **foreign** **keys** **—** **child** **tables** **first** **per** **actual** **`ON DELETE`** **clauses**)**.**
+3. **`DELETE FROM scenes`**.
+4. **`DELETE FROM lights`**.
+5. **`DELETE FROM models`**.
+6. **Run** **the** **same** **insert** **logic** **as** **`SeedDefaultSamples`** **(**§3.8**)** **inside** **this** **transaction** **—** **if** **today’s** **`SeedDefaultSamples`** **opens** **its** **own** **transaction**, **refactor** **so** **the** **insert** **path** **can** **run** **on** **a** **supplied** **`*sql.Tx`** **(or** **equivalent**)** **without** **an** **intermediate** **`COMMIT`**.
+7. **`COMMIT`**.
+
+**Invariants:** **No** **commit** **unless** **steps** **2–6** **all** **succeed**; **on** **error**, **`ROLLBACK`** **and** **return** **500** **with** **a** **generic** **message** **(client** **may** **offer** **retry** **copy**)**.** **After** **200**, **`GET /api/v1/models`** **lists** **only** **the** **three** **samples**; **`GET /api/v1/scenes`** **is** **empty**.
+
+**Security / abuse:** **Endpoint** **is** **unauthenticated** **(same** **as** **the** **rest** **of** **the** **MVP** **API**)**.** **Operator** **documentation** **should** **state** **that** **any** **client** **that** **can** **reach** **the** **server** **can** **invoke** **factory** **reset**; **future** **auth** **may** **protect** **this** **route** **first**.
+
+**HTTP:** **`POST /api/v1/system/factory-reset`** **—** **empty** **body** **or** **`{}`** **accepted**; **200** **`{ "ok": true }`**. **Idempotent** **in** **effect:** **repeated** **calls** **still** **yield** **three** **deterministic** **samples** **per** **§3.8**.
+
 ---
 
 ## 4. Next.js + Tailwind (build-time / authoring)
@@ -400,9 +423,9 @@ Unchanged intent: **Tailwind breakpoints**, **touch targets**, **`"use client"`*
 - **Routes (App Router):** e.g. **`/models`** (list), **`/models/new`** (upload form: **name** text input + **file** input), **`/models/[id]`** (detail: metadata; **§4.8** **paginated** light **table** + **§4.7** **3D** view; per-light or bulk controls per **REQ-011** / **REQ-013**; **Reset lights** **button** calling **`POST …/lights/state/reset`** per **§3.11** (**REQ-014**), **reachable** on **mobile** / **tablet** / **desktop** without **hover-only** use). **Model** **delete** **control:** on **`409`** **`model_in_scenes`**, **show** **`error.message`** **and** **`details.scenes`** (names/links to **`/scenes/{id}`**) per **§3.13**.
 - **Client data:** **`"use client"`** pages/components call **`fetch`** with **`GET`**, **`POST`** (**`FormData`** for multipart), **`DELETE`**, and **`PATCH`** (**JSON**) against **`/api/v1/models…`** on the **same origin** (**§4.3**).
 - **Feedback:** Inline / banner display of **400** / **409** **`message`** from API; loading states on list, detail, upload, and delete (**REQ-002**).
-- **Navigation:** Clear entry point from **home** or **app shell** to **models** list (**implementor** chooses IA).
+- **Navigation:** Clear entry point from **home** or **app shell** to **models** list (**implementor** chooses IA); **add** **§4.10** **Options** **link** **from** **the** **same** **shell** (**REQ-017**).
 
-### 4.7 Three.js visualization on model detail (**REQ-010**, **REQ-012**)
+### 4.7 Three.js visualization on model detail (**REQ-010**, **REQ-012**, **REQ-016**)
 
 **Dependency:** Declare **`three`** in **`web/package.json`** as a **direct** dependency (satisfies REQ-010 business rule 2). Pin a **stable semver** range in lockfile; bump intentionally when upgrading. Using **`@react-three/fiber`** / **`@react-three/drei`** is **optional**—if used, **`three`** MUST still appear **directly** in **`dependencies`** (not only as a transitive peer).
 
@@ -421,7 +444,12 @@ Unchanged intent: **Tailwind breakpoints**, **touch targets**, **`"use client"`*
   - **A.** **Two** **`InstancedMesh`** **layers**: (**1**) **on** lights — **`InstancedMesh`** + **`instanceColor`** (and **brightness** factored per instance or via **custom** attribute); (**2**) **off** lights — second **`InstancedMesh`** with **shared** **`#D0D0D0`**, **`opacity 0.15`**, **non-wireframe** **material**. When **`on`** toggles, **move** instances between **layers** or **rebuild** **both** from **authoritative** **state** (**O(n)** OK for **n ≤ 1000**).
   - **B.** **Up to n** **individual** **`Mesh`** **nodes** — acceptable if **performance** on **Pi-class** **clients** remains acceptable.
 - **Wire polyline (REQ-005 chain, REQ-010):** **`LineSegments`** (or **`LineBasicMaterial`** **lines**) only between **(i, i+1)** for **i = 0 … n−2**. **Colour** **`#D0D0D0`**, **`transparent: true`**, **`opacity: 0.15`**; **linewidth** where supported is **thin** (note: **WebGL** **line** **width** is often **1** px); segments MUST read **subtler** than **spheres**. **Style** does **not** vary with **on/off** (**REQ-012** **out** **of** **scope** for segment state).
-- **Framing:** Compute bounds from **sphere centers**, place **camera** / **`OrbitControls.target`** so the full model fits (**0.01 m** **radius** **margin** for **2 cm** spheres).
+- **Framing (baseline for REQ-016):** **Implement** a **pure** **helper** **`applyDefaultFraming(bounds: THREE.Box3, camera, controls, viewportWidth, viewportHeight)`** **(name** **local** **to** **codebase**)** **that:**
+  - Sets **`controls.target`** **to** **the** **center** **of** **`bounds`** **(axis-aligned** **bounding** **box** **of** **all** **light** **positions** **±** **0.01** **m** **sphere** **radius**)**.
+  - Positions **`camera`** **outside** **the** **bounds** **on** **a** **stable** **direction** **(e.g.** **normalized** **`(1, 1, 1)`** **from** **center** **scaled** **so** **the** **entire** **bounds** **fits** **in** **the** **vertical** **and** **horizontal** **FOV** **with** **a** **small** **padding** **factor** **≥** **1.1**)**—** **document** **chosen** **vector** **and** **padding** **in** **code** **comments** **so** **reset** **and** **first** **load** **match**.
+  - Calls **`camera.updateProjectionMatrix()`**, **`controls.update()`** **as** **needed** **after** **`ResizeObserver`** **driven** **size** **changes**.
+- **Initial load:** **After** **`lights`** **arrive**, **compute** **`bounds`**, **then** **`applyDefaultFraming`** **once**.
+- **Reset camera (REQ-016):** **Secondary** **button** **(e.g.** **label** **“Reset camera”)** **next** **to** **the** **canvas** **toolbar** **or** **overlay** **corner** **calls** **`applyDefaultFraming`** **again** **using** **the** **current** **`lights`** **bounds** **(recomputed** **if** **data** **changed**)**—** **no** **`fetch`**. **Repeat** **clicks** **yield** **the** **same** **baseline** **for** **the** **same** **`lights`** **and** **viewport** **size** **(REQ-016** **rule** **4**)**. **Architectural** **resolution** **for** **REQ-016** **open** **question:** **reset** **affects** **only** **camera** **and** **`OrbitControls`** **state**; **implementor** **MAY** **clear** **the** **hover**/**tap** **label** **for** **less** **confusion** **but** **is** **not** **required** **to** **clear** **list** **selection** **or** **pagination**.
 
 #### State sync (REQ-012 rule 3)
 
@@ -434,7 +462,7 @@ Unchanged intent: **Tailwind breakpoints**, **touch targets**, **`"use client"`*
 - **Desktop hover:** Show **`id`**, **`x`**, **`y`**, **`z`**; **MAY** **also** **show** **`on`**, **`color`**, **`brightness_pct`** (**REQ-012** **open** **question** **resolved** **here** **as** **optional** **but** **recommended** **for** **debuggability**).
 - **Touch / tablet equivalent:** Same **tap** **threshold** **behavior** **as** **before**; **pinned** **label** **may** **include** **state** **fields**.
 
-**Interaction (orbit, REQ-002):** Retain **`OrbitControls`** for **rotate / zoom / pan**; **touch** gestures as today.
+**Interaction (orbit, REQ-002, REQ-016):** Retain **`OrbitControls`** for **rotate / zoom / pan**; **touch** gestures as today. **REQ-016** **reset** **does** **not** **change** **polar**/**azimuth** **limits** **unless** **already** **set**; **if** **limits** **exist**, **ensure** **default** **camera** **pose** **remains** **within** **them** **or** **temporarily** **relax** **limits** **during** **reset** **(implementor** **picks** **simplest** **consistent** **behavior**)**.**
 
 **Layout:** **WebGL canvas** in a **responsive** container (**full width**, **bounded height** via **`min-h-[…]`** / **`max` viewport height**). **`ResizeObserver`** updates **camera.aspect** and **`renderer.setSize`**.
 
@@ -465,14 +493,34 @@ Unchanged intent: **Tailwind breakpoints**, **touch targets**, **`"use client"`*
 
 **Accessibility / responsive:** Table **MAY** **stack** as **cards** on **narrow** **viewports**; **checkboxes** and **bulk** **panel** remain **reachable** **without** **hover-only** **affordances** (**REQ-013** rule 7).
 
-### 4.9 Scenes UI and composite three.js (**REQ-015**, **REQ-010**, **REQ-012**)
+### 4.9 Scenes UI and composite three.js (**REQ-015**, **REQ-010**, **REQ-012**, **REQ-016**)
 
 - **Routes:** **`/scenes`** (list), **`/scenes/new`** (**create** **flow**: **scene** **name** + **ordered** **multi-select** **of** **≥ 1** **model** **—** **no** **per-row** **offset** **inputs**; **submit** **`POST /api/v1/scenes`** **with** **`models`** **in** **that** **order** **and** **let** **the** **server** **compute** **offsets** **per** **§3.12**), **`/scenes/[id]`** (**detail** **composite** **view** **+** **optional** **offset** **editing** **via** **`PATCH …/models/{modelId}`** **after** **create**).
 - **Data:** **`GET /api/v1/scenes`**, **`POST /api/v1/scenes`**, **`GET /api/v1/scenes/{id}`**, **`POST …/models`**, **`PATCH …/models/{modelId}`**, **`DELETE …/models/{modelId}`**, **`DELETE /api/v1/scenes/{id}`** per **§3.13**. **On** **`409`** **`scene_last_model`**, **show** **modal** **copy** **that** **removing** **the** **last** **model** **deletes** **the** **entire** **scene**; **on** **confirm**, **`DELETE /api/v1/scenes/{id}`** **then** **redirect** **to** **`/scenes`**.
 - **Composite** **three.js:** **Refactor** **or** **duplicate** **§4.7** **patterns** **into** **a** **`SceneLightsCanvas`** **(or** **extend** **`ModelLightsCanvas`**) **that** **accepts** **`items[]`**: **for** **each** **model**, **build** **the** **same** **2** **cm** **spheres** **and** **`#D0D0D0`** **`opacity`** **0.15** **segments** **between** **consecutive** **`id`** **only** **within** **that** **model**, **using** **`sx`, `sy`, `sz`** **from** **API** **(or** **client-composed** **positions** **identical** **to** **server** **rules**). **No** **segments** **between** **models**. **Per-light** **state** **materials** **match** **§4.7** (**REQ-012**). **Picking** **must** **identify** **which** **model** **and** **which** **light** **id** **for** **hover**/**tap** **(show** **scene** **coordinates** **and** **model** **id** **+** **light** **`id`** **as** **needed**).
-- **Framing:** **Fit** **camera** **to** **§3.12** **AABB** **`[0,0,0]`** **–** **`(Mmax+1)`** **per** **axis** **plus** **marker** **radius** **margin**.
+- **Framing (REQ-016):** **Fit** **camera** **to** **§3.12** **AABB** **`[0,0,0]`** **–** **`(Mmax+1)`** **per** **axis** **plus** **marker** **radius** **margin** **using** **the** **same** **`applyDefaultFraming`** **pattern** **as** **§4.7** **but** **with** **bounds** **derived** **from** **scene-space** **positions** **`(sx,sy,sz)`** **for** **all** **lights**. **A** **“Reset camera”** **control** **on** **the** **scene** **canvas** **re-invokes** **that** **same** **fit** **(no** **API** **call**)**.**
 - **Add** **model** **control:** **calls** **`POST …/scenes/{id}/models`** **without** **offsets** **to** **get** **default** **+X** **placement** **or** **with** **explicit** **integers** **after** **user** **edit**. **Placement** **inputs** **validate** **≥ 0** **client-side** **for** **fast** **feedback**; **authoritative** **errors** **from** **API** **400**.
 - **REQ-002:** **Same** **touch**/**pointer** **expectations** **as** **model** **detail**; **no** **hover-only** **blocking** **flows** **for** **add**/**remove**/**confirm**.
+
+### 4.10 Options and factory reset (**REQ-017**)
+
+**Route:** **`/options`** **(App Router)** **or** **equivalent** **single** **page** **with** **`<h1>Options</h1>`** **(or** **product** **title** **+** **“Options”**)** **and** **a** **short** **explanation** **that** **this** **area** **holds** **destructive** **maintenance** **actions**.
+
+**Information architecture:** **Expose** **“Options”** **in** **the** **global** **nav** **/** **header** **next** **to** **Models** **and** **Scenes** **(or** **under** **a** **“More”** **menu** **on** **narrow** **viewports** **with** **the** **same** **label** **visible** **after** **open**)**—** **REQ-002** **touch** **targets**.
+
+**Factory reset row:** **Primary** **button** **or** **destructive-styled** **control** **labeled** **Factory reset** **(or** **Reset all data**)** **opens** **a** **native** **`<dialog>`** **or** **modal** **with:**
+- **Title** **e.g.** **“Erase all data?”**
+- **Body** **text** **stating** **explicitly** **that** **all** **models** **(including** **uploads**)** **and** **all** **scenes** **will** **be** **permanently** **deleted**, **that** **the** **action** **cannot** **be** **undone**, **and** **that** **after** **completion** **only** **the** **three** **default** **sample** **models** **will** **remain**.
+- **Cancel** **(default** **focus** **on** **desktop** **where** **appropriate**)** **closes** **with** **no** **request**.
+- **Confirm** **(e.g.** **button** **label** **Erase everything**)** **submits** **`POST /api/v1/system/factory-reset`** **(disable** **while** **in-flight** **to** **prevent** **double** **submit**)**.**
+
+**Client behavior on success:** **On** **`200`**, **clear** **any** **client** **cached** **model**/**scene** **detail** **state** **(React** **query** **cache** **or** **router** **refresh**)**; **navigate** **to** **`/models`** **via** **`router.push`** **or** **`router.replace`** **and** **show** **a** **non-blocking** **success** **banner** **e.g.** **“All data was reset. Sample models were restored.”** **This** **resolves** **the** **REQ-017** **post-reset** **navigation** **open** **question** **as** **the** **architectural** **default**.
+
+**Client behavior on failure:** **Show** **API** **`error.message`** **or** **generic** **failure** **text**; **leave** **user** **on** **Options** **with** **dialog** **closed** **or** **open** **per** **UX** **consistency**.
+
+**REQ-017** **typed** **phrase** **(e.g.** **type** **RESET**)**:** **Not** **required** **for** **MVP** **per** **this** **architecture** **(optional** **hardening** **later**)**.**
+
+**Accessibility:** **Modal** **must** **trap** **focus** **or** **use** **native** **`dialog`** **with** **visible** **Cancel**/**Confirm**; **Escape** **cancels** **if** **the** **implementor** **enables** **it** **(recommended).**
 
 ---
 
@@ -876,6 +924,47 @@ sequenceDiagram
   end
 ```
 
+### 8.13 Factory reset all data (**REQ-017**, **§3.14**)
+
+```mermaid
+sequenceDiagram
+  actor User as User device
+  participant B as Browser
+  participant P as Reverse proxy (optional)
+  participant G as Go binary
+  participant S as SQLite store
+
+  User->>B: Open Options then Factory reset
+  B-->>User: Show blocking warning dialog
+  User->>B: Confirm erase
+  B->>P: POST /api/v1/system/factory-reset
+  P->>G: POST
+  alt success
+    G->>S: BEGIN; DELETE scene data, lights, models; SeedDefaultSamples; COMMIT
+    S-->>G: OK
+    G-->>P: 200 { ok: true }
+    P-->>B: 200
+    B->>B: Clear client caches; navigate to /models; show success banner
+    B-->>User: Model list shows three samples only
+  else failure
+    G-->>P: 500 JSON error
+    P-->>B: 500
+    B-->>User: Show error; data unchanged if transaction rolled back
+  end
+```
+
+### 8.14 Reset camera (client only) (**REQ-016**)
+
+```mermaid
+sequenceDiagram
+  actor User as User device
+  participant R as Client React + three.js + OrbitControls
+
+  User->>R: Click Reset camera on model or scene view
+  R->>R: applyDefaultFraming from current bounds; controls.update()
+  R-->>User: View returns to default framing; no HTTP request
+```
+
 ---
 
 ## 9. Security notes (baseline)
@@ -885,6 +974,7 @@ sequenceDiagram
 - **No** mandatory **container** trust boundary from the product’s perspective (REQ-004).
 - **Upload limits:** Enforce a **maximum request body size** on **`POST /api/v1/models`** (e.g. **`http.MaxBytesReader`** or server limit) large enough for **1000** CSV rows but small enough to bound **memory** and **DoS** risk on the Pi.
 - **SQLite file:** Treat **`DLM_DB_PATH`** as **persistent** storage on the Pi (e.g. SD card or USB); operators should **back up** the DB file with normal file backup practices.
+- **Factory reset:** **`POST /api/v1/system/factory-reset`** **is** **destructive** **and** **unauthenticated** **in** **MVP**; **treat** **network** **exposure** **accordingly** **(see** **§3.14**)**.**
 
 ---
 
@@ -907,7 +997,9 @@ sequenceDiagram
 | REQ-013 | §1, §3.2, §3.10, §4.6, §4.8, §4.7 (state sync), §8.8 |
 | REQ-014 | §1, §3.2, §3.3, §3.8, §3.9 (defaults), §3.11, §4.6, §4.7 (state sync), §8.9 |
 | REQ-015 | §1, §3.1, §3.2, §3.12–§3.13, §4.6, §4.9, §7 (DB), §8.10–§8.12 |
+| REQ-016 | §1, §4.7, §4.9, §8.14 |
+| REQ-017 | §1, §3.2, §3.14, §4.6, §4.10, §8.13, §9 |
 
 ---
 
-**Next step:** If **implementation** **already** **covers** **scenes**, **align** **code** **with** **this** **revision:** **`POST /api/v1/scenes`** **accepts** **only** **`model_id`** **per** **element** **(ordered)** **and** **`CreateScene`** **computes** **all** **offsets** **(§3.12)**; **reject** **client** **offsets** **on** **create** **(§3.13)**; **`/scenes/new`** **has** **no** **create-time** **offset** **UI** **(§4.9)**; **preserve** **canonical** **`lights`** **vs** **derived** **`sx/sy/sz`** **on** **`GET /scenes/{id}`**. **Otherwise** invoke **`@implementor`** **for** **the** **full** **§3.12–§3.13** / **§4.9** / **§8.4** **surface** **as** **before**. Then invoke **`@verifier`** **to** **audit**, **run** **tests**, **and** **update** **`docs/traceability_matrix.md`**.
+**Next step:** Invoke **`@implementor`** **to** **add** **`POST /api/v1/system/factory-reset`** **(**§3.14**)** **and** **`store.FactoryReset`**, **the** **`/options`** **page** **with** **confirmation** **modal** **(**§4.10**)** **,** **and** **“Reset camera”** **on** **model** **and** **scene** **canvases** **(**§4.7**, **§4.9**)** **using** **`applyDefaultFraming`**. **Then** invoke **`@verifier`** **to** **audit**, **run** **tests**, **and** **update** **`docs/traceability_matrix.md`**.

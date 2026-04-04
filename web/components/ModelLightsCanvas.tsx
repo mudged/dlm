@@ -18,6 +18,8 @@ type Props = {
   lights: Light[];
   /** When set, orbit position/target are restored across `lights` updates with the same key (e.g. model id). */
   cameraPersistenceKey?: string;
+  /** Increment to re-apply default framing without persisting orbit (REQ-016). */
+  cameraResetVersion?: number;
 };
 
 type PickData = {
@@ -96,10 +98,15 @@ type SavedOrbit = {
   target: THREE.Vector3;
 };
 
-function ModelLightsCanvas({ lights, cameraPersistenceKey }: Props) {
+function ModelLightsCanvas({
+  lights,
+  cameraPersistenceKey,
+  cameraResetVersion = 0,
+}: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasHostRef = useRef<HTMLDivElement>(null);
   const orbitRef = useRef<SavedOrbit | null>(null);
+  const prevResetVerRef = useRef(cameraResetVersion);
   const [pinned, setPinned] = useState<TooltipState | null>(null);
   const [hover, setHover] = useState<TooltipState | null>(null);
   const pinnedRef = useRef<TooltipState | null>(null);
@@ -108,7 +115,7 @@ function ModelLightsCanvas({ lights, cameraPersistenceKey }: Props) {
   useEffect(() => {
     setPinned(null);
     setHover(null);
-  }, [lights]);
+  }, [lights, cameraPersistenceKey, cameraResetVersion]);
 
   useEffect(() => {
     const wrap = wrapRef.current;
@@ -138,11 +145,16 @@ function ModelLightsCanvas({ lights, cameraPersistenceKey }: Props) {
     const framedDim = maxDim + margin;
     const target = new THREE.Vector3(cx, cy, cz);
 
+    const forceDefaultFraming =
+      cameraResetVersion !== prevResetVerRef.current;
+    prevResetVerRef.current = cameraResetVersion;
+
     const saved =
       cameraPersistenceKey !== undefined
         ? orbitRef.current
         : null;
     const restoreOrbit =
+      !forceDefaultFraming &&
       saved !== null &&
       cameraPersistenceKey !== undefined &&
       saved.key === cameraPersistenceKey;
@@ -445,7 +457,7 @@ function ModelLightsCanvas({ lights, cameraPersistenceKey }: Props) {
         container.removeChild(canvasEl);
       }
     };
-  }, [lights, cameraPersistenceKey]);
+  }, [lights, cameraPersistenceKey, cameraResetVersion]);
 
   const tip = pinned ?? hover;
 

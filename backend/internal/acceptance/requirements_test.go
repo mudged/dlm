@@ -522,3 +522,121 @@ func TestAcceptance_REQ013_modelViewPaginationAndBulkSettings(t *testing.T) {
 		t.Fatal("REQ-013 metadata must state priority Must")
 	}
 }
+
+func TestAcceptance_REQ016_cameraResetModelAndSceneViews(t *testing.T) {
+	doc := readRequirements(t)
+	block := requirementBlock(doc, "REQ-016")
+	if block == "" {
+		t.Fatal("requirements must contain ### REQ-016 section")
+	}
+	lower := strings.ToLower(block)
+	if !strings.Contains(lower, "camera reset") {
+		t.Fatal("REQ-016 must require a camera reset control")
+	}
+	if !strings.Contains(lower, "model") {
+		t.Fatal("REQ-016 must address the model 3D view")
+	}
+	if !strings.Contains(lower, "scene") {
+		t.Fatal("REQ-016 must address the scene 3D view")
+	}
+	if !strings.Contains(lower, "three.js") || !strings.Contains(lower, "req-010") {
+		t.Fatal("REQ-016 must tie model view to three.js / REQ-010")
+	}
+	if !strings.Contains(lower, "req-015") {
+		t.Fatal("REQ-016 must reference REQ-015 for scene visualization")
+	}
+	if !strings.Contains(lower, "default") {
+		t.Fatal("REQ-016 must require restoring default camera / framing")
+	}
+	if !strings.Contains(lower, "docs/architecture.md") {
+		t.Fatal("REQ-016 must reference docs/architecture.md for default framing")
+	}
+	if !strings.Contains(lower, "client-side") || !strings.Contains(lower, "navigation") {
+		t.Fatal("REQ-016 must limit reset to client-side navigation")
+	}
+	if !strings.Contains(lower, "persist") {
+		t.Fatal("REQ-016 must state that persisted models/scenes/state are not altered")
+	}
+	for _, kw := range []string{"mobile", "tablet", "desktop"} {
+		if !strings.Contains(lower, kw) {
+			t.Fatalf("REQ-016 responsive notes must mention %q", kw)
+		}
+	}
+	if !strings.Contains(lower, "req-002") {
+		t.Fatal("REQ-016 must reference REQ-002 for non-hover-only operability")
+	}
+	if !strings.Contains(lower, "hover-only") && !strings.Contains(lower, "hover only") {
+		t.Fatal("REQ-016 must address hover-only affordances for the reset control")
+	}
+	if !strings.Contains(lower, "req-014") {
+		t.Fatal("REQ-016 out-of-scope or rules must distinguish light reset (REQ-014) from camera reset")
+	}
+	if !strings.Contains(block, "| **Priority** | Must |") {
+		t.Fatal("REQ-016 metadata must state priority Must")
+	}
+}
+
+func TestAcceptance_REQ017_optionsFactoryResetWithConfirmation(t *testing.T) {
+	doc := readRequirements(t)
+	block := requirementBlock(doc, "REQ-017")
+	if block == "" {
+		t.Fatal("requirements must contain ### REQ-017 section")
+	}
+	lower := strings.ToLower(block)
+	if !strings.Contains(lower, "options") {
+		t.Fatal("REQ-017 must require an Options section or view")
+	}
+	if !strings.Contains(lower, "factory reset") {
+		t.Fatal("REQ-017 must name factory reset as an action")
+	}
+	if !strings.Contains(lower, "req-009") {
+		t.Fatal("REQ-017 must reference REQ-009 for re-seeded default samples")
+	}
+	if !strings.Contains(lower, "three") && !strings.Contains(lower, "sample") {
+		t.Fatal("REQ-017 must require three default sample models after reset")
+	}
+	if !strings.Contains(lower, "confirm") {
+		t.Fatal("REQ-017 must require explicit confirmation before destructive work")
+	}
+	if !strings.Contains(lower, "dialog") || !strings.Contains(lower, "prompt") {
+		t.Fatal("REQ-017 must require a blocking prompt or dialog before irreversible effects")
+	}
+	if !strings.Contains(lower, "cancel") {
+		t.Fatal("REQ-017 must allow cancel/dismissal without data loss")
+	}
+	if !strings.Contains(lower, "permanent") || !strings.Contains(lower, "irrevers") {
+		t.Fatal("REQ-017 must warn of permanent or irreversible data loss")
+	}
+	if !strings.Contains(lower, "scene") {
+		t.Fatal("REQ-017 must address scenes in wipe scope")
+	}
+	if !strings.Contains(lower, "req-015") {
+		t.Fatal("REQ-017 must reference REQ-015 for scenes")
+	}
+	if !strings.Contains(lower, "req-011") {
+		t.Fatal("REQ-017 must reference REQ-011 for per-light state")
+	}
+	if !strings.Contains(lower, "req-014") {
+		t.Fatal("REQ-017 must reference REQ-014 for defaults after re-seed")
+	}
+	if !strings.Contains(lower, "req-006") {
+		t.Fatal("REQ-017 must reference REQ-006")
+	}
+	if !strings.Contains(lower, "architecture") {
+		t.Fatal("REQ-017 must defer store shape or navigation to architecture")
+	}
+	for _, kw := range []string{"mobile", "tablet", "desktop"} {
+		if !strings.Contains(lower, kw) {
+			t.Fatalf("REQ-017 responsive notes must mention %q", kw)
+		}
+	}
+	if !strings.Contains(lower, "req-002") {
+		t.Fatal("REQ-017 must reference REQ-002 for the full flow (no hover-only)")
+	}
+	if !strings.Contains(lower, "hover-only") && !strings.Contains(lower, "hover only") {
+		t.Fatal("REQ-017 must forbid hover-only requirements for Options / factory reset flow")
+	}
+	if !strings.Contains(block, "| **Priority** | Must |") {
+		t.Fatal("REQ-017 metadata must state priority Must")
+	}
+}

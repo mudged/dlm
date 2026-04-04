@@ -42,6 +42,13 @@ export default function ScenesListPage() {
         >
           Models
         </Link>
+        <span className="text-slate-400"> · </span>
+        <Link
+          href="/options"
+          className="text-sky-700 underline-offset-4 hover:underline dark:text-sky-400"
+        >
+          Options
+        </Link>
       </nav>
 
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">

@@ -649,3 +649,89 @@ As a user, I want **scenes** that group **one or more** light **models** in a sh
 - Whether **placement** integers are **meters** rounded, **decimeters**, or **unitless grid** cells (must be **consistent** with **REQ-005** **meter** coordinates in architecture).
 
 ---
+
+### REQ-016 — Camera reset for model and scene 3D views
+
+| Field | Value |
+|-------|-------|
+| **ID** | REQ-016 |
+| **Title** | Camera reset for model and scene 3D views |
+| **Priority** | Must |
+| **Actor(s)** | End user |
+
+**User story**
+
+As a user viewing a **model** or a **scene** in **3D**, I want a **camera reset** control that returns the view to its **default** position and orientation, so that I can recover a predictable framing after panning, rotating, or zooming.
+
+**Scope**
+
+- In scope: On **single-model** **three.js** visualization (**REQ-010**, **REQ-006**) and **scene** **three.js** visualization (**REQ-015**), a **dedicated** user affordance (e.g. **“Reset camera”** or equivalent clear label) that restores the **default** camera (and any **architecture-defined** default **controls** state, e.g. orbit target) to the **same** baseline as when the user **first** opens that view in the session—or the product’s **documented** default if architecture fixes a single global default per view type.
+- Out of scope: **Persisting** camera pose across sessions; **per-user** saved views; changing **light** state (**REQ-014**); **screenshots** or **export**.
+
+**Business rules**
+
+1. The **model** **detail**/**view** experience MUST expose a **camera reset** affordance **adjacent** to or **within** the **primary** **3D** viewport region (exact placement deferred to architecture) so the user can **find** it **without** leaving the view.
+2. The **scene** **view** experience MUST expose the **same** class of **camera reset** affordance for the **scene** **three.js** viewport.
+3. Activating **camera reset** MUST **only** affect **client-side** **navigation** (camera and control state); it MUST **not** alter **persisted** **models**, **scenes**, **placements**, or **per-light** **state** (**REQ-005**–**REQ-015**).
+4. After **camera reset**, the **visible** **framing** MUST match the **default** **defined** in **docs/architecture.md** for that **view** **type** (model vs scene), so **repeat** activations yield the **same** baseline (modulo viewport size).
+5. The control MUST be **reachable** and **operable** on **mobile**, **tablet**, and **desktop** **without** **hover-only** **essential** steps (**REQ-002**).
+
+**Responsive / UX notes** *(when UI is involved)*
+
+- Mobile: Reset control **tappable**, label **clear**; **no** reliance on **hover** for the reset action itself.
+- Tablet: Same as mobile; **orientation** changes **do not** remove the control from the primary view chrome.
+- Desktop: Reset available **near** the **3D** view; **keyboard** **focus** **order** **includes** the control where applicable.
+
+**Dependencies**
+
+- REQ-002, REQ-010, REQ-015
+
+**Open questions**
+
+- Whether **reset** also **clears** **transient** **UI** (e.g. **selected** light for **tap**/**hover** **details**) or **only** the **camera**.
+
+---
+
+### REQ-017 — Options: factory reset with confirmation
+
+| Field | Value |
+|-------|-------|
+| **ID** | REQ-017 |
+| **Title** | Options: factory reset with confirmation |
+| **Priority** | Must |
+| **Actor(s)** | End user; operator |
+
+**User story**
+
+As a user, I want an **Options** area that includes **factory reset**, so that I can **wipe** **all** **application** **data** and return to a **clean** state **with** only the **default** **sample** **models** (**REQ-009**) **restored**—but **only** after I **confirm** **explicitly** **because** the **operation** is **dangerous** and **irreversible**.
+
+**Scope**
+
+- In scope: A **distinct** **Options** **section** (or **screen**/**panel** labeled **Options** or equivalent **clear** **navigation** **target**) in the **UI** that includes an action labeled **Factory reset** (or **equivalent** **unambiguous** **wording**). **Factory reset** MUST **remove** **all** **persisted** **user-relevant** **data** the product stores for **models**, **scenes** (**REQ-015**), **per-light** **state** (**REQ-011**), and **any** **other** **application** **content** **tied** to those **entities** (exact **store** **shape** per **architecture**), then **re-seed** the **system** so the **user** sees the **same** **default** **sample** **models** as on a **fresh** **install** per **REQ-009** (three **samples**; **no** **user-uploaded** **models** or **user-created** **scenes** **remain**). **Before** **any** **deletion** or **re-seed** **runs**, the user MUST be **prompted** with a **confirmation** **step** that **warns** of **data** **loss** and **irreversibility**; **Cancel** MUST **leave** **data** **unchanged**; **Confirm** MUST **complete** the **reset** and **surface** **success** **feedback** (exact **copy** deferred to **architecture**).
+- Out of scope: **Partial** **wipe** (e.g. **only** **scenes**); **scheduled** **reset**; **remote** **admin** **API** **for** **factory** **reset** unless added later; **export** **before** **wipe** (user may **export** **elsewhere** if **features** **exist**—not **required** here).
+
+**Business rules**
+
+1. The **product** MUST expose an **Options** **section** (or **dedicated** **Options** **view**) **discoverable** from **primary** **navigation** or **settings** **pattern** **documented** in **architecture**; it MUST **list** **Factory reset** as **one** of its **actions**.
+2. **Factory reset** MUST **not** **run** on a **single** **mis-click**: the user MUST **first** **see** a **blocking** **prompt** or **dialog** **before** **irreversible** **effects** **begin**, **explaining** that **all** **models**, **scenes**, and **related** **data** will be **permanently** **removed** and **only** **default** **samples** will **remain** (wording **may** **name** **consequences** **explicitly** per **UX** **review**).
+3. **Until** the user **explicitly** **confirms** (e.g. **Confirm** on the **dialog**), **no** **factory** **reset** **side** **effects** **may** **occur**; **dismissal** or **Cancel** MUST **preserve** **current** **data**.
+4. After **confirmed** **factory reset**, **no** **user-created** **models**, **no** **scenes**, and **no** **leftover** **state** **from** **prior** **entities** **may** **remain** **visible** in **listings**; the **model** **list** MUST **match** **REQ-009** **expectations** for a **fresh** **seed** (**exactly** **three** **sample** **models** **identifiable** as **sphere**, **cube**, **cone** per **REQ-009** **naming** **rules**).
+5. **Per-light** **defaults** after **re-seed** MUST **align** with **REQ-014** / **REQ-011** for **newly** **present** **models**.
+6. The **entire** **flow** MUST **satisfy** **REQ-002**: **no** **hover-only** **requirement** for **opening** **Options**, **starting** **factory** **reset**, **or** **confirming** / **canceling**.
+
+**Responsive / UX notes** *(when UI is involved)*
+
+- Mobile: **Options** and **factory** **reset** **reachable** **without** **horizontal** **scroll** **for** **primary** **labels**; **confirmation** **readable** **without** **truncating** **the** **warning**.
+- Tablet: Same as mobile.
+- Desktop: **Options** **easy** **to** **find**; **dialog** **keyboard** **accessible** where **modals** **are** **used**.
+
+**Dependencies**
+
+- REQ-002, REQ-006, REQ-009, REQ-011, REQ-014, REQ-015
+
+**Open questions**
+
+- Whether **factory** **reset** **requires** **typing** a **phrase** (e.g. **“RESET”**) **in** **addition** **to** **Confirm** for **extra** **safety**.
+- **Post-reset** **navigation** (**stay** **on** **page** vs **redirect** **to** **model** **list**).
+
+---

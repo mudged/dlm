@@ -516,6 +516,56 @@ Feature: Scenes composite 3D space and management (REQ-015)
     And the scene view must allow removing a model from the scene subject to last-model confirmation rules
     And changes must persist after success
     And essential controls must not rely on hover-only interaction per REQ-002
+
+Feature: Camera reset for 3D views (REQ-016)
+
+  Scenario: REQ-016 requires camera reset on model and scene three.js views
+    Parent requirement: REQ-016
+    Given docs/requirements.md defines REQ-016
+    When the REQ-016 scope and business rules are read
+    Then the single-model view with three.js must expose a camera reset affordance
+    And the scene view with three.js must expose a camera reset affordance
+    And activating camera reset must restore the default framing per architecture
+    And activating camera reset must not change persisted models scenes placements or per-light state
+
+  Scenario: REQ-016 binds camera reset to responsive non-hover-only use
+    Parent requirement: REQ-016
+    Given docs/requirements.md defines REQ-002 and REQ-016
+    When the REQ-016 responsive UX notes and business rules are read
+    Then camera reset must be reachable on mobile tablet and desktop
+    And essential use of camera reset must not rely on hover-only affordances
+
+Feature: Options factory reset with confirmation (REQ-017)
+
+  Scenario: REQ-017 requires an Options section with factory reset
+    Parent requirement: REQ-017
+    Given docs/requirements.md defines REQ-017
+    When the REQ-017 scope and business rules are read
+    Then the product must expose an Options section or equivalent discoverable area
+    And that area must include a factory reset action with unambiguous labeling
+
+  Scenario: REQ-017 requires prompt and warning before any destructive factory reset
+    Parent requirement: REQ-017
+    Given docs/requirements.md defines REQ-017
+    When the REQ-017 business rules about confirmation are read
+    Then factory reset must show a blocking prompt before irreversible effects begin
+    And the prompt must warn that all models scenes and related data will be permanently removed
+    And only default sample models will remain after completion
+    And cancel or dismiss must leave data unchanged
+
+  Scenario: REQ-017 requires post-reset state to match fresh samples
+    Parent requirement: REQ-017
+    Given docs/requirements.md defines REQ-009 REQ-011 REQ-014 and REQ-017
+    When the REQ-017 business rules about outcomes are read
+    Then after confirmed factory reset no user-created models or scenes may remain in listings
+    And the model list must satisfy REQ-009 expectations for a fresh seed with three identifiable samples
+    And per-light defaults for present models must align with REQ-014 and REQ-011
+
+  Scenario: REQ-017 factory reset flow is usable without hover-only steps
+    Parent requirement: REQ-017
+    Given docs/requirements.md defines REQ-002 and REQ-017
+    When the REQ-017 business rule about REQ-002 is read
+    Then opening Options starting factory reset and confirming or canceling must not require hover-only essential steps
 ```
 
 ---

@@ -345,6 +345,7 @@ export function ModelDetailClient() {
   const [goToIdErr, setGoToIdErr] = useState<string | null>(null);
   const [resetting, setResetting] = useState(false);
   const [resetErr, setResetErr] = useState<string | null>(null);
+  const [cameraResetVersion, setCameraResetVersion] = useState(0);
   const shiftAnchorRef = useRef<number | null>(null);
   const headerSelectRef = useRef<HTMLInputElement>(null);
 
@@ -578,14 +579,23 @@ export function ModelDetailClient() {
           >
             3D view
           </h2>
-          <Button
-            type="button"
-            className="h-9 w-full shrink-0 px-3 py-0 text-sm sm:w-auto"
-            disabled={resetting}
-            onClick={() => void resetAllLights()}
-          >
-            {resetting ? "Resetting…" : "Reset lights"}
-          </Button>
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:justify-end">
+            <Button
+              type="button"
+              className="h-9 w-full shrink-0 px-3 py-0 text-sm sm:w-auto"
+              onClick={() => setCameraResetVersion((v) => v + 1)}
+            >
+              Reset camera
+            </Button>
+            <Button
+              type="button"
+              className="h-9 w-full shrink-0 px-3 py-0 text-sm sm:w-auto"
+              disabled={resetting}
+              onClick={() => void resetAllLights()}
+            >
+              {resetting ? "Resetting…" : "Reset lights"}
+            </Button>
+          </div>
         </div>
         {resetErr ? (
           <p className="text-xs text-red-600 dark:text-red-400" role="alert">
@@ -600,6 +610,7 @@ export function ModelDetailClient() {
         <ModelLightsCanvas
           lights={model.lights}
           cameraPersistenceKey={model.id}
+          cameraResetVersion={cameraResetVersion}
         />
       </section>
 

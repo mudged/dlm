@@ -29,6 +29,7 @@ export function SceneDetailClient() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [addModelId, setAddModelId] = useState("");
+  const [cameraResetVersion, setCameraResetVersion] = useState(0);
 
   const load = useCallback(async () => {
     if (!id) {
@@ -196,7 +197,31 @@ export function SceneDetailClient() {
         </p>
       ) : null}
 
-      <SceneLightsCanvas items={scene.items} cameraPersistenceKey={scene.id} />
+      <section className="space-y-2" aria-labelledby="scene-3d-heading">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <h2
+            id="scene-3d-heading"
+            className="text-sm font-semibold text-slate-800 dark:text-slate-200"
+          >
+            3D view
+          </h2>
+          <Button
+            type="button"
+            className="h-9 w-full px-3 py-0 text-sm sm:w-auto"
+            onClick={() => setCameraResetVersion((v) => v + 1)}
+          >
+            Reset camera
+          </Button>
+        </div>
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          Drag to rotate; scroll or pinch to zoom. Tap a light to pin details.
+        </p>
+        <SceneLightsCanvas
+          items={scene.items}
+          cameraPersistenceKey={scene.id}
+          cameraResetVersion={cameraResetVersion}
+        />
+      </section>
 
       <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900/40">
         <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">

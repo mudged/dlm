@@ -18,6 +18,8 @@ import {
 type Props = {
   items: SceneItem[];
   cameraPersistenceKey?: string;
+  /** Increment to re-apply default framing (REQ-016). */
+  cameraResetVersion?: number;
 };
 
 type FlatPick = {
@@ -154,10 +156,12 @@ type SavedOrbit = {
 export default function SceneLightsCanvas({
   items,
   cameraPersistenceKey,
+  cameraResetVersion = 0,
 }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasHostRef = useRef<HTMLDivElement>(null);
   const orbitRef = useRef<SavedOrbit | null>(null);
+  const prevResetVerRef = useRef(cameraResetVersion);
   const [pinned, setPinned] = useState<TooltipState | null>(null);
   const [hover, setHover] = useState<TooltipState | null>(null);
   const pinnedRef = useRef<TooltipState | null>(null);
@@ -168,7 +172,7 @@ export default function SceneLightsCanvas({
   useEffect(() => {
     setPinned(null);
     setHover(null);
-  }, [flatKey]);
+  }, [flatKey, cameraPersistenceKey, cameraResetVersion]);
 
   useEffect(() => {
     const wrap = wrapRef.current;
@@ -207,9 +211,14 @@ export default function SceneLightsCanvas({
     const framedDim = maxDim + margin;
     const target = new THREE.Vector3(cx, cy, cz);
 
+    const forceDefaultFraming =
+      cameraResetVersion !== prevResetVerRef.current;
+    prevResetVerRef.current = cameraResetVersion;
+
     const saved =
       cameraPersistenceKey !== undefined ? orbitRef.current : null;
     const restoreOrbit =
+      !forceDefaultFraming &&
       saved !== null &&
       cameraPersistenceKey !== undefined &&
       saved.key === cameraPersistenceKey;
@@ -518,7 +527,7 @@ export default function SceneLightsCanvas({
         container.removeChild(canvasEl);
       }
     };
-  }, [items, cameraPersistenceKey, flatKey]);
+  }, [items, cameraPersistenceKey, flatKey, cameraResetVersion]);
 
   const tip = pinned ?? hover;
   const totalLights = items.reduce((a, it) => a + it.lights.length, 0);

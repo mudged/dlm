@@ -1,16 +1,35 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import type { ModelSummary } from "@/lib/models";
 
-export default function ModelsListPage() {
+function ModelsListFallback() {
+  return (
+    <main className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
+      <p className="text-sm text-slate-500">Loading…</p>
+    </main>
+  );
+}
+
+function ModelsListInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [models, setModels] = useState<ModelSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [flash, setFlash] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (searchParams.get("factoryReset") === "1") {
+      setFlash(
+        "All data was reset. The three default sample models were restored.",
+      );
+      router.replace("/models", { scroll: false });
+    }
+  }, [searchParams, router]);
 
   const load = useCallback(async () => {
     setError(null);
@@ -77,12 +96,26 @@ export default function ModelsListPage() {
 
   return (
     <main className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
-      <nav className="text-sm">
+      <nav className="flex flex-wrap gap-x-2 gap-y-1 text-sm">
         <Link
           href="/"
           className="text-sky-700 underline-offset-4 hover:underline dark:text-sky-400"
         >
           Home
+        </Link>
+        <span className="text-slate-400">·</span>
+        <Link
+          href="/scenes"
+          className="text-sky-700 underline-offset-4 hover:underline dark:text-sky-400"
+        >
+          Scenes
+        </Link>
+        <span className="text-slate-400">·</span>
+        <Link
+          href="/options"
+          className="text-sky-700 underline-offset-4 hover:underline dark:text-sky-400"
+        >
+          Options
         </Link>
       </nav>
 
@@ -107,6 +140,15 @@ export default function ModelsListPage() {
           Upload CSV
         </Button>
       </header>
+
+      {flash ? (
+        <p
+          className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-950 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-100"
+          role="status"
+        >
+          {flash}
+        </p>
+      ) : null}
 
       {error ? (
         <p
@@ -175,5 +217,13 @@ export default function ModelsListPage() {
         </ul>
       )}
     </main>
+  );
+}
+
+export default function ModelsListPage() {
+  return (
+    <Suspense fallback={<ModelsListFallback />}>
+      <ModelsListInner />
+    </Suspense>
   );
 }

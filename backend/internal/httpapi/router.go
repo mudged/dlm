@@ -31,6 +31,7 @@ func NewSiteHandler(cfg *config.Config, content fs.FS, st *store.Store) http.Han
 
 	api := http.NewServeMux()
 	deps := &apiDeps{store: st}
+	api.HandleFunc("POST /system/factory-reset", deps.postFactoryReset)
 	api.HandleFunc("GET /status", statusHandler)
 	api.HandleFunc("GET /models", deps.listModels)
 	api.HandleFunc("POST /models", deps.createModel)

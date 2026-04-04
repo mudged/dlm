@@ -3,8 +3,10 @@ package store
 import (
 	"context"
 	"path/filepath"
+	"slices"
 	"testing"
 
+	"example.com/dlm/backend/internal/samples"
 	"example.com/dlm/backend/internal/wiremodel"
 )
 
@@ -106,6 +108,52 @@ func TestStore_SeedDefaultSamples_idempotent(t *testing.T) {
 	}
 	if len(list2) != 3 {
 		t.Fatalf("second seed must not duplicate, got %d", len(list2))
+	}
+}
+
+func TestStore_FactoryReset(t *testing.T) {
+	ctx := context.Background()
+	s := testDB(t)
+	if err := s.SeedDefaultSamples(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Create(ctx, "extra-user-model", []wiremodel.Light{{ID: 0, X: 0, Y: 0, Z: 0}}); err != nil {
+		t.Fatal(err)
+	}
+	list, err := s.List(ctx)
+	if err != nil || len(list) != 4 {
+		t.Fatalf("want 4 models before reset, got %d err %v", len(list), err)
+	}
+	mid := list[0].ID
+	if _, err := s.CreateScene(ctx, "scene-one", []string{mid}); err != nil {
+		t.Fatal(err)
+	}
+	scenes, err := s.ListScenes(ctx)
+	if err != nil || len(scenes) != 1 {
+		t.Fatalf("want 1 scene before reset, got %d err %v", len(scenes), err)
+	}
+
+	if err := s.FactoryReset(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	scenes2, err := s.ListScenes(ctx)
+	if err != nil || len(scenes2) != 0 {
+		t.Fatalf("want 0 scenes after reset, got %d err %v", len(scenes2), err)
+	}
+	list2, err := s.List(ctx)
+	if err != nil || len(list2) != 3 {
+		t.Fatalf("want 3 models after reset, got %d err %v", len(list2), err)
+	}
+	names := make([]string, 0, 3)
+	for _, m := range list2 {
+		names = append(names, m.Name)
+	}
+	slices.Sort(names)
+	want := []string{samples.NameCone, samples.NameCube, samples.NameSphere}
+	slices.Sort(want)
+	if !slices.Equal(names, want) {
+		t.Fatalf("model names = %v want %v", names, want)
 	}
 }
 
