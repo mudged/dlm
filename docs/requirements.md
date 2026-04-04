@@ -180,8 +180,8 @@ As a user, I want a **model** to represent a configuration of lights on a wire w
 
 **Scope**
 
-- In scope: A model contains **up to 1000** lights; each light has a **sequential index** starting at **0** and a position in **3D space** (**x**, **y**, **z** coordinates). A model is representable as a **CSV** file with columns **id**, **x**, **y**, **z** (where **id** is the light index). Each model has **metadata** including a **name** and **creation date**.
-- Out of scope: Physical wire topology beyond “lights on a wire” as a conceptual grouping; animation, color, or brightness per light; import formats other than the defined CSV unless added later.
+- In scope: A model contains **up to 1000** lights; each light has a **sequential index** starting at **0** and a position in **3D space** (**x**, **y**, **z** coordinates). Lights form a **single ordered chain** along **ascending id**: each light is logically connected **only** to its **predecessor** and **successor** on that chain (see business rules). A model is representable as a **CSV** file with columns **id**, **x**, **y**, **z** (where **id** is the light index). Each model has **metadata** including a **name** and **creation date**.
+- Out of scope: **Branching** or **mesh** topologies (extra adjacencies beyond the chain); physical hardware; animation; colour or brightness in the CSV interchange; import formats other than the defined CSV unless added later.
 
 **Business rules**
 
@@ -190,6 +190,7 @@ As a user, I want a **model** to represent a configuration of lights on a wire w
 3. Coordinates **x**, **y**, and **z** MUST be **real numbers** (finite; architecture may fix representation and precision).
 4. The interchange CSV MUST use the field names **id**, **x**, **y**, **z** (column order and delimiter as specified in acceptance criteria).
 5. Model metadata MUST include **name** and **creation date** (storage format and timezone policy deferred to architecture).
+6. **Adjacency along the wire** is defined **only** by consecutive **id** values: for **n** lights (**n ≥ 0**), light **i** (**0 ≤ i < n**) has **at most two** logical neighbors—**i − 1** when **i > 0** and **i + 1** when **i < n − 1**. When **n > 1**, light **0** has **exactly one** neighbor (**1**); light **n − 1** has **exactly one** neighbor (**n − 2**); every light with **0 < i < n − 1** has **exactly two** neighbors. There MUST be **no** defined adjacency between **non-consecutive** ids (e.g. **i** and **i + 2**). When **n ≤ 1**, there are **no** pairwise adjacencies.
 
 **Responsive / UX notes** *(when UI is involved)*
 
@@ -389,11 +390,11 @@ As a user, I want **three sample light models** available **by default** that il
 
 **User story**
 
-As a user, when I **view** a model, I want **every** light drawn as a **1 cm white sphere**, each light linked to its **previous** and **next** along the wire by **very thin transparent** segments where those neighbors exist, and a way to see each light’s **index and coordinates**—so that I can interpret spatial layout and **wire order** without missing lights.
+As a user, when I **view** a model, I want **every** light drawn as a **2 cm white sphere**, each light linked to its **previous** and **next** along the wire (**REQ-005**) by **barely visible** **`#B5B5B5`** **light-grey** segments where those neighbors exist, and a way to see each light’s **index and coordinates**—so that I can interpret spatial layout and **wire order** without missing lights.
 
 **Scope**
 
-- In scope: On the **model view** / **detail** experience (the same flow as **viewing** a single model in **REQ-006**), the product MUST render the model’s light positions in **3D** using **three.js** (the JavaScript library from https://threejs.org/ , typically consumed as the `three` package). **Every** light returned for the model MUST be **drawn** (no deliberate omission, decimation, or level-of-detail that hides lights). **Each** light MUST appear as a **sphere** of **1 cm** diameter (**0.01 m**; **SI meters** per **REQ-005**) in **white**. **Straight line segments** MUST connect **consecutive** lights in **ascending id order** so that, for **0 < i < n − 1**, light **i** is joined to both **i − 1** and **i + 1**; light **0** is joined to light **1** only if **n > 1**; light **n − 1** is joined to **n − 2** only if **n > 1** (equivalent to drawing one segment per pair **(i, i+1)** for **i = 0 … n − 2**). Segments MUST be **very thin** and **visibly transparent** (partial opacity). **Pointer hover** over a light’s sphere MUST reveal that light’s **id** and **x**, **y**, **z**. **Touch** and **tablet** users MUST have an **equivalent** way to discover id and coordinates (**REQ-002**).
+- In scope: On the **model view** / **detail** experience (the same flow as **viewing** a single model in **REQ-006**), the product MUST render the model’s light positions in **3D** using **three.js** (the JavaScript library from https://threejs.org/ , typically consumed as the `three` package). **Every** light returned for the model MUST be **drawn** (no deliberate omission, decimation, or level-of-detail that hides lights). **Each** light MUST appear as a **sphere** of **2 cm** diameter (**0.02 m**; **SI meters** per **REQ-005**). **Default** sphere appearance (no per-light state or **REQ-012** default) MUST be **white** with **solid** (opaque) **fill**. **Straight line segments** MUST connect **only** **consecutive** lights in **ascending id order**, consistent with **REQ-005** adjacency (one segment per pair **(i, i+1)** for **i = 0 … n − 2** when **n > 1**). Segments MUST use **`#B5B5B5`** (**canonical `#RRGGBB` light grey**) and **75% transparent**—i.e. **25% opaque** (e.g. alpha **0.25** in an **0–1** opacity scale)—and **thin** enough that they read as **subtle** guidance, **barely visible**, and **less prominent** than the light **spheres** (including **on** lights at **100%** brightness). **Pointer hover** over a light’s sphere MUST reveal that light’s **id** and **x**, **y**, **z**. **Touch** and **tablet** users MUST have an **equivalent** way to discover id and coordinates (**REQ-002**).
 - Out of scope: Non-three.js renderers; **export** of screenshots or video; **editing** positions in the 3D view; segments between **non-consecutive** ids (e.g. skipping **i+1**); **animated** or **pulsing** hover chrome beyond showing the required data.
 
 **Business rules**
@@ -401,8 +402,8 @@ As a user, when I **view** a model, I want **every** light drawn as a **1 cm whi
 1. Whenever the user is **viewing** a single model’s content (lights and metadata context per **REQ-006**), the UI MUST include a **three.js**-based **3D view** that reflects the model’s **x**, **y**, **z** positions for **each** light in the payload (**all lights drawn**).
 2. The **three.js** dependency MUST be a **direct** front-end dependency (declared in the Next.js app’s package manifest), not loaded only indirectly through unrelated packages, so the visualization stack is explicit and auditable.
 3. The 3D view MUST remain **usable** on **mobile**, **tablet**, and **desktop** viewports per **REQ-002** (e.g. visible canvas or viewport, no reliance on desktop-only interaction for basic inspection unless alternatives are documented in architecture).
-4. Each light MUST be represented by a **sphere** with **diameter exactly 0.01 m** (**1 cm**). **Colour and on/off appearance** MUST follow **REQ-012** when per-light state is available; until then or where state is not defined, the sphere MUST appear **white** with **solid fill** (exact material or shading is deferred to architecture).
-5. For each **i** from **0** to **n − 2** (where **n** is the light count), a **single straight Euclidean segment** MUST be drawn between the positions of light **i** and light **i + 1** (this realizes **previous**/**next** connectivity along the wire). Segments MUST be **very thin** and **partially transparent**; exact line width and alpha are deferred to architecture within those constraints. If **n ≤ 1**, no segments are required.
+4. Each light MUST be represented by a **sphere** with **diameter exactly 0.02 m** (**2 cm**). **Colour and on/off appearance** MUST follow **REQ-012** when per-light state is available; until then or where state is not defined, the sphere MUST appear **white** with **solid fill** (exact material or shading is deferred to architecture).
+5. For each **i** from **0** to **n − 2** (where **n** is the light count), a **single straight Euclidean segment** MUST be drawn between the positions of light **i** and light **i + 1** (this matches **REQ-005** chain adjacency). Segments MUST use **`#B5B5B5`** and **75% transparency** (**25% opacity**) as in **Scope**, remain **thin**, and MUST **not** appear **more visually prominent** than the light spheres. If **n ≤ 1**, no segments are required.
 6. When the user moves the **pointer** so that it **hovers** a light’s **sphere** (primary **hit target** for that light), the UI MUST show that light’s **id** and **x**, **y**, **z** (same numeric meaning as the API / **REQ-005**). On **touch-first** devices, the product MUST provide a **documented** equivalent (e.g. **tap** to select the nearest light or the picked light) that surfaces the same **id** and **coordinates** without requiring hover.
 7. The renderer MUST NOT skip or merge lights for performance when **n ≤ 1000** (per **REQ-005**); **all n** spheres and the **n − 1** (or **0**) segments described above MUST be present.
 
@@ -449,7 +450,7 @@ As a user or integrator, I want a **REST API** on the model that lets me **read*
 3. **Hex colour** MUST use a **canonical** form agreed in architecture (e.g. **`#RRGGBB`** with six **hexadecimal** digits); invalid values MUST be rejected with a **clear** error.
 4. **Brightness** MUST be a **number** interpreted as **percent** with **0** = minimum and **100** = maximum for the **on** appearance; behavior when the light is **off** (whether brightness is stored or ignored visually) is defined in **REQ-012**.
 5. Successful **writes** MUST be **persisted** with the model (same durability as model data per architecture) so reloads and other clients see the same state.
-6. **Default** state for lights in a newly created or legacy model without prior state MUST be defined in **docs/architecture.md** (e.g. all **off** or all **on** at **100%** **#FFFFFF**) and MUST be **consistent** across API and UI.
+6. **Default** state for lights in a newly created or legacy model without prior state MUST match **REQ-014** (all **off**, **100%** brightness, white **`#FFFFFF`** in canonical hex) and MUST be **consistent** across API and UI; **docs/architecture.md** MAY elaborate representation only.
 
 **Responsive / UX notes** *(when UI is involved)*
 
@@ -479,17 +480,17 @@ As a user or integrator, I want a **REST API** on the model that lets me **read*
 
 **User story**
 
-As a user viewing a model, I want the **3D visualization** to **match** each light’s **stored state**, so that **colour**, **brightness**, and **on/off** are **immediately obvious** from the **spheres** (e.g. **blue** when set to blue, **hollow** when **off**).
+As a user viewing a model, I want the **3D visualization** to **match** each light’s **stored state**, so that **colour**, **brightness**, and **on/off** are **immediately obvious** from the **spheres** (e.g. **blue** when set to blue, subtle **#B5B5B5** when **off**).
 
 **Scope**
 
-- In scope: When viewing a model (**REQ-006**, **REQ-010**), each light’s **sphere** (**0.01 m** diameter) MUST reflect **REQ-011** state: **on** = **filled** appearance using the light’s **hex colour** modulated by **brightness**; **off** = **hollow** appearance with **semi-transparent** material (user can see through or see only a shell—exact technique deferred to architecture). **Any** change to persisted light state via the API (**REQ-011**) MUST be **reflected** in the visualization **without** requiring a full page reload if the client is already viewing that model (e.g. **poll**, **push**, or **same-session** refetch—architecture defines mechanism; the requirement is **timely** consistency from the user’s perspective).
-- Out of scope: Changing **wire segment** styling based on state unless added later; **export** of rendered images.
+- In scope: When viewing a model (**REQ-006**, **REQ-010**), each light’s **sphere** (**0.02 m** diameter) MUST reflect **REQ-011** state: **on** = **filled** **opaque** appearance using the light’s **hex colour** modulated by **brightness**; **off** = appearance using **`#B5B5B5`** and **75% transparency** (**25% opacity**) as **REQ-010** wire segments, applied to the **sphere** (filled or thin shell—exact geometry deferred to architecture) so **off** lights remain **discernible** but **less prominent** than **on** lights. **Any** change to persisted light state via the API (**REQ-011**) MUST be **reflected** in the visualization **without** requiring a full page reload if the client is already viewing that model (e.g. **poll**, **push**, or **same-session** refetch—architecture defines mechanism; the requirement is **timely** consistency from the user’s perspective).
+- Out of scope: Changing **wire segment** styling based on **on/off** state unless added later; **export** of rendered images.
 
 **Business rules**
 
 1. For a light that is **on**, the **sphere** MUST appear **filled** (solid or equivalent **opaque** **surface** fill) and MUST use the **current** **hex colour** and **brightness** from **REQ-011** (architecture defines how **percentage** maps to rendered colour or intensity).
-2. For a light that is **off**, the **sphere** MUST appear **hollow** (e.g. **wireframe** shell, **rim**, or **transparent** shell) and MUST be **semi-transparent** so it reads as **not lit** while still marking the **position**.
+2. For a light that is **off**, the **sphere** MUST use **`#B5B5B5`** and **75% transparency** (**25% opacity**), **consistent** with **REQ-010** segment styling, so it reads as **not lit** yet remains **locatable**; it MUST **not** appear **more visually prominent** than **on** lights or than the **wire segments**.
 3. The visualization MUST **update** when light state changes from **REQ-011** while the user is viewing the affected model, so the **sphere** **appearance** matches the **latest** **persisted** state within a **reasonable** delay (architecture may set bounds; **stale** display after a successful write is **not** acceptable indefinitely).
 4. **REQ-010** **segments** and **hover**/**touch** **id** and **coordinates** behavior remain in force; state fields (**on/off**, **colour**, **brightness**) MAY be shown on hover/tap in addition if architecture chooses.
 5. Lights **without** stored state yet MUST follow the **default** defined for **REQ-011** and still render per rules **1** and **2** above.
@@ -554,5 +555,46 @@ As a user **viewing** a model, I want to **select multiple lights** and **apply 
 - Whether **selection** is **per-page only** or MUST **persist** when the user changes pages (cross-page bulk apply).
 - Whether **REQ-011** needs an explicit **batch** HTTP operation for performance; until then, repeated per-light updates MAY satisfy rule **5** if UX meets timeliness (**rule 6**).
 - Exact **preset** page sizes and default page size.
+
+---
+
+### REQ-014 — Default light state (off, 100% white) and model reset
+
+| Field | Value |
+|-------|-------|
+| **ID** | REQ-014 |
+| **Title** | Default light state (off, 100% white) and model reset |
+| **Priority** | Must |
+| **Actor(s)** | End user |
+
+**User story**
+
+As a user working with a model, I want **every** light to **start** in a **known** state—**off** but configured as **full white** at **100%** brightness—and I want a **reset** control that returns **all** lights to that state after I have changed them, so that behaviour is predictable and I can quickly restore a clean baseline.
+
+**Scope**
+
+- In scope: **Initial** per-light state for **each** light when a model first exists in the system (including **new** models after **CSV** upload or **seeded** samples, and **legacy** rows **backfilled** per architecture): **on** = **false** (**off**), **brightness** = **100** (percent, per **REQ-011**), **hex colour** = **`#FFFFFF`** (six-digit canonical form per **REQ-011**). On the **model view** (**REQ-006**), a **reset** affordance (e.g. a **Reset** button or equivalent clearly labeled control) that sets **every** light in the **current** model to that **same** triple (**off**, **100%**, **`#FFFFFF`**) in **one** deliberate user action, with **persistence** per **REQ-011**.
+- Out of scope: **Undo**/**redo** stacks; resetting **only** selected lights; resetting **3D** camera or navigation; **bulk** HTTP beyond what architecture needs to implement the single user gesture.
+
+**Business rules**
+
+1. For **every** light in a model, the **initial** stored state (including after model **creation** and any **migration** of older data) MUST be **off** (**on** = **false**), **brightness** = **100**, and **hex colour** = **`#FFFFFF`** (rejecting invalid hex remains per **REQ-011**).
+2. The **model view** MUST include a **reset** control, **reachable** and **operable** without **hover-only** interaction (**REQ-002**), that restores **all** lights in that model to the state in rule **1** and **persists** it so **API** clients and **reloads** see the same result.
+3. After a **successful** reset, the **3D** visualization (**REQ-012**) and any **light list** showing state (**REQ-013** where applicable) MUST **reflect** the new state within the same **timeliness** expectations as other **REQ-011** writes (**no indefinite staleness**).
+4. **REQ-011** default semantics for lights **without** prior stored state MUST align with rule **1** (not **on** at default unless the user or API has turned them **on**).
+
+**Responsive / UX notes** *(when UI is involved)*
+
+- Mobile: Reset control visible and tappable; label makes intent clear (e.g. “Reset lights” or “Reset all lights”).
+- Tablet: Same as mobile; orientation changes do not hide the control in the primary model view.
+- Desktop: Reset available alongside other model-view actions; keyboard focus order includes the control where applicable.
+
+**Dependencies**
+
+- REQ-002, REQ-006, REQ-011, REQ-012, REQ-013
+
+**Open questions**
+
+- Whether the reset action **requires** a **confirmation** step for large models (architecture / UX choice).
 
 ---

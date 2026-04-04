@@ -35,6 +35,7 @@ func NewSiteHandler(cfg *config.Config, content fs.FS, st *store.Store) http.Han
 	api.HandleFunc("GET /models", deps.listModels)
 	api.HandleFunc("POST /models", deps.createModel)
 	api.HandleFunc("GET /models/{id}/lights/state", deps.listLightStates)
+	api.HandleFunc("POST /models/{id}/lights/state/reset", deps.postResetLightStates)
 	api.HandleFunc("PATCH /models/{id}/lights/state/batch", deps.patchLightStatesBatch)
 	api.HandleFunc("GET /models/{id}/lights/{lightId}/state", deps.getLightState)
 	api.HandleFunc("PATCH /models/{id}/lights/{lightId}/state", deps.patchLightState)

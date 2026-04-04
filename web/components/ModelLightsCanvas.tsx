@@ -33,9 +33,11 @@ type PickData = {
 type TooltipState = { pick: PickData; cx: number; cy: number };
 
 const TAP_PX = 10;
-const LINE_OPACITY = 0.28;
+/** REQ-010: #B5B5B5 at 75% transparency (25% opacity). */
+const VIZ_GREY = 0xb5b5b5;
+const LINE_OPACITY = 0.25;
+const OFF_SPHERE_OPACITY = 0.25;
 const HOVER_DECIMALS = 4;
-const OFF_WIREFRAME_OPACITY = 0.36;
 
 function lightOn(L: Light): boolean {
   return L.on !== false;
@@ -171,10 +173,9 @@ function ModelLightsCanvas({ lights, cameraPersistenceKey }: Props) {
       return m;
     }
     const matOff = new THREE.MeshBasicMaterial({
-      color: 0xffffff,
-      wireframe: true,
+      color: VIZ_GREY,
       transparent: true,
-      opacity: OFF_WIREFRAME_OPACITY,
+      opacity: OFF_SPHERE_OPACITY,
       depthWrite: false,
     });
 
@@ -229,7 +230,7 @@ function ModelLightsCanvas({ lights, cameraPersistenceKey }: Props) {
       const lg = new THREE.BufferGeometry();
       lg.setAttribute("position", new THREE.BufferAttribute(segPos, 3));
       const lm = new THREE.LineBasicMaterial({
-        color: 0xffffff,
+        color: VIZ_GREY,
         transparent: true,
         opacity: LINE_OPACITY,
         depthWrite: false,

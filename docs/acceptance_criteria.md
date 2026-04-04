@@ -89,6 +89,14 @@ Feature: Wire light model definition
     Then the interchange CSV must use fields id, x, y, and z
     And model metadata must include name and creation date
 
+  Scenario: REQ-005 defines chain adjacency at most two neighbors
+    Parent requirement: REQ-005
+    Given docs/requirements.md defines REQ-005
+    When the REQ-005 business rule about adjacency along the wire is read
+    Then each light has at most two logical neighbors by consecutive id only
+    And the first and last light each have exactly one neighbor when n is greater than 1
+    And there is no adjacency between non-consecutive ids
+
 Feature: Model management in the application
 
   Scenario: REQ-006 requires list, view, delete, and CSV upload create
@@ -239,26 +247,27 @@ Feature: Three.js model view (REQ-010)
     Then the three.js view is required in the same model view flow as REQ-006
     And mobile, tablet, and desktop usability expectations are stated for the 3D view
 
-  Scenario: REQ-010 requires 1 cm spheres with white default or REQ-012 state appearance
+  Scenario: REQ-010 requires 2 cm spheres with white default or REQ-012 state appearance
     Parent requirement: REQ-010
     Given docs/requirements.md defines REQ-010 and REQ-012
     When the REQ-010 business rule about sphere diameter and colour is read
-    Then each light must be shown as a sphere with diameter 0.01 meters
+    Then each light must be shown as a sphere with diameter 0.02 meters
     And colour and on off appearance must follow REQ-012 when per light state is available
     And otherwise the sphere must appear white with solid fill
 
-  Scenario: REQ-010 requires thin transparent segments between consecutive ids
+  Scenario: REQ-010 requires B5B5B5 light grey 75 percent transparent segments between consecutive ids
     Parent requirement: REQ-010
-    Given docs/requirements.md exists
-    When the REQ-010 business rules about line segments are read
-    Then straight segments must connect light i to light i plus 1 for ascending ids
-    And segments must be very thin and partially transparent
+    Given docs/requirements.md defines REQ-005 and REQ-010
+    When the REQ-010 scope and business rules about line segments are read
+    Then straight segments must connect only consecutive lights i and i plus 1 for ascending ids
+    And segments must use hex colour B5B5B5 as canonical light grey with 75 percent transparency meaning 25 percent opacity
+    And segments must be thin barely visible and less prominent than the light spheres
 
   Scenario: REQ-010 requires every light drawn with previous and next connectivity
     Parent requirement: REQ-010
     Given docs/requirements.md exists
     When REQ-010 scope and business rules are read
-    Then every light in the model must be drawn as a 1 cm diameter sphere per REQ-010 and REQ-012
+    Then every light in the model must be drawn as a 2 cm diameter sphere per REQ-010 and REQ-012
     And interior lights along the wire must connect to previous and next via those segments
 
   Scenario: REQ-010 forbids omitting lights when n is at most 1000
@@ -305,11 +314,11 @@ Feature: Per-light state REST API (REQ-011)
     When the REQ-011 business rules are read
     Then successful writes must persist with the model for reloads and other clients
 
-  Scenario: REQ-011 binds default state to architecture consistency
+  Scenario: REQ-011 binds default state to REQ-014 and cross-surface consistency
     Parent requirement: REQ-011
-    Given docs/requirements.md defines REQ-011
+    Given docs/requirements.md defines REQ-011 and REQ-014
     When the REQ-011 business rules about defaults are read
-    Then default state for lights without prior state must be defined in docs/architecture.md
+    Then default state for lights without prior state must match REQ-014
     And defaults must be consistent across API and UI
 
 Feature: Visualization reflects light state (REQ-012)
@@ -321,12 +330,13 @@ Feature: Visualization reflects light state (REQ-012)
     Then the sphere must appear filled opaque surface fill
     And the appearance must use the current hex colour and brightness from REQ-011
 
-  Scenario: Off lights appear hollow and semi transparent
+  Scenario: Off lights use B5B5B5 and 75 percent transparency like wire segments
     Parent requirement: REQ-012
-    Given docs/requirements.md defines REQ-012
+    Given docs/requirements.md defines REQ-010 and REQ-012
     When the REQ-012 business rules for an off light are read
-    Then the sphere must appear hollow such as wireframe shell rim or transparent shell
-    And the sphere must be semi transparent
+    Then the sphere must use hex colour B5B5B5 with 75 percent transparency meaning 25 percent opacity
+    And the appearance must be consistent with REQ-010 segment styling
+    And off lights must not appear more prominent than on lights or than wire segments
 
   Scenario: Visualization updates after API state changes
     Parent requirement: REQ-012
@@ -343,9 +353,10 @@ Feature: Visualization reflects light state (REQ-012)
 
   Scenario: REQ-012 applies defaults for lights without stored state
     Parent requirement: REQ-012
-    Given docs/requirements.md defines REQ-011 and REQ-012
+    Given docs/requirements.md defines REQ-011 REQ-014 and REQ-012
     When the REQ-012 business rule about missing stored state is read
-    Then lights without stored state must use the REQ-011 default and still render per on and off rules
+    Then lights without stored state must use the REQ-011 default aligned with REQ-014
+    And they must still render per on and off rules
 
 Feature: Model view light list pagination and bulk settings (REQ-013)
 
@@ -385,6 +396,37 @@ Feature: Model view light list pagination and bulk settings (REQ-013)
     When the REQ-013 responsive UX notes are read
     Then pagination and multi-select must remain usable on mobile tablet and desktop
     And essential actions must not rely on hover-only affordances
+
+Feature: Default light state and model reset (REQ-014)
+
+  Scenario: REQ-014 mandates initial off state with 100 percent white
+    Parent requirement: REQ-014
+    Given docs/requirements.md defines REQ-014
+    When the REQ-014 business rules about initial state are read
+    Then every light must start in the off state with on false
+    And brightness must be 100 percent
+    And hex colour must be white FFFFFF in canonical six-digit form
+
+  Scenario: REQ-014 requires a reset control on the model view
+    Parent requirement: REQ-014
+    Given docs/requirements.md defines REQ-006 and REQ-014
+    When the REQ-014 scope and business rules are read
+    Then the model view must expose a reset affordance such as a Reset button
+    And the control must restore all lights in the current model in one user action
+
+  Scenario: REQ-014 binds reset to persistence and visualization timeliness
+    Parent requirement: REQ-014
+    Given docs/requirements.md defines REQ-011 REQ-012 REQ-013 and REQ-014
+    When the REQ-014 business rules about successful reset are read
+    Then reset must persist state per REQ-011
+    And the 3D view and light list must update without indefinite staleness after success
+
+  Scenario: REQ-014 requires non-hover-only reset on all device classes
+    Parent requirement: REQ-014
+    Given docs/requirements.md defines REQ-002 and REQ-014
+    When the REQ-014 responsive UX notes are read
+    Then the reset control must be reachable on mobile tablet and desktop
+    And essential use of reset must not rely on hover-only affordances
 ```
 
 ---

@@ -1,7 +1,7 @@
 import type { Light } from "@/lib/models";
 
-/** Sphere radius (m); diameter = 1 cm per REQ-010. */
-export const SPHERE_RADIUS_M = 0.005;
+/** Sphere radius (m); diameter = 2 cm per REQ-010. */
+export const SPHERE_RADIUS_M = 0.01;
 
 /** Vertex pairs for LineSegments: (x0,y0,z0,x1,y1,z1, ...) along ascending `id`. */
 export function buildWireSegmentPositions(lights: Light[]): Float32Array {

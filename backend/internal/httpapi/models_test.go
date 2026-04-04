@@ -234,6 +234,9 @@ func TestModels_lightStateEndpoints(t *testing.T) {
 	if len(bulk.States) != 2 || bulk.States[0].ID != 0 {
 		t.Fatalf("states %+v", bulk.States)
 	}
+	if bulk.States[0].On || bulk.States[1].On {
+		t.Fatalf("new model lights should default off, got %+v", bulk.States)
+	}
 
 	patchBody := `{"on":false,"color":"#00aaff"}`
 	req, err := http.NewRequest(http.MethodPatch, srv.URL+"/api/v1/models/"+sum.ID+"/lights/0/state", strings.NewReader(patchBody))
@@ -294,5 +297,33 @@ func TestModels_lightStateEndpoints(t *testing.T) {
 	}
 	if len(batchOut.States) != 2 || batchOut.States[0].ID != 0 || batchOut.States[0].Color != "#112233" {
 		t.Fatalf("batch states %+v", batchOut.States)
+	}
+
+	req, err = http.NewRequest(http.MethodPost, srv.URL+"/api/v1/models/"+sum.ID+"/lights/state/reset", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(res.Body)
+		t.Fatalf("reset status %d %s", res.StatusCode, b)
+	}
+	var resetOut struct {
+		States []store.LightStateDTO `json:"states"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&resetOut); err != nil {
+		t.Fatal(err)
+	}
+	if len(resetOut.States) != 2 {
+		t.Fatalf("reset states %+v", resetOut.States)
+	}
+	for _, st := range resetOut.States {
+		if st.On || st.Color != "#ffffff" || st.BrightnessPct != 100 {
+			t.Fatalf("after reset want off/white/100, got %+v", st)
+		}
 	}
 }

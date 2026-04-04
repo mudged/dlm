@@ -1,6 +1,6 @@
 # Architecture
 
-This document defines technical structure and deployment for the product described in `docs/requirements.md` (**REQ-001–REQ-013**). It satisfies **REQ-001** (Go + Next.js + Tailwind), **REQ-002** (responsive, client-interactive UI), **REQ-003** (Raspberry Pi 4 Model B, **ARM64**, resource awareness), **REQ-004** (**one runnable executable** per release target; **no** mandatory Docker/OCI/compose packaging at this stage), **REQ-005** (wire light model shape, CSV interchange, metadata), **REQ-006** (list / view / delete / create via CSV upload), **REQ-007** (server-side CSV validation and actionable errors), **REQ-008** (single command to build UI and run the Go server locally), **REQ-009** (default **sphere**, **cube**, **cone** samples: lights on **exterior** nominal surfaces with **even** coverage of **face planes** (**cube**) and **surface area** (**sphere** / **cone**), **not** **edge-only** or **single-curve-only** layouts; consecutive spacing **0.05–0.10 m**; **500–1000** lights each; **≤ 0.03 m** surface deviation; **~2 m** characteristic size), **REQ-010** (**three.js** **3D** view on **model detail**: **every** light as **1 cm** sphere; **all** lights drawn for **n ≤ 1000**; **thin transparent** segments for **previous/next** along **id** order; **hover** / **touch** disclosure of **id** and **coordinates**), **REQ-011** (**REST** **read/write** of per-light **on/off**, **hex** **#RRGGBB** colour, **brightness** **0–100%**, persisted in **SQLite**), **REQ-012** (**3D** **spheres** reflect that state: **on** = **filled** **colour** × **brightness**; **off** = **hollow** **semi-transparent**; **timely** UI sync after **writes**), and **REQ-013** (**model detail**: **paginated** light **list** with **page-size** control and **go to id**; **multi-select** and **bulk apply** of **REQ-011** fields with **one** **HTTP** round-trip via **batch** **PATCH**).
+This document defines technical structure and deployment for the product described in `docs/requirements.md` (**REQ-001–REQ-014**). It satisfies **REQ-001** (Go + Next.js + Tailwind), **REQ-002** (responsive, client-interactive UI), **REQ-003** (Raspberry Pi 4 Model B, **ARM64**, resource awareness), **REQ-004** (**one runnable executable** per release target; **no** mandatory Docker/OCI/compose packaging at this stage), **REQ-005** (wire light **chain** model: **CSV** interchange, **metadata**, **at most two** logical neighbors per light by **consecutive id**—**endpoints** have **one**), **REQ-006** (list / view / delete / create via CSV upload), **REQ-007** (server-side CSV validation and actionable errors), **REQ-008** (single command to build UI and run the Go server locally), **REQ-009** (default **sphere**, **cube**, **cone** samples: lights on **exterior** nominal surfaces with **even** coverage of **face planes** (**cube**) and **surface area** (**sphere** / **cone**), **not** **edge-only** or **single-curve-only** layouts; consecutive spacing **0.05–0.10 m**; **500–1000** lights each; **≤ 0.03 m** surface deviation; **~2 m** characteristic size), **REQ-010** (**three.js** **3D** view on **model detail**: **every** light as **2 cm** sphere; **all** lights drawn for **n ≤ 1000**; **wire** segments **only** between **consecutive** **ids**; segments **`#B5B5B5`** at **75% transparency** (**25% opacity**), **subtler** than spheres; **hover** / **touch** disclosure of **id** and **coordinates**), **REQ-011** (**REST** **read/write** of per-light **on/off**, **hex** **#RRGGBB** colour, **brightness** **0–100%**, persisted in **SQLite**), **REQ-012** (**3D** **spheres** reflect state: **on** = **opaque** **filled** **colour** × **brightness**; **off** = **`#B5B5B5`** at **75% transparency** matching segments; **timely** UI sync after **writes**), **REQ-013** (**model detail**: **paginated** light **list** with **page-size** control and **go to id**; **multi-select** and **bulk apply** via **batch** **PATCH**), and **REQ-014** (**default** all lights **off**, **`#FFFFFF`**, **100%** brightness on create/seed; **reset** control + **authoritative** API to restore that state for **all** lights in **one** action).
 
 ## Architectural resolution: REQ-004 (single binary) vs Next.js
 
@@ -24,15 +24,16 @@ This meets REQ-004 rule 1 (**no separate Node.js runtime** in the distribution) 
 | REQ-002 | **Mobile-first** Tailwind, **Client Components** for interactivity; **`fetch('/api/v1/…')`** from the browser to the same Go origin. |
 | REQ-003 | Primary release target **linux/arm64** (Pi 4B, 64-bit OS); document **CPU/RAM**; **one** long-lived app process. |
 | REQ-004 | **One executable file** per release target; assets **embedded** (or generated inside the process); **Docker/compose not** the canonical install path. |
-| REQ-005 | **Domain types** + **CSV** contract; **metadata** (**name**, **creation instant**) stored with each model; coordinates as **float64** in Go/API JSON. |
+| REQ-005 | **Domain types** + **CSV** contract; **ordered chain** adjacency (**id** **i** ↔ **i±1** only); **metadata** (**name**, **creation instant**) stored with each model; coordinates as **float64** in Go/API JSON. |
 | REQ-006 | **REST JSON API** for models + **Next.js** client pages (list, detail, upload, delete); **multipart** upload for CSV. |
 | REQ-007 | **Authoritative validation** in Go when ingesting CSV; **transactional** create (all-or-nothing); **400** responses with clear **error** envelope. |
 | REQ-008 | **`scripts/run.sh`** (or documented equivalent) from repo root: **`npm run release:sync`** in `web/` then **`go run ./cmd/server`** in `backend/`; **README** documents exact invocation (**§3.7**). |
 | REQ-009 | **`internal/samples`** builds three **ordered** light paths on each solid’s boundary (**500 ≤ n ≤ 1000**, **0.05–0.10 m** consecutive chords, **§3.8**) with **even** placement on **faces** / **surfaces** per **§3.8**; **`store.SeedDefaultSamples`** when **`models`** empty (**§3.8**). |
-| REQ-010 | **`three`** direct; **client-only** detail: **InstancedMesh** (or equivalent **§4.7**) **ø 0.01 m** markers for **all n** lights (**no** LOD/decimation); **`LineSegments`** **i↔i+1**; **`Raycaster`** + **DOM** tooltip (**§4.7**). |
+| REQ-010 | **`three`** direct; **client-only** detail: **InstancedMesh** (or equivalent **§4.7**) **ø 0.02 m** markers for **all n** lights (**no** LOD/decimation); **`LineSegments`** **i↔i+1** only (**chain**); segment colour **`#B5B5B5`**, **opacity 0.25** (**75%** transparent), thinner/subtler than spheres; **`Raycaster`** + **DOM** tooltip (**§4.7**). |
 | REQ-011 | **REST** **`/api/v1/models/{id}/lights/...`** for **bulk** + **per-id** **state** **read** and **`PATCH`** **per** **light**; **validation** and **defaults** in **Go** (**§3.2**, **§3.3**, **§3.9**). |
-| REQ-012 | **three.js** **materials** per **on/off** + **colour**/**brightness**; **client** merges **API** state into the scene; **no** indefinite staleness after **successful** **PATCH** (**§4.7**, **§8.7**). |
+| REQ-012 | **three.js** **materials**: **on** = **opaque** **fill** **colour** × **brightness**; **off** = **`#B5B5B5`**, **opacity 0.25** (match **REQ-010** segments); **client** merges **API** state; **no** indefinite staleness after **writes** (**§4.7**, **§8.7**). |
 | REQ-013 | **Model detail** **light table**: **client-side** **pagination** over **`GET` detail** payload; **page size** presets **25 / 50 / 100** (default **50**); **go to id** computes target page + **inline validation**; **checkbox** multi-select with **optional** **Shift+click** range on **current page**; **selection** **retained** across pages in **React state** (**`Set<number>`**) until **clear** or **navigate away**; **bulk apply** calls **`PATCH …/lights/state/batch`** (**§3.10**); **list** and **three.js** updated from **response** (**§4.8**, **§8.8**). |
+| REQ-014 | **Insert defaults** **on=false**, **`color="#ffffff"`**, **`brightness_pct=100`** (**§3.9**); **`POST …/lights/state/reset`** (**§3.11**); **model detail** **Reset** button (non–hover-only) calls reset then merges **`states`** into **UI** + **§4.7** (**§4.6**, **§8.9**). |
 
 **Assumed Pi context:** Raspberry Pi 4 Model B, **64-bit OS**, **ARM64** userspace. **2–8 GB RAM** — with **no Node** at runtime, **4 GB** is practical for modest traffic; **off-device** `next export` builds recommended.
 
@@ -101,6 +102,7 @@ dlm/
 | API | `GET /api/v1/models/{id}/lights/{lightId}/state` | **One** light’s **state** (**404** if model or **lightId** missing). **REQ-011** |
 | API | `PATCH /api/v1/models/{id}/lights/{lightId}/state` | **Partial** update of **`on`**, **`color`**, **`brightness_pct`** (JSON body; omitted fields unchanged). **200** returns the **full** **updated** **state** object. **REQ-011** |
 | API | `PATCH /api/v1/models/{id}/lights/state/batch` | **Atomic** partial update of **many** lights: JSON body **`{ "ids": [<int>, …], "on"?, "color"?, "brightness_pct"? }`** with **at least one** of **`on`**, **`color`**, **`brightness_pct`** present; **omitted** fields **unchanged** per row. **200** returns **`{ "states": [ { "id", "on", "color", "brightness_pct" }, … ] }`** sorted by **`id`**. **400** if **`ids`** empty, duplicate ids, any id **∉ [0, n−1]**, or merged values invalid. **REQ-013** (**§3.10**). |
+| API | `POST /api/v1/models/{id}/lights/state/reset` | **REQ-014:** **no** body (or empty **JSON** object). **One** **transaction** sets **every** light in the model to **`on=false`**, **`color="#ffffff"`**, **`brightness_pct=100`**. **200** returns **`{ "states": [ … ] }`** for **all** **n** lights, **`id`** ascending. **404** if model missing. |
 | API | `/api/v1/*` | Other versioned **JSON** endpoints as the product grows. |
 | Static | `/`, `/*.html`, **`/_next/**`**, other export assets | **Next static export** tree from embed; **SPA / HTML5** fallback policy: serve **`index.html`** for unmatched **non-API** GET if needed (implementor defines exact fallback rules). |
 
@@ -113,7 +115,7 @@ dlm/
 - **Schema (logical):**
   - **`models`:** `id` (TEXT UUID primary key), `name` (TEXT **NOT NULL**, **UNIQUE**), `created_at` (TEXT **RFC3339 UTC**).
   - **`lights`:** `model_id` (TEXT FK → `models.id`), `idx` (INTEGER light index), `x`, `y`, `z` (REAL), **`on`** (INTEGER **NOT NULL**, **0** = off / **1** = on), **`color`** (TEXT **NOT NULL**, canonical **`#RRGGBB`**), **`brightness_pct`** (REAL **NOT NULL**, **0..100** inclusive), primary key **`(model_id, idx)`**.
-- **Transactions:** **`POST /api/v1/models`** MUST parse+validate CSV, then insert **`models`** + all **`lights`** in **one transaction**; each new **`lights`** row MUST receive **default** **`on`**, **`color`**, **`brightness_pct`** per **§3.9**; rollback on any validation failure so **no partial model** is stored (**REQ-007**).
+- **Transactions:** **`POST /api/v1/models`** MUST parse+validate CSV, then insert **`models`** + all **`lights`** in **one transaction**; each new **`lights`** row MUST receive **default** **`on`**, **`color`**, **`brightness_pct`** per **§3.9** (**REQ-014**); rollback on any validation failure so **no partial model** is stored (**REQ-007**).
 - **Migrations:** Implementor MAY use a minimal migration hook or `CREATE TABLE IF NOT EXISTS` at startup; document schema version if evolved.
 
 **Architectural resolutions (requirements open questions):**
@@ -146,6 +148,8 @@ dlm/
 - **Row count:** After the header, **0 ≤ n ≤ 1000** data rows; **n > 1000** → **400** referencing the cap.
 - **Id sequence:** Let **n** be the number of data rows. Sorting rows by **`id`**, the multiset of ids MUST equal **`{0,1,…,n−1}`** exactly once each (contiguous from **0**, no gaps, no duplicates). Implementor MAY require rows to appear sorted by **`id`** ascending for simpler validation, or accept any order and validate the set—behavior MUST match tests derived from **`docs/acceptance_criteria.md`**.
 - **Authoritative checks:** All rules above are enforced **in Go** on upload; the UI MAY add client-side hints but MUST NOT trust them for security or integrity.
+
+**Chain topology (REQ-005 rule 6):** The **CSV** does **not** encode edges explicitly; **logical** adjacency is **only** **(i, i+1)** for **i = 0 … n−2**. **Visualization** and **any** future features MUST **not** introduce **extra** adjacencies between **non-consecutive** **ids**.
 
 **JSON API shapes (illustrative):**
 
@@ -221,11 +225,13 @@ Requirements demand **both** **even** **2D/area** placement **and** **consecutiv
 
 | Field | Type | Rules |
 |-------|------|--------|
-| **`on`** | boolean | **`true`** = lit appearance (**REQ-012** **filled**); **`false`** = **off** (**hollow** **semi-transparent**). |
+| **`on`** | boolean | **`true`** = lit appearance (**REQ-012** **opaque** **filled**); **`false`** = **off** (**REQ-012** **`#B5B5B5`** at **75%** transparency in **three.js**, **§4.7**). |
 | **`color`** | string | **Exactly** **`#` + 6** **hex** digits **`[0-9A-Fa-f]`** (normalize to **lowercase** in responses if desired; accept any case on input). |
 | **`brightness_pct`** | number | **IEEE-754** number **in** **[0, 100]**; semantics for **rendering** in **§4.7**; when **`on`** is **`false`**, stored value is **still** persisted but **does not** drive a **lit** appearance. |
 
-**Default state (architectural resolution for REQ-011 rule 6):** On **insert** of each **`lights`** row (**CSV** create or **sample** seed), set **`on = true`**, **`color = "#ffffff"`**, **`brightness_pct = 100`**. This matches the **historical** **REQ-010** **white** **lit** look until the user or integrator changes state.
+**Default state (REQ-011 rule 6 + REQ-014):** On **insert** of each **`lights`** row (**CSV** create, **sample** seed, or **migration** backfill), set **`on = false`**, **`color = "#ffffff"`** (canonical lowercase in DB/API responses acceptable), **`brightness_pct = 100`**. This matches **REQ-014** (**all off**, **full white** stored, **100%** brightness for when the light is **turned on**).
+
+**Legacy databases** that used **`on = true`** on insert SHOULD be **migrated** (or **reset** via **UI/API**) so **product** **behavior** matches **REQ-014**; **implementor** documents the **chosen** **path**.
 
 **Endpoints (summary — see §3.2 table):**
 
@@ -272,6 +278,24 @@ Requirements demand **both** **even** **2D/area** placement **and** **consecutiv
 
 **Compatibility:** Single-light **`PATCH …/lights/{lightId}/state`** remains **available** for integrators and simple UI paths (**REQ-011**).
 
+### 3.11 Reset all lights to default state (**REQ-014**)
+
+**Endpoint:** **`POST /api/v1/models/{id}/lights/state/reset`**
+
+**Request:** **No** JSON body required (**`Content-Length: 0`** or **`{}`** accepted and ignored).
+
+**Behavior:**
+
+1. **404** if the model does **not** exist.
+2. **BEGIN** transaction; **UPDATE** **every** **`lights`** row for **`model_id`** to **`on = 0`**, **`color = '#ffffff'`** (or stored canonical case), **`brightness_pct = 100`**.
+3. **COMMIT**; **200** with **`{ "states": [ { "id", "on", "color", "brightness_pct" }, … ] }`** covering **all** **n** lights, sorted by **`id`**.
+
+**Store:** e.g. **`ResetAllLightStates(ctx, modelID)`** in **`internal/store`**; register **`POST …/lights/state/reset`** on the **API** mux with the **other** **`…/lights/…`** **routes** so the **literal** **`reset`** **segment** is **not** mistaken for a **`lightId`** in any **future** **catch-all** patterns (**ordering** per **§3.2**).
+
+**Client:** **Model detail** exposes a **Reset** (or **Reset lights**) **button** (**§4.6**). On **200**, **merge** **`states`** into **`lights`** and refresh **§4.7** + **§4.8** in **one** update (**same** **timeliness** expectation as **§8.7**).
+
+**Integrators:** **Idempotent** aside from **touching** **`updated`** semantics if added later; **safe** to call repeatedly.
+
 ---
 
 ## 4. Next.js + Tailwind (build-time / authoring)
@@ -302,9 +326,9 @@ Requirements demand **both** **even** **2D/area** placement **and** **consecutiv
 
 Unchanged intent: **Tailwind breakpoints**, **touch targets**, **`"use client"`** for interactivity.
 
-### 4.6 Models UI (**REQ-002**, **REQ-006**, **REQ-010**, **REQ-011**, **REQ-012**)
+### 4.6 Models UI (**REQ-002**, **REQ-006**, **REQ-010**, **REQ-011**, **REQ-012**, **REQ-014**)
 
-- **Routes (App Router):** e.g. **`/models`** (list), **`/models/new`** (upload form: **name** text input + **file** input), **`/models/[id]`** (detail: metadata; **§4.8** **paginated** light **table** + **§4.7** **3D** view; per-light or bulk controls per **REQ-011** / **REQ-013**).
+- **Routes (App Router):** e.g. **`/models`** (list), **`/models/new`** (upload form: **name** text input + **file** input), **`/models/[id]`** (detail: metadata; **§4.8** **paginated** light **table** + **§4.7** **3D** view; per-light or bulk controls per **REQ-011** / **REQ-013**; **Reset lights** **button** calling **`POST …/lights/state/reset`** per **§3.11** (**REQ-014**), **reachable** on **mobile** / **tablet** / **desktop** without **hover-only** use).
 - **Client data:** **`"use client"`** pages/components call **`fetch`** with **`GET`**, **`POST`** (**`FormData`** for multipart), **`DELETE`**, and **`PATCH`** (**JSON**) against **`/api/v1/models…`** on the **same origin** (**§4.3**).
 - **Feedback:** Inline / banner display of **400** / **409** **`message`** from API; loading states on list, detail, upload, and delete (**REQ-002**).
 - **Navigation:** Clear entry point from **home** or **app shell** to **models** list (**implementor** chooses IA).
@@ -319,19 +343,20 @@ Unchanged intent: **Tailwind breakpoints**, **touch targets**, **`"use client"`*
 
 #### Geometry and materials (REQ-010 rules 4–5, 7; REQ-012)
 
-- **Per-light marker:** Each light is a **sphere** with **diameter 0.01 m** → **`SphereGeometry`** with **radius `0.005`**.
+- **Per-light marker:** Each light is a **sphere** with **diameter 0.02 m** (**2 cm**) → **`SphereGeometry`** with **radius `0.01`**.
+- **Canonical visualization grey:** **`#B5B5B5`** — parse once to **`THREE.Color`** for **wire segments** and **off** spheres (**REQ-010** / **REQ-012**).
 - **On vs off (REQ-012):**
-  - **`on === true`:** **Filled** **opaque** (or effectively **opaque**) **surface** — e.g. **`MeshStandardMaterial`** or **`MeshBasicMaterial`** **`side: FrontSide`**, **`transparent: false`** (or **opacity 1**). **Colour** from **`color`** **hex** parsed to **`THREE.Color`**. **Brightness:** multiply **linear** RGB by **`brightness_pct / 100`** **before** **gamma** display (e.g. **`color.multiplyScalar(brightness_pct / 100)`** on a **clone** of the parsed colour, **clamped** to **[0,1]** per channel). At **`brightness_pct === 0`**, the **on** sphere MAY appear **black**; product copy may note that **“off”** is clearer via **`on: false`**.
-  - **`on === false`:** **Hollow** **semi-transparent** marker. **Preferred pattern:** same **`SphereGeometry`**, **`MeshBasicMaterial`** with **`wireframe: true`**, **`transparent: true`**, **`opacity`** in **~0.25–0.45**, **`depthWrite: false`** if **z-fighting** with **segments**; **optional** **`color`** **tint** at **low** **opacity** so **position** reads against the background. **Alternative** acceptable if visually equivalent: **`EdgesGeometry`** on the **sphere** + **`LineSegments`**. **Do not** use a **solid** **opaque** **fill** for **off** lights.
+  - **`on === true`:** **Filled** **opaque** (or effectively **opaque**) **surface** — e.g. **`MeshStandardMaterial`** or **`MeshBasicMaterial`** **`side: FrontSide`**, **`transparent: false`** (or **opacity 1**). **Colour** from API **`color`** **hex** parsed to **`THREE.Color`**. **Brightness:** multiply **linear** RGB by **`brightness_pct / 100`** **before** display (e.g. **`color.multiplyScalar(brightness_pct / 100)`** on a **clone**, **clamped** to **[0,1]** per channel). At **`brightness_pct === 0`**, the **on** sphere MAY appear **black**; **“off”** in the **product** sense remains **`on: false`**.
+  - **`on === false`:** **Filled** **sphere** (same **geometry** as **on**) with **`MeshBasicMaterial`** (**or** equivalent): **`color`** = **`#B5B5B5`**, **`transparent: true`**, **`opacity: 0.25`** (**75%** transparency per requirements), **`depthWrite: false`** if needed to reduce **z-fighting** with **segments** and **neighbors**. **Do not** present **off** lights as **more** visually **prominent** than **on** lights or than **wire** segments (**REQ-012**).
 - **Draw all lights (no omission):** For **n** lights (**n ≤ 1000**), the scene MUST contain **exactly n** **visible** markers at the **correct** **positions**—**no** decimation. **Rendering strategy (implementor picks one):**
-  - **A.** **Two** **`InstancedMesh`** **layers**: (**1**) **on** lights — **`InstancedMesh`** with **`MeshStandardMaterial`** (or **`MeshBasicMaterial`**) and **`instanceColor`** (or **per-instance** **uniform** via **custom** **shader**) for **filled** spheres; (**2**) **off** lights — second **`InstancedMesh`** with **wireframe** **material** and **per-instance** **matrix** only. When **`PATCH`** toggles **`on`**, **move** the **instance** between **layers** (swap **matrices** / **counts**) or **rebuild** **both** **meshes** from **authoritative** **state** (**O(n)** **acceptable** for **n ≤ 1000**).
-  - **B.** **Up to n** **individual** **`Mesh`** **nodes** with **per-light** **material** **clones** — simpler code paths; **must** still **hit** **performance** **targets** on **Pi-class** **clients** (prefer **A** if **frame** **time** **suffers**).
-- **Wire polyline (previous / next along id):** Unchanged from **REQ-010**: **`LineSegments`** between **consecutive** **ids**; **style** does **not** vary with **on/off** unless a **later** **requirement** says so.
-- **Framing:** Compute bounds from **sphere centers**, place **camera** / **`OrbitControls.target`** so the full model fits (**0.005 m** **radius** **margin**).
+  - **A.** **Two** **`InstancedMesh`** **layers**: (**1**) **on** lights — **`InstancedMesh`** + **`instanceColor`** (and **brightness** factored per instance or via **custom** attribute); (**2**) **off** lights — second **`InstancedMesh`** with **shared** **`#B5B5B5`**, **`opacity 0.25`**, **non-wireframe** **material**. When **`on`** toggles, **move** instances between **layers** or **rebuild** **both** from **authoritative** **state** (**O(n)** OK for **n ≤ 1000**).
+  - **B.** **Up to n** **individual** **`Mesh`** **nodes** — acceptable if **performance** on **Pi-class** **clients** remains acceptable.
+- **Wire polyline (REQ-005 chain, REQ-010):** **`LineSegments`** (or **`LineBasicMaterial`** **lines**) only between **(i, i+1)** for **i = 0 … n−2**. **Colour** **`#B5B5B5`**, **`transparent: true`**, **`opacity: 0.25`**; **linewidth** where supported is **thin** (note: **WebGL** **line** **width** is often **1** px); segments MUST read **subtler** than **spheres**. **Style** does **not** vary with **on/off** (**REQ-012** **out** **of** **scope** for segment state).
+- **Framing:** Compute bounds from **sphere centers**, place **camera** / **`OrbitControls.target`** so the full model fits (**0.01 m** **radius** **margin** for **2 cm** spheres).
 
 #### State sync (REQ-012 rule 3)
 
-- **After a successful `PATCH …/lights/{lightId}/state`** or **`PATCH …/lights/state/batch`** (**§3.10**, **REQ-013**) initiated from **this** **browser** **session**, the **client** MUST **merge** the **JSON** **response** (or **refetch** **`GET …/lights/state`** / **model** **detail**) and **update** **three.js** **meshes** **before** the **next** **`requestAnimationFrame`** **paint** **following** **the** **`fetch`** **resolution** (i.e. **no** **indefinite** **staleness** **after** **confirmed** **write**).
+- **After a successful `PATCH …/lights/{lightId}/state`**, **`PATCH …/lights/state/batch`** (**§3.10**, **REQ-013**), or **`POST …/lights/state/reset`** (**§3.11**, **REQ-014**) initiated from **this** **browser** **session**, the **client** MUST **merge** the **JSON** **response** (or **refetch** **`GET …/lights/state`** / **model** **detail**) and **update** **three.js** **meshes** **before** the **next** **`requestAnimationFrame`** **paint** **following** **the** **`fetch`** **resolution** (i.e. **no** **indefinite** **staleness** **after** **confirmed** **write**).
 - **Concurrent** **sessions** **(another** **tab** **or** **REST** **client):** **Optional** **`setInterval`** **poll** of **`GET /api/v1/models/{id}/lights/state`** every **≤ 5 s** while the **detail** **route** **is** **mounted**; if **absent**, **manual** **browser** **refresh** **still** **shows** **truth** — **document** **in** **README** **that** **live** **multi-user** **sync** **may** **lag** **up** **to** **one** **poll** **period**.
 
 #### Picking, hover, and touch (REQ-010 rule 6; REQ-012 rule 4)
@@ -562,7 +587,7 @@ sequenceDiagram
   P->>G: GET /api/v1/models/{id}
   G-->>P: 200 JSON (metadata + lights with on color brightness_pct)
   P-->>R: 200 JSON (metadata + lights with on color brightness_pct)
-  R->>R: Build scene, filled vs wireframe spheres per on off, transparent line segments, OrbitControls
+  R->>R: Build scene, opaque filled on-spheres vs B5B5B5 25 percent opacity off-spheres, B5B5B5 25 percent opacity segments between consecutive ids, OrbitControls
   R->>R: Raycast hover or tap shows id and x y z overlay
   R-->>User: WebGL canvas + metadata UI (same origin, no Node SSR)
 ```
@@ -651,6 +676,37 @@ sequenceDiagram
 
 **Boundary:** **One** **transaction** in **SQLite** for **all** **ids** in the **batch**; the **UI** **must** **treat** **`200`** **`states`** as **authoritative** for **both** **§4.8** and **§4.7**.
 
+### 8.9 Reset all lights to defaults (**REQ-014**, **§3.11**)
+
+```mermaid
+sequenceDiagram
+  actor User as User device
+  participant B as Browser
+  participant P as Reverse proxy (optional)
+  participant G as Go binary
+  participant S as SQLite store
+  participant R as Client React + three.js + light table
+
+  User->>B: Click Reset lights
+  B->>R: Invoke reset handler
+  R->>P: POST /api/v1/models/{id}/lights/state/reset (no body)
+  P->>G: POST
+  alt model missing
+    G-->>P: 404 JSON error
+    P-->>R: 404
+    R-->>User: Show error message
+  else success
+    G->>S: BEGIN; UPDATE all lights to off, white, 100 percent brightness; COMMIT
+    S-->>G: OK
+    G-->>P: 200 JSON states array for all lights
+    P-->>R: 200 JSON states array
+    R->>R: Merge states into lights; refresh table and three.js meshes
+    R-->>User: Model matches default visual and list state
+  end
+```
+
+**Boundary:** **Same** **timeliness** expectation as **§8.7** — **no** **indefinite** **staleness** after **200**.
+
 ---
 
 ## 9. Security notes (baseline)
@@ -680,7 +736,8 @@ sequenceDiagram
 | REQ-011 | §1, §3.2, §3.3, §3.9, §3.10 (validation semantics shared with batch), §4.6, §8.7 |
 | REQ-012 | §1, §3.9, §4.6, §4.7, §8.5, §8.7 |
 | REQ-013 | §1, §3.2, §3.10, §4.6, §4.8, §4.7 (state sync), §8.8 |
+| REQ-014 | §1, §3.2, §3.3, §3.8, §3.9 (defaults), §3.11, §4.6, §4.7 (state sync), §8.9 |
 
 ---
 
-**Next step:** Invoke the **`@implementor`** agent to (1) extend **`internal/store`** and **`internal/httpapi`** per **§3.3**, **§3.9**, and **§3.10** (**lights** **state** **columns**, **`GET`/`PATCH`** **routes**, **`PATCH …/lights/state/batch`**, **model** **detail** **JSON**), (2) update **`ModelLightsCanvas`** (or equivalent) per **§4.7** (**on** **filled** **colour** × **brightness**, **off** **wireframe** **semi-transparent**, **sync** **after** **single** or **batch** **`PATCH`**), (3) implement **§4.8** on **model detail** (**paginated** **table**, **go to id**, **multi-select**, **bulk** **panel** wired to **batch** **endpoint**), and (4) keep **`internal/samples`** / **CSV** **create** **paths** **aligned** **with** **§3.9** **defaults**. Then invoke the **`@verifier`** agent to audit, run tests, and update **`docs/traceability_matrix.md`**.
+**Next step:** Invoke the **`@implementor`** agent to (1) align **`internal/store`**, **`internal/httpapi`**, **`internal/samples`**, and **CSV** **create** with **§3.9** **defaults** (**`on=false`**, **`#ffffff`**, **`brightness_pct=100`**) and **`POST …/lights/state/reset`** (**§3.11**), (2) update **`ModelLightsCanvas`** (or equivalent) per **§4.7** (**2 cm** spheres; **on** = **opaque** **colour** × **brightness**; **off** + **wire** segments = **`#B5B5B5`** **`opacity 0.25`**; **chain** segments **only** **i↔i+1**), (3) add **Reset lights** on **model detail** (**§4.6**), (4) keep **§4.8** **bulk** **apply** wired to **`PATCH …/lights/state/batch`**, and (5) add/adjust **tests** and **migrations** for **legacy** DBs if needed. Then invoke the **`@verifier`** agent to audit, run tests, and update **`docs/traceability_matrix.md`**.

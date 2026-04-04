@@ -47,8 +47,8 @@ func TestStore_CreateListGetDelete(t *testing.T) {
 	if len(d.Lights) != 1 || d.Lights[0].ID != 0 || d.Lights[0].X != 1 {
 		t.Fatalf("detail %+v", d)
 	}
-	if !d.Lights[0].On || d.Lights[0].Color != "#ffffff" || d.Lights[0].BrightnessPct != 100 {
-		t.Fatalf("want default light state, got %+v", d.Lights[0])
+	if d.Lights[0].On || d.Lights[0].Color != "#ffffff" || d.Lights[0].BrightnessPct != 100 {
+		t.Fatalf("want default light state (off, white, 100%%), got %+v", d.Lights[0])
 	}
 
 	if err := s.Delete(ctx, sum.ID); err != nil {
@@ -124,7 +124,7 @@ func TestStore_LightStateListPatch(t *testing.T) {
 	if err != nil || len(states) != 2 {
 		t.Fatalf("ListLightStates: %v %+v", err, states)
 	}
-	if !states[0].On || states[0].Color != "#ffffff" {
+	if states[0].On || states[0].Color != "#ffffff" {
 		t.Fatalf("state[0] %+v", states[0])
 	}
 
@@ -142,8 +142,8 @@ func TestStore_LightStateListPatch(t *testing.T) {
 	}
 
 	one, err := s.GetLightState(ctx, sum.ID, 1)
-	if err != nil || !one.On {
-		t.Fatalf("light 1 %+v err %v", one, err)
+	if err != nil || one.On {
+		t.Fatalf("light 1 should stay default off %+v err %v", one, err)
 	}
 
 	_, err = s.PatchLightState(ctx, sum.ID, 99, LightStatePatch{On: &f})
@@ -197,9 +197,44 @@ func TestStore_BatchPatchLightStates(t *testing.T) {
 	}
 
 	one, err := s.GetLightState(ctx, sum.ID, 1)
-	if err != nil || !one.On {
-		t.Fatalf("light 1 should be unchanged %+v", one)
+	if err != nil || one.On {
+		t.Fatalf("light 1 should be unchanged (still off) %+v", one)
+	}
+}
+
+func TestStore_ResetAllLightStates(t *testing.T) {
+	ctx := context.Background()
+	s := testDB(t)
+	sum, err := s.Create(ctx, "resetme", []wiremodel.Light{
+		{ID: 0, X: 0, Y: 0, Z: 0},
+		{ID: 1, X: 1, Y: 0, Z: 0},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tOn := true
+	red := "#ff0000"
+	if _, err := s.PatchLightState(ctx, sum.ID, 0, LightStatePatch{On: &tOn, Color: &red}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.PatchLightState(ctx, sum.ID, 1, LightStatePatch{BrightnessPct: ptrFloat(50)}); err != nil {
+		t.Fatal(err)
+	}
+
+	states, err := s.ResetAllLightStates(ctx, sum.ID)
+	if err != nil || len(states) != 2 {
+		t.Fatalf("ResetAllLightStates: %v %+v", err, states)
+	}
+	for _, st := range states {
+		if st.On || st.Color != "#ffffff" || st.BrightnessPct != 100 {
+			t.Fatalf("want REQ-014 default, got %+v", st)
+		}
+	}
+	if _, err := s.ResetAllLightStates(ctx, "00000000-0000-0000-0000-000000000000"); err != ErrNotFound {
+		t.Fatalf("missing model: want ErrNotFound, got %v", err)
 	}
 }
 
 func ptrBool(b bool) *bool { return &b }
+
+func ptrFloat(f float64) *float64 { return &f }

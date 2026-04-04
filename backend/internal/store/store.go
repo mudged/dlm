@@ -34,9 +34,9 @@ var ErrBatchEmptyIDs = errors.New("batch ids must be non-empty")
 // ErrBatchDuplicateIDs is returned when the same light id appears more than once in a batch.
 var ErrBatchDuplicateIDs = errors.New("duplicate light ids in batch")
 
-// Default light state for new rows (REQ-011 / architecture §3.9).
+// Default light state for new rows (REQ-011 / REQ-014 / architecture §3.9).
 const (
-	DefaultLightOn            = true
+	DefaultLightOn            = false
 	DefaultLightColor         = "#ffffff"
 	DefaultLightBrightnessPct = 100.0
 )
@@ -117,7 +117,7 @@ func (s *Store) migrate(ctx context.Context) error {
 			x REAL NOT NULL,
 			y REAL NOT NULL,
 			z REAL NOT NULL,
-			"on" INTEGER NOT NULL DEFAULT 1,
+			"on" INTEGER NOT NULL DEFAULT 0,
 			color TEXT NOT NULL DEFAULT '#ffffff',
 			brightness_pct REAL NOT NULL DEFAULT 100,
 			PRIMARY KEY (model_id, idx),
@@ -139,7 +139,7 @@ func (s *Store) ensureLightStateColumns(ctx context.Context) error {
 		return err
 	}
 	if !cols["on"] {
-		if _, err := s.db.ExecContext(ctx, `ALTER TABLE lights ADD COLUMN "on" INTEGER NOT NULL DEFAULT 1`); err != nil {
+		if _, err := s.db.ExecContext(ctx, `ALTER TABLE lights ADD COLUMN "on" INTEGER NOT NULL DEFAULT 0`); err != nil {
 			return fmt.Errorf("migrate lights.on: %w", err)
 		}
 	}
@@ -611,6 +611,55 @@ func (s *Store) BatchPatchLightStates(ctx context.Context, modelID string, ids [
 		})
 	}
 
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// ResetAllLightStates sets every light in the model to REQ-014 defaults (off, #ffffff, 100% brightness).
+func (s *Store) ResetAllLightStates(ctx context.Context, modelID string) ([]LightStateDTO, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var n int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM models WHERE id = ?`, modelID).Scan(&n); err != nil {
+		return nil, err
+	}
+	if n == 0 {
+		return nil, ErrNotFound
+	}
+
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE lights SET "on" = 0, color = ?, brightness_pct = ? WHERE model_id = ?
+	`, DefaultLightColor, DefaultLightBrightnessPct, modelID); err != nil {
+		return nil, err
+	}
+
+	rows, err := tx.QueryContext(ctx, `
+		SELECT idx, "on", color, brightness_pct FROM lights WHERE model_id = ? ORDER BY idx ASC
+	`, modelID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []LightStateDTO
+	for rows.Next() {
+		var st LightStateDTO
+		var onInt int
+		if err := rows.Scan(&st.ID, &onInt, &st.Color, &st.BrightnessPct); err != nil {
+			return nil, err
+		}
+		st.On = onInt != 0
+		out = append(out, st)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}

@@ -343,6 +343,8 @@ export function ModelDetailClient() {
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [goToIdInput, setGoToIdInput] = useState("");
   const [goToIdErr, setGoToIdErr] = useState<string | null>(null);
+  const [resetting, setResetting] = useState(false);
+  const [resetErr, setResetErr] = useState<string | null>(null);
   const shiftAnchorRef = useRef<number | null>(null);
   const headerSelectRef = useRef<HTMLInputElement>(null);
 
@@ -470,6 +472,43 @@ export function ModelDetailClient() {
     });
   };
 
+  const resetAllLights = async () => {
+    if (!model) {
+      return;
+    }
+    setResetting(true);
+    setResetErr(null);
+    try {
+      const res = await fetch(
+        `/api/v1/models/${encodeURIComponent(model.id)}/lights/state/reset`,
+        { method: "POST" },
+      );
+      const j = (await res.json().catch(() => null)) as {
+        states?: {
+          id: number;
+          on: boolean;
+          color: string;
+          brightness_pct: number;
+        }[];
+        error?: { message?: string };
+      };
+      if (!res.ok) {
+        setResetErr(j?.error?.message ?? `Reset failed (${res.status})`);
+        return;
+      }
+      const states = j.states;
+      if (!states || !Array.isArray(states)) {
+        setResetErr("Invalid response from server.");
+        return;
+      }
+      setModel((m) => (m ? mergeBatchLightStatesApi(m, states) : m));
+    } catch {
+      setResetErr("Could not reach the API.");
+    } finally {
+      setResetting(false);
+    }
+  };
+
   const submitGoToId = () => {
     if (!model) {
       return;
@@ -532,12 +571,27 @@ export function ModelDetailClient() {
       </header>
 
       <section className="space-y-2" aria-labelledby="model-3d-heading">
-        <h2
-          id="model-3d-heading"
-          className="text-sm font-semibold text-slate-800 dark:text-slate-200"
-        >
-          3D view
-        </h2>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <h2
+            id="model-3d-heading"
+            className="text-sm font-semibold text-slate-800 dark:text-slate-200"
+          >
+            3D view
+          </h2>
+          <Button
+            type="button"
+            className="h-9 w-full shrink-0 px-3 py-0 text-sm sm:w-auto"
+            disabled={resetting}
+            onClick={() => void resetAllLights()}
+          >
+            {resetting ? "Resetting…" : "Reset lights"}
+          </Button>
+        </div>
+        {resetErr ? (
+          <p className="text-xs text-red-600 dark:text-red-400" role="alert">
+            {resetErr}
+          </p>
+        ) : null}
         <p className="text-xs text-slate-500 dark:text-slate-400">
           Drag to rotate; scroll or pinch to zoom. Hover a sphere for id and
           coordinates (desktop). Tap a sphere to pin the label; tap empty space

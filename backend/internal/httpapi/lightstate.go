@@ -3,6 +3,7 @@ package httpapi
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -17,6 +18,34 @@ type jsonLightStatePatch struct {
 	On            *bool    `json:"on"`
 	Color         *string  `json:"color"`
 	BrightnessPct *float64 `json:"brightness_pct"`
+}
+
+func (a *apiDeps) postResetLightStates(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	modelID := r.PathValue("id")
+	if modelID == "" {
+		writeAPIError(w, http.StatusBadRequest, "bad_request", "missing model id")
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 4096)
+	_, _ = io.Copy(io.Discard, r.Body)
+
+	states, err := a.store.ResetAllLightStates(r.Context(), modelID)
+	if errors.Is(err, store.ErrNotFound) {
+		writeAPIError(w, http.StatusNotFound, "not_found", "model not found")
+		return
+	}
+	if err != nil {
+		writeAPIError(w, http.StatusInternalServerError, "internal_error", "could not reset light states")
+		return
+	}
+	if states == nil {
+		states = []store.LightStateDTO{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"states": states})
 }
 
 func (a *apiDeps) listLightStates(w http.ResponseWriter, r *http.Request) {

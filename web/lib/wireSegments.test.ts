@@ -31,7 +31,7 @@ describe("buildWireSegmentPositions", () => {
 });
 
 describe("SPHERE_RADIUS_M", () => {
-  it("is half of 1 cm diameter", () => {
-    expect(SPHERE_RADIUS_M).toBe(0.005);
+  it("is half of 2 cm diameter", () => {
+    expect(SPHERE_RADIUS_M).toBe(0.01);
   });
 });
