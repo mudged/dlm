@@ -1,6 +1,6 @@
 # Architecture
 
-This document defines technical structure and deployment for the product described in `docs/requirements.md` (**REQ-001–REQ-014**). It satisfies **REQ-001** (Go + Next.js + Tailwind), **REQ-002** (responsive, client-interactive UI), **REQ-003** (Raspberry Pi 4 Model B, **ARM64**, resource awareness), **REQ-004** (**one runnable executable** per release target; **no** mandatory Docker/OCI/compose packaging at this stage), **REQ-005** (wire light **chain** model: **CSV** interchange, **metadata**, **at most two** logical neighbors per light by **consecutive id**—**endpoints** have **one**), **REQ-006** (list / view / delete / create via CSV upload), **REQ-007** (server-side CSV validation and actionable errors), **REQ-008** (single command to build UI and run the Go server locally), **REQ-009** (default **sphere**, **cube**, **cone** samples: lights on **exterior** nominal surfaces with **even** coverage of **face planes** (**cube**) and **surface area** (**sphere** / **cone**), **not** **edge-only** or **single-curve-only** layouts; consecutive spacing **0.05–0.10 m**; **500–1000** lights each; **≤ 0.03 m** surface deviation; **~2 m** characteristic size), **REQ-010** (**three.js** **3D** view on **model detail**: **every** light as **2 cm** sphere; **all** lights drawn for **n ≤ 1000**; **wire** segments **only** between **consecutive** **ids**; segments **`#D0D0D0`** at **85% transparency** (**15% opacity**), **subtler** than spheres; **hover** / **touch** disclosure of **id** and **coordinates**), **REQ-011** (**REST** **read/write** of per-light **on/off**, **hex** **#RRGGBB** colour, **brightness** **0–100%**, persisted in **SQLite**), **REQ-012** (**3D** **spheres** reflect state: **on** = **opaque** **filled** **colour** × **brightness**; **off** = **`#D0D0D0`** at **85% transparency** matching segments; **timely** UI sync after **writes**), **REQ-013** (**model detail**: **paginated** light **list** with **page-size** control and **go to id**; **multi-select** and **bulk apply** via **batch** **PATCH**), and **REQ-014** (**default** all lights **off**, **`#FFFFFF`**, **100%** brightness on create/seed; **reset** control + **authoritative** API to restore that state for **all** lights in **one** action).
+This document defines technical structure and deployment for the product described in `docs/requirements.md` (**REQ-001–REQ-015**). It satisfies **REQ-001** (Go + Next.js + Tailwind), **REQ-002** (responsive, client-interactive UI), **REQ-003** (Raspberry Pi 4 Model B, **ARM64**, resource awareness), **REQ-004** (**one runnable executable** per release target; **no** mandatory Docker/OCI/compose packaging at this stage), **REQ-005** (wire light **chain** model: **CSV** interchange, **metadata**, **at most two** logical neighbors per light by **consecutive id**—**endpoints** have **one**), **REQ-006** (list / view / delete / create via CSV upload; **delete blocked** with **409** when the model is **referenced** by **one or more** **scenes**, with an **actionable** **error** payload), **REQ-007** (server-side CSV validation and actionable errors), **REQ-008** (single command to build UI and run the Go server locally), **REQ-009** (default **sphere**, **cube**, **cone** samples: lights on **exterior** nominal surfaces with **even** coverage of **face planes** (**cube**) and **surface area** (**sphere** / **cone**), **not** **edge-only** or **single-curve-only** layouts; consecutive spacing **0.05–0.10 m**; **500–1000** lights each; **≤ 0.03 m** surface deviation; **~2 m** characteristic size), **REQ-010** (**three.js** **3D** view on **model detail**: **every** light as **2 cm** sphere; **all** lights drawn for **n ≤ 1000**; **wire** segments **only** between **consecutive** **ids**; segments **`#D0D0D0`** at **85% transparency** (**15% opacity**), **subtler** than spheres; **hover** / **touch** disclosure of **id** and **coordinates**), **REQ-011** (**REST** **read/write** of per-light **on/off**, **hex** **#RRGGBB** colour, **brightness** **0–100%**, persisted in **SQLite**), **REQ-012** (**3D** **spheres** reflect state: **on** = **opaque** **filled** **colour** × **brightness**; **off** = **`#D0D0D0`** at **85% transparency** matching segments; **timely** UI sync after **writes**), **REQ-013** (**model detail**: **paginated** light **list** with **page-size** control and **go to id**; **multi-select** and **bulk apply** via **batch** **PATCH**), **REQ-014** (**default** all lights **off**, **`#FFFFFF`**, **100%** brightness on create/seed; **reset** control + **authoritative** API to restore that state for **all** lights in **one** action), and **REQ-015** (**scenes**: **named** **composite** **3D** **space**; **create** with **≥ 1** **model** **and** **server-computed** **integer** **offsets** **(no** **client-supplied** **offsets** **on** **create)**; **canonical** **`lights.x/y/z`** **unchanged** **by** **scenes**; **derived** **`sx/sy/sz`** **=** **canonical** **+** **offset** **for** **API**/**UI** **in** **scene** **context**; **non-negative** **containment** **+** **≥ 1 m** **margin** **beyond** **max** **extent** **per** **axis**; **three.js** **composite** **view** **reusing** **REQ-010**/**012** **per** **model**; **add**/**remove**/**optional** **placement** **edit** **after** **create**; **last** **model** **→** **confirm** **then** **delete** **scene**; **+X** **default** **for** **models** **added** **after** **create**).
 
 ## Architectural resolution: REQ-004 (single binary) vs Next.js
 
@@ -25,7 +25,7 @@ This meets REQ-004 rule 1 (**no separate Node.js runtime** in the distribution) 
 | REQ-003 | Primary release target **linux/arm64** (Pi 4B, 64-bit OS); document **CPU/RAM**; **one** long-lived app process. |
 | REQ-004 | **One executable file** per release target; assets **embedded** (or generated inside the process); **Docker/compose not** the canonical install path. |
 | REQ-005 | **Domain types** + **CSV** contract; **ordered chain** adjacency (**id** **i** ↔ **i±1** only); **metadata** (**name**, **creation instant**) stored with each model; coordinates as **float64** in Go/API JSON. |
-| REQ-006 | **REST JSON API** for models + **Next.js** client pages (list, detail, upload, delete); **multipart** upload for CSV. |
+| REQ-006 | **REST JSON API** for models + **Next.js** client pages (list, detail, upload, delete); **multipart** upload for CSV; **409** **`model_in_scenes`** when **delete** **blocked** (**§3.13**). |
 | REQ-007 | **Authoritative validation** in Go when ingesting CSV; **transactional** create (all-or-nothing); **400** responses with clear **error** envelope. |
 | REQ-008 | **`scripts/run.sh`** (or documented equivalent) from repo root: **`npm run release:sync`** in `web/` then **`go run ./cmd/server`** in `backend/`; **README** documents exact invocation (**§3.7**). |
 | REQ-009 | **`internal/samples`** builds three **ordered** light paths on each solid’s boundary (**500 ≤ n ≤ 1000**, **0.05–0.10 m** consecutive chords, **§3.8**) with **even** placement on **faces** / **surfaces** per **§3.8**; **`store.SeedDefaultSamples`** when **`models`** empty (**§3.8**). |
@@ -34,6 +34,7 @@ This meets REQ-004 rule 1 (**no separate Node.js runtime** in the distribution) 
 | REQ-012 | **three.js** **materials**: **on** = **opaque** **fill** **colour** × **brightness**; **off** = **`#D0D0D0`**, **opacity 0.15** (match **REQ-010** segments); **client** merges **API** state; **no** indefinite staleness after **writes** (**§4.7**, **§8.7**). |
 | REQ-013 | **Model detail** **light table**: **client-side** **pagination** over **`GET` detail** payload; **page size** presets **25 / 50 / 100** (default **50**); **go to id** computes target page + **inline validation**; **checkbox** multi-select with **optional** **Shift+click** range on **current page**; **selection** **retained** across pages in **React state** (**`Set<number>`**) until **clear** or **navigate away**; **bulk apply** calls **`PATCH …/lights/state/batch`** (**§3.10**); **list** and **three.js** updated from **response** (**§4.8**, **§8.8**). |
 | REQ-014 | **Insert defaults** **on=false**, **`color="#ffffff"`**, **`brightness_pct=100`** (**§3.9**); **`POST …/lights/state/reset`** (**§3.11**); **model detail** **Reset** button (non–hover-only) calls reset then merges **`states`** into **UI** + **§4.7** (**§4.6**, **§8.9**). |
+| REQ-015 | **`scenes`** + **`scene_models`** (**§3.12**); **`POST /scenes`** **computes** **all** **offsets** **from** **ordered** **`model_id`** **list**; **`GET /models/{id}`** **unchanged** **(canonical** **coords)**; **`GET /scenes/{id}`** **returns** **`x,y,z`** **+** **`sx,sy,sz`** (**§3.13**); **composite** **three.js** **§4.9**; **409** **`model_in_scenes`** (**§3.2**, **§8.4**). |
 
 **Assumed Pi context:** Raspberry Pi 4 Model B, **64-bit OS**, **ARM64** userspace. **2–8 GB RAM** — with **no Node** at runtime, **4 GB** is practical for modest traffic; **off-device** `next export` builds recommended.
 
@@ -84,9 +85,9 @@ dlm/
 - **Module path:** `example.com/dlm/backend` (or successor); unchanged conceptually.
 - **`cmd/server`:** Load config; construct **`http.Server`**; mount **API sub-router** and **static file server** from **`embed`**; graceful **SIGINT/SIGTERM** shutdown.
 - **`internal/config`:** **Env-based** listen address, timeouts, optional **CORS** (primarily for **dev** when UI dev server uses another origin); production **same-origin** reduces CORS; **SQLite** path via **`DLM_DB_PATH`** and/or **`DLM_DATA_DIR`** (**§3.3**).
-- **`internal/httpapi`:** Middleware (**request ID**, **slog**, **recover**, optional **CORS**); **JSON** handlers and error envelope `{ "error": { "code", "message" } }`; **models** and **light-state** routes (including **batch** **PATCH** per **§3.10**) delegate to **`internal/store`** and **`internal/wiremodel`**.
+- **`internal/httpapi`:** Middleware (**request ID**, **slog**, **recover**, optional **CORS**); **JSON** handlers and error envelope `{ "error": { "code", "message", "details"? } }`; **models**, **light-state**, and **scenes** routes (including **batch** **PATCH** per **§3.10**) delegate to **`internal/store`** and **`internal/wiremodel`**.
 - **`internal/wiremodel`:** Parses and validates uploaded **CSV** per **§3.6**; returns structured errors for HTTP **400** responses (**REQ-007**).
-- **`internal/store`:** **SQLite** repository (see **§3.3**); opened at process start; migrations or `CREATE IF NOT EXISTS` for schema (**REQ-006**); **idempotent default seed** when no models exist (**§3.8**, **REQ-009**).
+- **`internal/store`:** **SQLite** repository (see **§3.3**, **§3.12**); opened at process start; migrations or `CREATE IF NOT EXISTS` for schema (**REQ-006**); **idempotent default seed** when no models exist (**§3.8**, **REQ-009**); **scene** CRUD and **reference** checks for **model** **delete** (**REQ-015**, **REQ-006** rule **5**).
 - **`internal/samples`:** Pure functions that return **`[]wiremodel.Light`** (sequential **id**s from **0**) for the three canonical shapes: **on-surface** positions, **even** coverage per **§3.8**, consecutive **dᵢ** in band; no I/O (**REQ-009**).
 
 ### 3.2 HTTP surface
@@ -97,7 +98,14 @@ dlm/
 | API | `GET /api/v1/models` | List models (**metadata** + **light_count**). **REQ-006** |
 | API | `POST /api/v1/models` | Create model: **`multipart/form-data`** with **`name`** (string) + **`file`** (CSV). **REQ-006/007** |
 | API | `GET /api/v1/models/{id}` | Model **metadata** + ordered **lights** `{ id, x, y, z, on, color, brightness_pct }[]` (**§3.9**). **REQ-006**, **REQ-011** |
-| API | `DELETE /api/v1/models/{id}` | Delete model (**204** / **404**). **REQ-006** |
+| API | `DELETE /api/v1/models/{id}` | Delete model (**204** / **404**). **409** if the model is **assigned** to **any** scene (**REQ-006** rule **5**, **§3.13**). **REQ-006** |
+| API | `GET /api/v1/scenes` | List scenes (**id**, **name**, **created_at**, **model_count**). **REQ-015** |
+| API | `POST /api/v1/scenes` | Create scene: **JSON** **`{ "name", "models": [ { "model_id": "<uuid>" }, … ] }`** — **≥ 1** **element**; **array** **order** **is** **placement** **order** (**REQ-015** **rule** **2**). **Server** **computes** **all** **`offset_x/y/z`** **(§3.12** **create-time** **algorithm**)**; **client** **MUST** **not** **send** **offsets** **on** **create** (**reject** **or** **ignore** **unknown** **offset** **fields** **per** **§3.13**). **201** + scene summary. **REQ-015** |
+| API | `GET /api/v1/scenes/{id}` | Scene **metadata** + **placements** + **full** **lights** (positions + state) **per** **model** for **one** **round-trip** (**§3.13**). **REQ-015** |
+| API | `DELETE /api/v1/scenes/{id}` | Delete scene and **all** **placements** (**204** / **404**). Used after **user** **confirms** **deleting** **the** **whole** **scene** when **removing** **the** **last** **model** (**REQ-015**). |
+| API | `POST /api/v1/scenes/{id}/models` | **Add** a **model** to an **existing** scene: **`{ "model_id", "offset_x"?, "offset_y"?, "offset_z"? }`** — if **offsets** **omitted**, server **computes** **default** **“to** **the** **right”** **placement** (**§3.13**). **201** / **400** / **404** / **409** (duplicate model in scene). |
+| API | `PATCH /api/v1/scenes/{id}/models/{modelId}` | **Update** **integer** **offsets** **`{ "offset_x", "offset_y", "offset_z" }`** (all required or **PATCH** **semantics** per implementor—**must** **re-validate** **containment**). **200** with **updated** **placement** + **optional** **derived** **bounds** **metadata**. |
+| API | `DELETE /api/v1/scenes/{id}/models/{modelId}` | **Remove** **model** **from** **scene**. If **> 1** models: **204**. If **this** **is** **the** **last** **model**: **409** **`scene_last_model`** — **no** **mutation**; **message** **states** **that** **confirming** **will** **delete** **the** **entire** **scene**; client **shows** **modal** then calls **`DELETE /api/v1/scenes/{id}`** (**§3.13**). |
 | API | `GET /api/v1/models/{id}/lights/state` | **All** lights’ **state** for the model (**ordered** by **`id`**). **REQ-011** |
 | API | `GET /api/v1/models/{id}/lights/{lightId}/state` | **One** light’s **state** (**404** if model or **lightId** missing). **REQ-011** |
 | API | `PATCH /api/v1/models/{id}/lights/{lightId}/state` | **Partial** update of **`on`**, **`color`**, **`brightness_pct`** (JSON body; omitted fields unchanged). **200** returns the **full** **updated** **state** object. **REQ-011** |
@@ -296,6 +304,67 @@ Requirements demand **both** **even** **2D/area** placement **and** **consecutiv
 
 **Integrators:** **Idempotent** aside from **touching** **`updated`** semantics if added later; **safe** to call repeatedly.
 
+### 3.12 Scene persistence and containment (**REQ-015**)
+
+**Tables (logical, SQLite):**
+
+| Table | Columns | Notes |
+|-------|---------|--------|
+| **`scenes`** | `id` (TEXT **UUID** PK), `name` (TEXT **NOT NULL**, **UNIQUE**), `created_at` (TEXT **RFC3339** UTC) | One row per scene. **No** row without **≥ 1** **`scene_models`** row **after** successful **create** (**transaction**). |
+| **`scene_models`** | `scene_id` (TEXT **FK** → **`scenes.id`** **ON DELETE CASCADE**), `model_id` (TEXT **FK** → **`models.id`** **ON DELETE RESTRICT** or **check** before **model** **delete**), `offset_x`, `offset_y`, `offset_z` (INTEGER **NOT NULL**) | **PK** **`(scene_id, model_id)`** — each **model** **at most once** per **scene**. **Offsets** are **signed** **integers** **interpreted** **as** **whole** **SI** **meters** added to **each** **light’s** **`x`**, **`y`**, **`z`** (**float64**) from **`lights`**. **API** **accepts** **only** **non-negative** **offsets**; **invalid** **combinations** **fail** **containment** **checks** below. |
+
+**Referential integrity:** **Deleting** a **model** **MUST** **fail** with **409** if **any** **`scene_models`** row references **`model_id`** (**REQ-006** **rule** **5**). Use **`ON DELETE RESTRICT`** on **`scene_models.model_id`** and/or an **explicit** **pre-check** in the **handler** so the **JSON** **error** **matches** **`model_in_scenes`** (**§3.13**).
+
+**Scene-space position:** For **light** **`L`** **with** **model-space** **`(x, y, z)`** and **placement** **`(ox, oy, oz)`**:
+
+**`sx = x + ox`**, **`sy = y + oy`**, **`sz = z + oz`** (all **float64** **arithmetic**).
+
+**Canonical vs derived (REQ-015 rule 4):** **`lights`** **rows** **and** **`GET /api/v1/models/{id}`** **always** **expose** **the** **stored** **`x`**, **`y`**, **`z`** **(REQ-005)** — **never** **rewritten** **when** **a** **model** **joins** **or** **leaves** **a** **scene** **or** **when** **`scene_models`** **offsets** **change**. **Only** **`scene_models`** **stores** **`offset_*`**. **`GET /api/v1/scenes/{id}`** **and** **the** **scene** **three.js** **view** **use** **derived** **`sx`**, **`sy`**, **`sz`** **(plus** **canonical** **`x`**, **`y`**, **`z`** **on** **each** **light** **object** **for** **labels** **/** **comparison**).**
+
+**Containment (authoritative in Go):** For **every** **light** **in** **every** **model** **in** **the** **scene**, **`sx`, `sy`, `sz`** **MUST** be **≥ 0** (treat **tiny** **negative** **float** **noise** **< 1e‑9** as **0** if needed—**document** **ε**). **Violations** → **400** on **create**/**add**/**patch** with **`error.message`** **naming** **model** **and** **axis** **where** **possible**.
+
+**Automatic bounds / margin for rendering:** Let **`Mmax_x`**, **`Mmax_y`**, **`Mmax_z`** be the **maxima** **of** **`sx`**, **`sy`**, **`sz`** **respectively** **over** **all** **lights** **in** **the** **scene**. The **visual**/**framing** **AABB** **uses** **origin** **`(0,0,0)`** and **upper** **corner** **`(Mmax_x + 1, Mmax_y + 1, Mmax_z + 1)`** **meters** (**≥ 1 m** **padding** **beyond** **tight** **max** **per** **axis**; **mins** **at** **0** **per** **REQ-015**). **Camera** **framing** (**§4.9**) **uses** **this** **box** **(+** **sphere** **radius** **for** **2** **cm** **markers**).
+
+**Canonical “right” axis (+X):** **three.js** **default** **camera** **looks** **toward** **−Z** **with** **+Y** **up**; **“to** **the** **right”** **of** **the** **existing** **layout** **means** **increasing** **scene** **`+X`**. **Document** **in** **UI** **copy** **if** **needed** **for** **user** **mental** **model**.
+
+**Default placement for `POST …/scenes/{id}/models` (omit offsets):**
+
+1. **Compute** **`M_x`** = **maximum** **`sx`** over **all** **lights** **already** **in** **the** **scene** (if **no** **lights**, **`M_x = 0`**).
+2. **Gap:** **`gap_m = 0`** **meters** **abutting** **(architecture** **default**; **implementor** **MAY** **use** **a** **small** **positive** **constant** **e.g.** **`0.1`** **if** **tests** **prefer** **visual** **separation**—**document**).
+3. For the **incoming** **model**, **load** **all** **lights**; **let** **`m_min_x`** = **min(x)**, **`m_min_y`** = **min(y)**, **`m_min_z`** = **min(z)** **over** **its** **lights**.
+4. **`offset_x`** = **smallest** **integer** **≥** **`M_x + gap_m - m_min_x`** **(ceil** **to** **int**). **`offset_y`** = **smallest** **integer** **≥** **`−m_min_y`** **so** **that** **`y + offset_y ≥ 0`** **for** **all** **lights** **(typically** **`max(0, ⌈−m_min_y⌉)`** **if** **all** **`y`** **share** **offset**). **`offset_z`** **analogous** **for** **`z`**. **Re-run** **full** **containment** **check** **after** **rounding**.
+
+**Create-time placement for `POST /api/v1/scenes` (REQ-015 rule 2):** **Input** **is** **an** **ordered** **list** **`[model_id₁, …, model_idₙ]`** **(JSON** **array** **order**)**.** **Store** **implementation** **`CreateScene(ctx, name, modelIDs []string)`** **(or** **equivalent**)**:**
+
+1. **Validate** **unique** **ids**, **existence**, **`len ≥ 1`**, **scene** **name**.
+2. **`placed := []scenePlacementLights{}`** **(empty** **accumulator**)**.**
+3. **For** **each** **`mid`** **in** **`modelIDs`** **order**:
+   - **Load** **`Detail(mid)`** **lights**.
+   - **If** **`len(placed) == 0`**: **first** **model** — **compute** **minimal** **non-negative** **integers** **`ox`, `oy`, `oz`** **so** **every** **light** **has** **`x+ox ≥ 0`**, **`y+oy ≥ 0`**, **`z+oz ≥ 0`** **(e.g.** **`ox = max(0, ⌈−min_x(lights) − ε⌉)`**, **same** **for** **`y`**, **`z`**)**. **This** **anchors** **the** **first** **footprint** **in** **the** **non-negative** **octant** **without** **user** **input**.
+   - **Else**: **`ox`, `oy`, `oz` ← `DefaultOffsetsForNewModel(placed, lights)`** **(same** **routine** **as** **`POST …/scenes/{id}/models`** **with** **omitted** **offsets**)**.**
+   - **Append** **`{model_id: mid, offsetX/Y/Z: ox/oy/oz, lights}`** **to** **`placed`**; **run** **`validateScenePlacements(placed)`**; **on** **failure** **abort** **whole** **transaction** **with** **400**.
+4. **BEGIN**; **insert** **`scenes`** **+** **all** **`scene_models`** **rows**; **COMMIT**.
+
+**Optional** **REQ-015** **advanced** **override** **(not** **MVP**)**:** **If** **product** **later** **allows** **client-supplied** **offsets** **on** **create**, **document** **a** **separate** **flag** **or** **endpoint**; **default** **path** **remains** **fully** **automatic**.
+
+**Scene name uniqueness:** **Reuse** **same** **policy** **as** **models**: **`UNIQUE`** **on** **`scenes.name`**; **duplicate** → **409**.
+
+### 3.13 Scenes HTTP API behavior (**REQ-015**)
+
+**`POST /api/v1/scenes`** — **Body** **`{ "name": string, "models": [ { "model_id": "<uuid>" }, … ] }`**. **Each** **object** **SHOULD** **contain** **only** **`model_id`**; **if** **`offset_x`**, **`offset_y`**, **`offset_z`** **appear**, **return** **`400`** **`validation_failed`** **(do** **not** **accept** **client** **offsets** **on** **create** **—** **REQ-015** **rule** **2**)** **or** **strict** **JSON** **schema** **rejection**. **Validate:** **`name`** **non-empty** **trimmed**; **`models.length ≥ 1`**; **no** **duplicate** **`model_id`**; **every** **`model_id`** **exists**. **Server** **runs** **§3.12** **create-time** **placement** **algorithm** **(no** **offsets** **from** **client**)**; **then** **transaction:** **insert** **`scenes`** + **`scene_models`**. **Response** **`201`:** **`{ "id", "name", "created_at", "model_count" }`**. **Canonical** **`lights`** **rows** **are** **never** **updated** **by** **this** **handler**.
+
+**`GET /api/v1/scenes/{id}`** — **`200`:** **`{ "id", "name", "created_at", "items": [ { "model_id", "name", "offset_x", "offset_y", "offset_z", "lights": [ { "id", "x", "y", "z", "sx", "sy", "sz", "on", "color", "brightness_pct" }, … ] } ] }`**. **`x`, `y`, `z`** **MUST** **match** **persisted** **`lights`** **(canonical** **REQ-005**)**; **`sx`, `sy`, `sz`** **MUST** **equal** **canonical** **+** **offsets** **(derived)**. **Scene** **tooltip**/**labels** **SHOULD** **show** **both** **scene** **and** **model-local** **coordinates** **where** **space** **allows** (**§4.9**). **`PATCH /api/v1/scenes/{id}/models/{modelId}`** **updates** **only** **`scene_models`** **offsets** **—** **never** **`lights`**.**
+
+**`POST /api/v1/scenes/{id}/models`** — **Add** **one** **model**. **Optional** **offsets** → **default** **§3.12**. **409** if **`model_id`** **already** **in** **scene**.
+
+**`PATCH /api/v1/scenes/{id}/models/{modelId}`** — **Update** **offsets**; **re-validate** **full** **scene** **containment**.
+
+**`DELETE /api/v1/scenes/{id}/models/{modelId}`** — If **remaining** **model** **count** **after** **delete** **≥ 1**: **delete** **row**, **204**. If **this** **is** **the** **only** **model**: **409** **`{ "error": { "code": "scene_last_model", "message": "…", "details": { "scene_id": "…" } } }`** — **no** **row** **deleted**. **Client** **shows** **confirm** **dialog** **then** **`DELETE /api/v1/scenes/{id}`**.
+
+**`DELETE /api/v1/models/{id}`** — **Before** **delete**, **`SELECT`** **from** **`scene_models`**. If **any** **row**: **`409`** **`{ "error": { "code": "model_in_scenes", "message": "…", "details": { "scenes": [ { "id", "name" }, … ] } } }`** (**REQ-006** **rule** **5**).
+
+**Light state in scene view:** **Same** **persistence** **as** **model** **detail**; **composite** **view** **uses** **`GET /api/v1/scenes/{id}`** **payload** **or** **parallel** **`PATCH`** **to** **`/models/{id}/lights/…`** **after** **pick** **model**+**light** **(implementor** **chooses** **simplest** **consistent** **with** **REQ-012** **timeliness**)**.** **Recommended:** **scene** **detail** **response** **includes** **current** **state**; **per-light** **PATCH** **from** **scene** **page** **reuses** **existing** **endpoints** **by** **`model_id`** **+** **`lightId`** **then** **merge** **into** **local** **state** **for** **that** **model’s** **group** **in** **three.js**.
+
 ---
 
 ## 4. Next.js + Tailwind (build-time / authoring)
@@ -328,7 +397,7 @@ Unchanged intent: **Tailwind breakpoints**, **touch targets**, **`"use client"`*
 
 ### 4.6 Models UI (**REQ-002**, **REQ-006**, **REQ-010**, **REQ-011**, **REQ-012**, **REQ-014**)
 
-- **Routes (App Router):** e.g. **`/models`** (list), **`/models/new`** (upload form: **name** text input + **file** input), **`/models/[id]`** (detail: metadata; **§4.8** **paginated** light **table** + **§4.7** **3D** view; per-light or bulk controls per **REQ-011** / **REQ-013**; **Reset lights** **button** calling **`POST …/lights/state/reset`** per **§3.11** (**REQ-014**), **reachable** on **mobile** / **tablet** / **desktop** without **hover-only** use).
+- **Routes (App Router):** e.g. **`/models`** (list), **`/models/new`** (upload form: **name** text input + **file** input), **`/models/[id]`** (detail: metadata; **§4.8** **paginated** light **table** + **§4.7** **3D** view; per-light or bulk controls per **REQ-011** / **REQ-013**; **Reset lights** **button** calling **`POST …/lights/state/reset`** per **§3.11** (**REQ-014**), **reachable** on **mobile** / **tablet** / **desktop** without **hover-only** use). **Model** **delete** **control:** on **`409`** **`model_in_scenes`**, **show** **`error.message`** **and** **`details.scenes`** (names/links to **`/scenes/{id}`**) per **§3.13**.
 - **Client data:** **`"use client"`** pages/components call **`fetch`** with **`GET`**, **`POST`** (**`FormData`** for multipart), **`DELETE`**, and **`PATCH`** (**JSON**) against **`/api/v1/models…`** on the **same origin** (**§4.3**).
 - **Feedback:** Inline / banner display of **400** / **409** **`message`** from API; loading states on list, detail, upload, and delete (**REQ-002**).
 - **Navigation:** Clear entry point from **home** or **app shell** to **models** list (**implementor** chooses IA).
@@ -396,6 +465,15 @@ Unchanged intent: **Tailwind breakpoints**, **touch targets**, **`"use client"`*
 
 **Accessibility / responsive:** Table **MAY** **stack** as **cards** on **narrow** **viewports**; **checkboxes** and **bulk** **panel** remain **reachable** **without** **hover-only** **affordances** (**REQ-013** rule 7).
 
+### 4.9 Scenes UI and composite three.js (**REQ-015**, **REQ-010**, **REQ-012**)
+
+- **Routes:** **`/scenes`** (list), **`/scenes/new`** (**create** **flow**: **scene** **name** + **ordered** **multi-select** **of** **≥ 1** **model** **—** **no** **per-row** **offset** **inputs**; **submit** **`POST /api/v1/scenes`** **with** **`models`** **in** **that** **order** **and** **let** **the** **server** **compute** **offsets** **per** **§3.12**), **`/scenes/[id]`** (**detail** **composite** **view** **+** **optional** **offset** **editing** **via** **`PATCH …/models/{modelId}`** **after** **create**).
+- **Data:** **`GET /api/v1/scenes`**, **`POST /api/v1/scenes`**, **`GET /api/v1/scenes/{id}`**, **`POST …/models`**, **`PATCH …/models/{modelId}`**, **`DELETE …/models/{modelId}`**, **`DELETE /api/v1/scenes/{id}`** per **§3.13**. **On** **`409`** **`scene_last_model`**, **show** **modal** **copy** **that** **removing** **the** **last** **model** **deletes** **the** **entire** **scene**; **on** **confirm**, **`DELETE /api/v1/scenes/{id}`** **then** **redirect** **to** **`/scenes`**.
+- **Composite** **three.js:** **Refactor** **or** **duplicate** **§4.7** **patterns** **into** **a** **`SceneLightsCanvas`** **(or** **extend** **`ModelLightsCanvas`**) **that** **accepts** **`items[]`**: **for** **each** **model**, **build** **the** **same** **2** **cm** **spheres** **and** **`#D0D0D0`** **`opacity`** **0.15** **segments** **between** **consecutive** **`id`** **only** **within** **that** **model**, **using** **`sx`, `sy`, `sz`** **from** **API** **(or** **client-composed** **positions** **identical** **to** **server** **rules**). **No** **segments** **between** **models**. **Per-light** **state** **materials** **match** **§4.7** (**REQ-012**). **Picking** **must** **identify** **which** **model** **and** **which** **light** **id** **for** **hover**/**tap** **(show** **scene** **coordinates** **and** **model** **id** **+** **light** **`id`** **as** **needed**).
+- **Framing:** **Fit** **camera** **to** **§3.12** **AABB** **`[0,0,0]`** **–** **`(Mmax+1)`** **per** **axis** **plus** **marker** **radius** **margin**.
+- **Add** **model** **control:** **calls** **`POST …/scenes/{id}/models`** **without** **offsets** **to** **get** **default** **+X** **placement** **or** **with** **explicit** **integers** **after** **user** **edit**. **Placement** **inputs** **validate** **≥ 0** **client-side** **for** **fast** **feedback**; **authoritative** **errors** **from** **API** **400**.
+- **REQ-002:** **Same** **touch**/**pointer** **expectations** **as** **model** **detail**; **no** **hover-only** **blocking** **flows** **for** **add**/**remove**/**confirm**.
+
 ---
 
 ## 5. UI ↔ API coordination (single process)
@@ -457,7 +535,7 @@ flowchart TB
   B -->|"HTTPS or HTTP"| P
   P -->|"all paths -> one upstream"| G
   B -.->|"Dev: direct to Go :8080"| G
-  G --> DB[(SQLite models + lights incl. state)]
+  G --> DB[(SQLite models + lights + scenes + scene_models)]
 ```
 
 ---
@@ -564,11 +642,19 @@ sequenceDiagram
   User->>B: Confirm delete
   B->>P: DELETE /api/v1/models/{id}
   P->>G: DELETE /api/v1/models/{id}
-  G->>S: Delete model (cascade lights)
-  S-->>G: OK
-  G-->>P: 204 No Content
-  P-->>B: 204 No Content
-  B-->>User: Update list / redirect
+  alt model referenced by scenes
+    G->>S: Check scene_models for model_id
+    S-->>G: One or more rows
+    G-->>P: 409 JSON model_in_scenes with scene list
+    P-->>B: 409 JSON
+    B-->>User: Explain model in use; link to scenes
+  else success
+    G->>S: Delete model (cascade lights)
+    S-->>G: OK
+    G-->>P: 204 No Content
+    P-->>B: 204 No Content
+    B-->>User: Update list / redirect
+  end
 ```
 
 ### 8.5 Model detail: JSON from Go, WebGL in the browser (**REQ-010**, **REQ-012**)
@@ -707,6 +793,89 @@ sequenceDiagram
 
 **Boundary:** **Same** **timeliness** expectation as **§8.7** — **no** **indefinite** **staleness** after **200**.
 
+### 8.10 Create scene with models (**REQ-015**)
+
+```mermaid
+sequenceDiagram
+  actor User as User device
+  participant B as Browser
+  participant P as Reverse proxy (optional)
+  participant G as Go binary
+  participant S as SQLite store
+
+  User->>B: Submit scene name and ordered model list (no offsets)
+  B->>P: POST /api/v1/scenes (JSON: model_id list only)
+  P->>G: POST /api/v1/scenes
+  G->>G: Compute offsets per §3.12 create-time algorithm; validate containment
+  alt validation failure
+    G-->>P: 400 JSON error
+    P-->>B: 400
+    B-->>User: Show actionable message
+  else success
+    G->>S: BEGIN; insert scenes + scene_models; COMMIT
+    S-->>G: OK
+    G-->>P: 201 JSON scene id
+    P-->>B: 201
+    B-->>User: Navigate to scene detail
+  end
+```
+
+### 8.11 Load scene detail and render composite WebGL (**REQ-015**)
+
+```mermaid
+sequenceDiagram
+  actor User as User device
+  participant B as Browser
+  participant P as Reverse proxy (optional)
+  participant G as Go binary
+  participant S as SQLite store
+  participant R as Client React + three.js
+
+  User->>B: Open scene detail
+  R->>P: GET /api/v1/scenes/{id}
+  P->>G: GET /api/v1/scenes/{id}
+  G->>S: Load scene, placements, models, lights, state
+  S-->>G: Rowsets
+  G-->>P: 200 JSON items with scene-space positions
+  P-->>R: 200 JSON
+  R->>R: Build composite scene: per-model spheres and chain segments only within each model
+  R-->>User: WebGL canvas + add remove placement controls
+```
+
+### 8.12 Remove last model from scene (**REQ-015**)
+
+```mermaid
+sequenceDiagram
+  actor User as User device
+  participant B as Browser
+  participant P as Reverse proxy (optional)
+  participant G as Go binary
+  participant S as SQLite store
+
+  User->>B: Remove model from scene
+  B->>P: DELETE /api/v1/scenes/{sid}/models/{mid}
+  P->>G: DELETE
+  alt last model in scene
+    G-->>P: 409 scene_last_model
+    P-->>B: 409 JSON
+    B-->>User: Modal explains whole scene will be deleted
+    User->>B: Confirm
+    B->>P: DELETE /api/v1/scenes/{sid}
+    P->>G: DELETE scene
+    G->>S: CASCADE delete scene_models and scene row
+    S-->>G: OK
+    G-->>P: 204
+    P-->>B: 204
+    B-->>User: Redirect to scene list
+  else more than one model
+    G->>S: DELETE scene_models row
+    S-->>G: OK
+    G-->>P: 204
+    P-->>B: 204
+    B-->>User: Refresh scene detail
+  end
+```
+
 ---
 
 ## 9. Security notes (baseline)
@@ -728,7 +897,7 @@ sequenceDiagram
 | REQ-003 | §1, §3.4, §6, §7 |
 | REQ-004 | §1 (resolution), §3.3–§3.5, §4.1–§4.2, §5–§6 |
 | REQ-005 | §1, §3.1, §3.6 |
-| REQ-006 | §1, §3.1–§3.3, §3.2, §4.3, §4.6, §7–§8 |
+| REQ-006 | §1, §3.1–§3.3, §3.2, §3.12–§3.13, §4.3, §4.6, §7–§8 (incl. **§8.4** **409** **path**) |
 | REQ-007 | §1, §3.3, §3.6, §8.3 |
 | REQ-008 | §1, §2, §3.1, §3.7, §3.5 (release:sync contract) |
 | REQ-009 | §1, §2, §3.1, §3.3, §3.8 |
@@ -737,7 +906,8 @@ sequenceDiagram
 | REQ-012 | §1, §3.9, §4.6, §4.7, §8.5, §8.7 |
 | REQ-013 | §1, §3.2, §3.10, §4.6, §4.8, §4.7 (state sync), §8.8 |
 | REQ-014 | §1, §3.2, §3.3, §3.8, §3.9 (defaults), §3.11, §4.6, §4.7 (state sync), §8.9 |
+| REQ-015 | §1, §3.1, §3.2, §3.12–§3.13, §4.6, §4.9, §7 (DB), §8.10–§8.12 |
 
 ---
 
-**Next step:** Invoke the **`@implementor`** agent to (1) align **`internal/store`**, **`internal/httpapi`**, **`internal/samples`**, and **CSV** **create** with **§3.9** **defaults** (**`on=false`**, **`#ffffff`**, **`brightness_pct=100`**) and **`POST …/lights/state/reset`** (**§3.11**), (2) update **`ModelLightsCanvas`** (or equivalent) per **§4.7** (**2 cm** spheres; **on** = **opaque** **colour** × **brightness**; **off** + **wire** segments = **`#D0D0D0`** **`opacity 0.15`**; **chain** segments **only** **i↔i+1**), (3) add **Reset lights** on **model detail** (**§4.6**), (4) keep **§4.8** **bulk** **apply** wired to **`PATCH …/lights/state/batch`**, and (5) add/adjust **tests** and **migrations** for **legacy** DBs if needed. Then invoke the **`@verifier`** agent to audit, run tests, and update **`docs/traceability_matrix.md`**.
+**Next step:** If **implementation** **already** **covers** **scenes**, **align** **code** **with** **this** **revision:** **`POST /api/v1/scenes`** **accepts** **only** **`model_id`** **per** **element** **(ordered)** **and** **`CreateScene`** **computes** **all** **offsets** **(§3.12)**; **reject** **client** **offsets** **on** **create** **(§3.13)**; **`/scenes/new`** **has** **no** **create-time** **offset** **UI** **(§4.9)**; **preserve** **canonical** **`lights`** **vs** **derived** **`sx/sy/sz`** **on** **`GET /scenes/{id}`**. **Otherwise** invoke **`@implementor`** **for** **the** **full** **§3.12–§3.13** / **§4.9** / **§8.4** **surface** **as** **before**. Then invoke **`@verifier`** **to** **audit**, **run** **tests**, **and** **update** **`docs/traceability_matrix.md`**.

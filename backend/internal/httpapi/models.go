@@ -61,10 +61,19 @@ func (a *apiDeps) deleteModel(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusBadRequest, "bad_request", "missing model id")
 		return
 	}
-	if err := a.store.Delete(r.Context(), id); errors.Is(err, store.ErrNotFound) {
+	err := a.store.Delete(r.Context(), id)
+	if errors.Is(err, store.ErrNotFound) {
 		writeAPIError(w, http.StatusNotFound, "not_found", "model not found")
 		return
-	} else if err != nil {
+	}
+	var inUse *store.ModelInUseError
+	if errors.As(err, &inUse) {
+		writeAPIErrorDetail(w, http.StatusConflict, "model_in_scenes",
+			"This model is used by one or more scenes. Remove it from each scene (or delete those scenes) before deleting the model.",
+			map[string]any{"scenes": inUse.Scenes})
+		return
+	}
+	if err != nil {
 		writeAPIError(w, http.StatusInternalServerError, "internal_error", "could not delete model")
 		return
 	}

@@ -68,6 +68,12 @@ export default function NewModelPage() {
         >
           Models
         </Link>
+        <Link
+          href="/scenes"
+          className="text-sky-700 underline-offset-4 hover:underline dark:text-sky-400"
+        >
+          Scenes
+        </Link>
       </nav>
 
       <header>

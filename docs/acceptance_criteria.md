@@ -114,6 +114,14 @@ Feature: Model management in the application
     When the REQ-006 responsive UX notes are read
     Then expectations are stated for mobile, tablet, and desktop for list, detail, and upload flows
 
+  Scenario: REQ-006 blocks model delete when model is used in scenes and explains why
+    Parent requirement: REQ-006
+    Given docs/requirements.md defines REQ-006 and REQ-015
+    When the REQ-006 business rule about deletion and scene membership is read
+    Then the system must refuse to delete a model that is assigned to one or more scenes
+    And the user must be clearly informed that the model is in use by one or more scenes
+    And the explanation must indicate what the user can do next such as remove the model from those scenes
+
 Feature: CSV upload validation
 
   Scenario: Valid minimal CSV is accepted
@@ -427,6 +435,87 @@ Feature: Default light state and model reset (REQ-014)
     When the REQ-014 responsive UX notes are read
     Then the reset control must be reachable on mobile tablet and desktop
     And essential use of reset must not rely on hover-only affordances
+
+Feature: Scenes composite 3D space and management (REQ-015)
+
+  Scenario: REQ-015 requires create with one or more models plus list delete and open
+    Parent requirement: REQ-015
+    Given docs/requirements.md defines REQ-015
+    When the REQ-015 scope and business rules about lifecycle are read
+    Then creating a scene must require a name and one or more models in the same creation flow
+    And a persisted scene must always have at least one model until the whole scene is deleted
+    And the application must list all scenes
+    And the application must allow deleting a scene
+    And the application must allow opening or selecting a scene for viewing
+
+  Scenario: REQ-015 requires automatic offsets on create so models fit fully in scene including boundary
+    Parent requirement: REQ-015
+    Given docs/requirements.md defines REQ-015
+    When the REQ-015 business rules about scene creation are read
+    Then the system must automatically compute integer placement offsets for each model chosen at create time
+    And every light of each model must lie fully within the non-negative scene region after composition
+    And the create flow must not require the user to enter numeric placement offsets for initial placement
+    And automatic calculation must satisfy display and framing boundary rules together with containment
+
+  Scenario: REQ-015 keeps stored model coordinates separate from derived scene coordinates
+    Parent requirement: REQ-015
+    Given docs/requirements.md defines REQ-005 REQ-006 and REQ-015
+    When the REQ-015 business rules about coordinate systems are read
+    Then persisted model light coordinates must not be rewritten when a model is used in a scene
+    And scene visualization and scene-oriented API data must use positions derived from canonical coordinates plus offsets
+    And the single-model view must continue to reflect the original model coordinates per REQ-006
+
+  Scenario: REQ-015 forbids negative placement and any light outside the non-negative scene region
+    Parent requirement: REQ-015
+    Given docs/requirements.md defines REQ-015
+    When the REQ-015 business rules about placement and containment are read
+    Then placement offsets x y z must be integers greater than or equal to zero
+    And every light in scene space must have coordinates greater than or equal to zero on each axis
+    And the system must reject or block placements that would put any part of any model outside that region
+    And the user must receive clear feedback when a placement is invalid
+
+  Scenario: REQ-015 requires scene volume at least one meter beyond combined model bounds
+    Parent requirement: REQ-015
+    Given docs/requirements.md defines REQ-015
+    When the REQ-015 business rule about automatic scene sizing is read
+    Then the scene display volume must automatically size to enclose all placed models
+    And the margin beyond the tight combined axis-aligned extent must be at least one SI meter in the sense stated in REQ-015
+
+  Scenario: REQ-015 requires confirmation before deleting scene when removing the last model
+    Parent requirement: REQ-015
+    Given docs/requirements.md defines REQ-015
+    When the REQ-015 business rules about removing the last model are read
+    Then removing the last remaining model must not silently delete the scene
+    And the user must confirm after a clear explanation that the entire scene will be deleted
+    And on confirm the scene must be deleted and on cancel the scene must remain unchanged
+    And the confirmation flow must not rely on hover-only essential steps per REQ-002
+
+  Scenario: REQ-015 defaults new model to the right and allows reposition with automatic bounds update
+    Parent requirement: REQ-015
+    Given docs/requirements.md defines REQ-015
+    When the REQ-015 business rules about adding models and adjusting placement are read
+    Then adding a model when at least one model already exists must default placement to the right of the existing layout per architecture
+    And the scene volume must adjust automatically to satisfy containment and margin rules
+    And the user must be able to change placements of models already in the scene subject to non-negative containment
+    And successful placement changes must persist
+
+  Scenario: REQ-015 requires three.js scene view analogous to model view
+    Parent requirement: REQ-015
+    Given docs/requirements.md defines REQ-010 REQ-012 and REQ-015
+    When the REQ-015 business rules about viewing a scene are read
+    Then the scene view must use three.js as a direct front-end dependency
+    And every light of every assigned model must be drawn with positions relative to the scene including placement
+    And segments must connect consecutive ids only within the same model
+    And per-light state from REQ-011 and REQ-012 must apply in the scene view
+
+  Scenario: REQ-015 requires add and remove model from scene in scene view
+    Parent requirement: REQ-015
+    Given docs/requirements.md defines REQ-006 and REQ-015
+    When the REQ-015 business rules about editing membership are read
+    Then the scene view must allow adding an existing model to the scene
+    And the scene view must allow removing a model from the scene subject to last-model confirmation rules
+    And changes must persist after success
+    And essential controls must not rely on hover-only interaction per REQ-002
 ```
 
 ---

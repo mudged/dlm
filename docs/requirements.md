@@ -224,15 +224,16 @@ As a user, I want to **list** all models, **open** one to inspect it, **delete**
 
 **Scope**
 
-- In scope: User-facing flows (and backing behavior per architecture) to **list** all stored models, **view** details of a selected model (including its lights and metadata as appropriate), **delete** an existing model, and **create** a new model by **uploading** a CSV in the format defined under REQ-005.
+- In scope: User-facing flows (and backing behavior per architecture) to **list** all stored models, **view** details of a selected model (including its lights and metadata as appropriate), **delete** an existing model, and **create** a new model by **uploading** a CSV in the format defined under REQ-005. **Deletion** MUST respect **scene** membership per **REQ-015**: a model that **is assigned** to **one or more** scenes MUST **not** be deletable until that **reference** is **resolved** (see business rules).
 - Out of scope: Bulk export, editing lights in-place after import, versioning, and sharing links unless added later.
 
 **Business rules**
 
 1. The application MUST expose a way to see **all** models the user may access (subject to any future auth).
 2. The application MUST allow **viewing** a single model’s content (lights and metadata) after selection.
-3. The application MUST allow **deleting** a model such that it no longer appears in listings and is removed per persistence rules in architecture.
+3. The application MUST allow **deleting** a model such that it no longer appears in listings and is removed per persistence rules in architecture, **except** where rule **5** applies.
 4. The application MUST allow **creating** a model by **uploading** a CSV file; successful creation MUST persist the model and its metadata (name and creation date supplied or derived per architecture—e.g. user-provided name at upload time).
+5. When **REQ-015** is in effect, the system MUST **refuse** to **delete** a model that is **assigned** to **one or more** scenes. The user MUST be **clearly informed** **why** deletion is blocked: the model **is in use** by **one or more** scenes, **that** scenes **reference** models, and **what** the user can do next (e.g. **remove** the model from **each** listed scene or **delete** those scenes)—exact presentation (list of scene names, links, etc.) is deferred to architecture.
 
 **Responsive / UX notes** *(when UI is involved)*
 
@@ -242,7 +243,7 @@ As a user, I want to **list** all models, **open** one to inspect it, **delete**
 
 **Dependencies**
 
-- REQ-001, REQ-002, REQ-005
+- REQ-001, REQ-002, REQ-005, REQ-015
 
 **Open questions**
 
@@ -596,5 +597,55 @@ As a user working with a model, I want **every** light to **start** in a **known
 **Open questions**
 
 - Whether the reset action **requires** a **confirmation** step for large models (architecture / UX choice).
+
+---
+
+### REQ-015 — Scenes: composite space, placement, CRUD, and three.js view
+
+| Field | Value |
+|-------|-------|
+| **ID** | REQ-015 |
+| **Title** | Scenes: composite space, placement, CRUD, and three.js view |
+| **Priority** | Must |
+| **Actor(s)** | End user |
+
+**User story**
+
+As a user, I want **scenes** that group **one or more** light **models** in a shared **3D** space with a **name**, **automatic** **integer** **placement** **computed** **on** **create** **so** **each** **model** **fits** **fully** **inside** the **scene** **(including** **boundary** **rules)**, **without** **changing** **stored** **model** **coordinates**, so that **the** **composite** **view** **shows** **lights** **in** **scene** **coordinates** **while** **the** **model** **detail** **view** **still** **shows** **original** **coordinates**; I can **list**, **delete**, and **open** a scene, **visualize** with **three.js**, **add** further models (default **to** **the** **right**), **adjust** placements, and **remove** models—including **confirming** when **removing** the **last** one would **delete** the **whole** scene.
+
+**Scope**
+
+- In scope: A **scene** entity with **metadata** including a **name**; **persistence** and user flows to **create** (see business rules), **list**, **delete**, and **select** a scene. **Scene creation** MUST include **one or more** **models** (per **REQ-005** / **REQ-006**) chosen at **create** **time**; **initial** **placements** MUST be **computed** **automatically** **per** **business** **rule** **2** (**not** **user-entered** **offsets** **as** **the** **default** **path**). **Coordinate** **separation** (**rule** **4**): **canonical** **model** **light** **x**, **y**, **z** **in** **persistence** MUST **not** **be** **updated** **because** **of** **scenes**; **scene** **API** **and** **3D** **composite** **view** **use** **derived** **scene-space** **positions** (**canonical** **plus** **offsets**). A scene **always** has **at least one** model **while** it **exists**; there are **no** persisted **empty** scenes. **Placement** **offsets** are **integers** **≥ 0** (**rule** **5**). **Negative** **scene-space** **coordinates** **for** **any** **light** **are** **forbidden**; the **valid** **region** is the **non-negative** **octant** **from** **(0, 0, 0)**. The **scene**’s **display** **volume** **adjusts** with **at least 1 SI meter** **margin** **beyond** **tight** **bounds** **(rule** **7**). When the user **views** a **scene**, **three.js** (**REQ-010**, **REQ-012**) **draws** **every** **light** **at** **derived** **scene** **positions**, **segments** **only** **within** **each** **model’s** **id** **chain**. **Add**/**remove** **models** **and** **optional** **placement** **edits** **after** **create** **per** **rules** **6**, **10**, **11**.
+- Out of scope: **Editing** individual light **positions** inside the scene view (only membership and **model-level** placement unless a later requirement adds it); **import**/**export** of scene definitions as files; **rotation** or **scale** of models within a scene unless added later.
+
+**Business rules**
+
+1. The application MUST allow the user to **create** a scene, **list** all scenes, **delete** a scene (explicit **whole-scene** delete), and **open**/**select** a scene for viewing.
+2. **Creating** a scene MUST require a **name** and **one or more** **models** to **attach** in **that** **same** **flow** (multi-step wizard is acceptable if **creation** **cannot** **complete** without **at least** **one** model **saved** with the scene). For **each** **model** **chosen** **at** **create** **time**, the system MUST **automatically** **compute** **integer** **offsets** **ox**, **oy**, **oz** **≥ 0** such that **every** **light** **of** **that** **model** lies **fully** **within** the **non-negative** **scene** **region** **after** **composition** **with** **that** **model’s** **stored** **REQ-005** **coordinates**, **and** **such** **that** **the** **order** **of** **models** **in** **the** **create** **flow** **yields** **a** **valid** **combined** **layout** (**each** **successive** **model** **positioned** **relative** **to** **those** **already** **placed**, **consistent** **with** **rule** **6** **for** **horizontal** **stacking** **where** **applicable**). **Automatic** **calculation** MUST **keep** **each** **model’s** **entire** **footprint** **inside** the **allowed** **non-negative** **scene** **space** **and** **satisfy** **the** **display**/**framing** **boundary** **rules** (**rules** **5**, **7**, **and** **architecture**). The **create** **flow** MUST **not** **require** **the** **user** **to** **type** **or** **pick** **numeric** **offsets** **for** **initial** **placement** (**architecture** **MAY** **offer** **optional** **advanced** **override** **only** **if** **requirements** **are** **still** **met** **without** **it**).
+3. A scene MUST have a **name** (uniqueness policy deferred to open questions / architecture). A persisted scene MUST **always** have **at least one** model **until** it is **deleted** as a **whole** or via rule **10**.
+4. **Persisted** **model** **data** (**REQ-005** **light** **x**, **y**, **z** **in** **storage**) MUST **remain** **unchanged** **when** **a** **model** **is** **assigned** **to**, **moved** **within**, or **removed** **from** **a** **scene**; **scene** **membership** **only** **adds** **or** **updates** **placement** **offsets** **and** **does** **not** **rewrite** **the** **model’s** **canonical** **coordinates**. **Scene-space** **positions** **used** **for** **rendering** **and** **disclosed** **in** **the** **scene** **context** **are** **derived** **from** **canonical** **coordinates** **plus** **offsets**.
+5. Each **persisted** **placement** (**offsets** **ox**, **oy**, **oz**) MUST be **integers** **≥ 0**. For **every** light, the **composed** **scene-space** coordinates MUST satisfy **x, y, z ≥ 0**; **no** light **position** may lie **outside** that **non-negative** **region** (**fully** or **partially**). The system MUST **reject** or **block** **invalid** placements (**including** **user** **edits** **after** **create**) with **clear** feedback.
+6. When **adding** a model to a scene that **already** contains **at least one** model, the **default** **initial** placement MUST position the **new** model **to the** **right** of the **existing** **layout**—i.e. **offset** along the **scene** axis that **architecture** defines as **“right”** in the **default** **camera**/**viewer** **convention**—so it sits **beside** the **current** **combined** **axis-aligned** **footprint** **without** **overlap** at **default** (exact **gap** or **touching** rule per architecture). The **scene** **volume** MUST **grow** (or **otherwise** **adjust**) **automatically** to **satisfy** **rules** **5** and **7**.
+7. The **scene**’s **display** volume MUST **automatically** **size** so that it **encloses** **all** placed model geometry with a **margin** of **at least 1 meter** beyond the **axis-aligned bounds** of **all** light positions in **scene** space (how **1 m** is **allocated** across **faces** is architecture).
+8. When viewing a scene, the product MUST use **three.js** as a **direct** front-end dependency (**REQ-010**) and MUST render **all** lights of **all** assigned models **without** omission when **n ≤ 1000** per model (**REQ-005**), with **segments** only between **consecutive** **ids** **within** the **same** model (**REQ-005**), **not** between models, **using** **derived** **scene-space** **positions** (**rule** **4**).
+9. **Per-light** **state** (**REQ-011**, **REQ-012**) MUST apply in the scene view **per model** as in the single-model view (colours, brightness, on/off, and **timely** updates).
+10. **Removing** a model when **more than one** model remains MUST **persist** **without** deleting the scene. **Removing** the **last** **remaining** model MUST **not** **silently** delete the scene: the user MUST **first** **confirm** a **clear** **explanation** that **removing** this **last** model will **delete** the **entire** scene (and **that** the scene will **disappear** from **lists**). On **confirm**, the system MUST **delete** the scene (and **remove** the model assignment). On **cancel**, the scene MUST **remain** **unchanged**. This **confirm** flow MUST be **usable** without **hover-only** **essential** steps (**REQ-002**).
+11. The scene view MUST provide **affordances** to **add** a **model** (from those available per **REQ-006**) and to **remove** a model, subject to **rules** **6** and **10**; the user MUST be able to **adjust** placements for models **already** in the scene (**subject** to **rule** **5**); **successful** changes MUST **persist** per architecture **without** **altering** **stored** **model** **light** **coordinates** (**rule** **4**).
+
+**Responsive / UX notes** *(when UI is involved)*
+
+- Mobile: Scene list, scene detail/view, **create** **without** **manual** **offset** **entry**, add/remove, placement editing, and **last-model** **confirmation** are reachable and readable; **three.js** viewport usable like the model view (**REQ-010**); **touch** equivalent for light **id** and **scene**/**model** **coordinate** **disclosure** where applicable.
+- Tablet: Same as mobile; orientation changes handled where applicable.
+- Desktop: Efficient navigation between scene list and scene view; **hover** on lights where applicable.
+
+**Dependencies**
+
+- REQ-002, REQ-005, REQ-006, REQ-010, REQ-011, REQ-012
+
+**Open questions**
+
+- Whether **scene names** must be **globally unique**.
+- Exact mapping of **(0,0,0)** and **which** **axis** is **“right”** vs **“up”** in the **default** **three.js** **scene** setup.
+- Whether **placement** integers are **meters** rounded, **decimeters**, or **unitless grid** cells (must be **consistent** with **REQ-005** **meter** coordinates in architecture).
 
 ---

@@ -19,3 +19,14 @@ func writeAPIError(w http.ResponseWriter, status int, code, message string) {
 		},
 	})
 }
+
+func writeAPIErrorDetail(w http.ResponseWriter, status int, code, message string, details any) {
+	errObj := map[string]any{
+		"code":    code,
+		"message": message,
+	}
+	if details != nil {
+		errObj["details"] = details
+	}
+	writeJSON(w, status, map[string]any{"error": errObj})
+}

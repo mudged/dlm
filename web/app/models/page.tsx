@@ -46,9 +46,24 @@ export default function ModelsListPage() {
       });
       if (res.status !== 204) {
         const j = (await res.json().catch(() => null)) as {
-          error?: { message?: string };
+          error?: {
+            message?: string;
+            code?: string;
+            details?: { scenes?: { id: string; name: string }[] };
+          };
         };
-        setError(j?.error?.message ?? `Delete failed (${res.status})`);
+        let msg = j?.error?.message ?? `Delete failed (${res.status})`;
+        if (
+          res.status === 409 &&
+          j?.error?.code === "model_in_scenes" &&
+          j.error.details?.scenes?.length
+        ) {
+          const names = j.error.details.scenes
+            .map((s) => s.name || s.id)
+            .join(", ");
+          msg = `${msg} Scenes: ${names}. Remove the model from those scenes first.`;
+        }
+        setError(msg);
         setBusyId(null);
         return;
       }

@@ -129,7 +129,108 @@ func (s *Store) migrate(ctx context.Context) error {
 			return fmt.Errorf("migrate: %w", err)
 		}
 	}
-	return s.ensureLightStateColumns(ctx)
+	if err := s.ensureLightStateColumns(ctx); err != nil {
+		return err
+	}
+	return s.ensureSceneTables(ctx)
+}
+
+func (s *Store) ensureSceneTables(ctx context.Context) error {
+	stmts := []string{
+		`CREATE TABLE IF NOT EXISTS scenes (
+			id TEXT PRIMARY KEY,
+			name TEXT NOT NULL UNIQUE,
+			created_at TEXT NOT NULL
+		)`,
+		`CREATE TABLE IF NOT EXISTS scene_models (
+			scene_id TEXT NOT NULL,
+			model_id TEXT NOT NULL,
+			offset_x INTEGER NOT NULL,
+			offset_y INTEGER NOT NULL,
+			offset_z INTEGER NOT NULL,
+			ordinal INTEGER NOT NULL DEFAULT 0,
+			PRIMARY KEY (scene_id, model_id),
+			FOREIGN KEY (scene_id) REFERENCES scenes(id) ON DELETE CASCADE,
+			FOREIGN KEY (model_id) REFERENCES models(id) ON DELETE RESTRICT
+		)`,
+	}
+	for _, q := range stmts {
+		if _, err := s.db.ExecContext(ctx, q); err != nil {
+			return fmt.Errorf("migrate scenes: %w", err)
+		}
+	}
+	if err := s.ensureSceneModelOrdinal(ctx); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *Store) ensureSceneModelOrdinal(ctx context.Context) error {
+	cols, err := s.tableColumns(ctx, "scene_models")
+	if err != nil {
+		return err
+	}
+	if cols["ordinal"] {
+		return nil
+	}
+	if _, err := s.db.ExecContext(ctx, `ALTER TABLE scene_models ADD COLUMN ordinal INTEGER NOT NULL DEFAULT 0`); err != nil {
+		return fmt.Errorf("migrate scene_models.ordinal: %w", err)
+	}
+	return s.backfillSceneModelOrdinals(ctx)
+}
+
+func (s *Store) backfillSceneModelOrdinals(ctx context.Context) error {
+	rows, err := s.db.QueryContext(ctx, `SELECT DISTINCT scene_id FROM scene_models`)
+	if err != nil {
+		return err
+	}
+	var sceneIDs []string
+	for rows.Next() {
+		var sid string
+		if err := rows.Scan(&sid); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		sceneIDs = append(sceneIDs, sid)
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return err
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	for _, sid := range sceneIDs {
+		r2, err := s.db.QueryContext(ctx, `
+			SELECT model_id FROM scene_models WHERE scene_id = ? ORDER BY model_id ASC
+		`, sid)
+		if err != nil {
+			return err
+		}
+		i := 0
+		for r2.Next() {
+			var mid string
+			if err := r2.Scan(&mid); err != nil {
+				_ = r2.Close()
+				return err
+			}
+			if _, err := s.db.ExecContext(ctx, `
+				UPDATE scene_models SET ordinal = ? WHERE scene_id = ? AND model_id = ?
+			`, i, sid, mid); err != nil {
+				_ = r2.Close()
+				return err
+			}
+			i++
+		}
+		if err := r2.Err(); err != nil {
+			_ = r2.Close()
+			return err
+		}
+		if err := r2.Close(); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *Store) ensureLightStateColumns(ctx context.Context) error {
@@ -352,6 +453,13 @@ func (s *Store) Create(ctx context.Context, name string, lights []wiremodel.Ligh
 
 // Delete removes a model and its lights.
 func (s *Store) Delete(ctx context.Context, id string) error {
+	refs, err := s.listScenesReferencingModel(ctx, id)
+	if err != nil {
+		return err
+	}
+	if len(refs) > 0 {
+		return &ModelInUseError{Scenes: refs}
+	}
 	res, err := s.db.ExecContext(ctx, `DELETE FROM models WHERE id = ?`, id)
 	if err != nil {
 		return err
