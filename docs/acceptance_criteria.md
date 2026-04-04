@@ -620,6 +620,59 @@ Feature: Three.js fixed dark-grey viewport (REQ-019)
     Given docs/requirements.md defines REQ-002 and REQ-019
     When the REQ-019 business rule 3 and responsive notes are read
     Then the 3D viewport and its controls must remain usable on mobile tablet and desktop without hover-only essential steps
+
+Feature: Scene routines lifecycle and execution (REQ-020)
+
+  Scenario: REQ-020 requires routine create list and delete with name description and type
+    Parent requirement: REQ-020
+    Given docs/requirements.md defines REQ-020
+    When the REQ-020 scope and business rules about routine lifecycle are read
+    Then the system must support creating routines
+    And the system must support listing routines
+    And the system must support deleting routines
+    And each routine must store a name description and type
+
+  Scenario: REQ-020 requires running a routine against a selected scene
+    Parent requirement: REQ-020
+    Given docs/requirements.md defines REQ-015 and REQ-020
+    When the REQ-020 business rules about execution are read
+    Then a routine must be runnable against a selected scene
+    And while running its effects must apply to light state for models assigned to that scene
+
+  Scenario: REQ-020 requires volumetric shape selection semantics in scene space
+    Parent requirement: REQ-020
+    Given docs/requirements.md defines REQ-020
+    When the REQ-020 business rule about routine rule evaluation is read
+    Then routine evaluation in scene context must support selecting affected lights by volumetric shape semantics
+    And the volumetric rule must be defined at a position within scene space
+
+  Scenario: REQ-020 first routine type turns all lights on and randomizes colours every second
+    Parent requirement: REQ-020
+    Given a scene exists with one or more assigned models and lights
+    And a routine of the first supported type is created
+    When the user runs that routine against the scene
+    Then all lights in the target scene are turned on
+    And every second the routine applies a new random colour cycle to those lights while it remains active
+
+  Scenario: REQ-020 running first routine continues until explicitly stopped
+    Parent requirement: REQ-020
+    Given a first-type routine is currently running against a scene
+    When one second elapses repeatedly without a stop action
+    Then colour updates continue once per second
+    And updates do not end automatically
+
+  Scenario: REQ-020 stop halts further periodic updates
+    Parent requirement: REQ-020
+    Given a routine is running against a scene and applying periodic updates
+    When the user stops the routine
+    Then the routine performs no further periodic updates until it is explicitly run again
+
+  Scenario: REQ-020 routine controls remain usable across device classes
+    Parent requirement: REQ-020
+    Given docs/requirements.md defines REQ-002 and REQ-020
+    When the REQ-020 responsive notes and business rule 7 are read
+    Then routine list create and run or stop controls must remain usable on mobile tablet and desktop
+    And essential routine interactions must not rely on hover-only affordances
 ```
 
 ---

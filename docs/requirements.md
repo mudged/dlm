@@ -821,3 +821,48 @@ As a user **viewing** a **model** or a **scene** in **three.js**, I want the **3
 - **Whether** **the** **fixed** **three.js** **grey** **should** **match** **a** **single** **token** **shared** **with** **REQ-018** **dark** **shell** **or** **a** **dedicated** **“viz** **grey”** **token**.
 
 ---
+
+### REQ-020 — Scene routines: lifecycle and execution
+
+| Field | Value |
+|-------|-------|
+| **ID** | REQ-020 |
+| **Title** | Scene routines: lifecycle and execution |
+| **Priority** | Must |
+| **Actor(s)** | End user |
+
+**User story**
+
+As a user, I want to define and run routines against a scene so that light states across the scene's models can be changed by reusable rules, including an initial routine that cycles random colours until stopped.
+
+**Scope**
+
+- In scope: A routine entity with **name**, **description**, and **type**; user flows to **create**, **list**, and **delete** routines; ability to **run** a routine against a chosen **scene**; ability to **stop** a running routine; routine rules that target lights using volumetric-shape logic at a position within scene space; an initial routine type that turns on all lights and changes to random colours every second until stopped.
+- Out of scope: Scheduling routines to start in the future; chaining multiple routines into playlists; importing/exporting routine definitions; 3D editing UI for authoring arbitrary custom routine logic beyond the declared type system.
+
+**Business rules**
+
+1. The system MUST support creating, listing, and deleting routines, and each routine MUST store **name**, **description**, and **type**.
+2. The system MUST allow a routine to be run against a selected scene; while running, routine effects MUST apply to light state for models assigned to that scene.
+3. Routine rule evaluation in scene context MUST support selecting affected lights by volumetric shape semantics at a defined position within scene space (exact shape set and parameterization deferred to architecture).
+4. The first supported routine type MUST turn **all** lights in the target scene **on**, then cycle those lights through different random colours every **1 second** while the routine is active.
+5. The first routine type MUST continue updating colours once per second until the user stops the routine.
+6. The user MUST be able to stop a running routine; after stop, the routine MUST perform no further periodic updates until it is explicitly run again.
+7. Routine run and stop interactions MUST be exposed in a way that can be used on mobile, tablet, and desktop without hover-only essential steps.
+
+**Responsive / UX notes** *(when UI is involved)*
+
+- Mobile: Routine list, create form fields (name, description, type), and run/stop controls are reachable and readable without horizontal scrolling for primary content.
+- Tablet: Same as mobile; routine controls remain usable in portrait and landscape layouts.
+- Desktop: Efficient routine management and run/stop controls near scene context where the routine target is clear.
+
+**Dependencies**
+
+- REQ-002, REQ-011, REQ-012, REQ-015
+
+**Open questions**
+
+- Whether multiple routines may run concurrently on the same scene, and if not, what conflict behavior is required.
+- Whether stopping a routine should preserve the last applied light states or restore a previous snapshot.
+
+---
