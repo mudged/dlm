@@ -177,15 +177,15 @@ func subdivideGreatCircleArc(p0, p1 [3]float64, R float64) [][3]float64 {
 	return out
 }
 
-// coneRingAtZ returns samples on the cone lateral surface at height z in [0, coneH):
-// radius r = coneR * (1 - z/coneH), full azimuth.
-func coneRingAtZ(z float64) [][3]float64 {
-	if z >= coneH-1e-9 {
-		return [][3]float64{{0, 0, coneH}}
+// coneRingAtY returns samples on the cone lateral surface at height y in [0, coneH):
+// radius r = coneR * (1 - y/coneH), full azimuth in the xz plane (Y-up, base on xz at y=0).
+func coneRingAtY(y float64) [][3]float64 {
+	if y >= coneH-1e-9 {
+		return [][3]float64{{0, coneH, 0}}
 	}
-	r := coneR * (1 - z/coneH)
+	r := coneR * (1 - y/coneH)
 	if r < 1e-9 {
-		return [][3]float64{{0, 0, z}}
+		return [][3]float64{{0, y, 0}}
 	}
 	C := 2 * math.Pi * r
 	nLo := int(math.Ceil(C / chordMax))
@@ -206,7 +206,7 @@ func coneRingAtZ(z float64) [][3]float64 {
 	var out [][3]float64
 	for k := 0; k < n; k++ {
 		theta := 2 * math.Pi * float64(k) / float64(n)
-		out = append(out, [3]float64{r * math.Cos(theta), r * math.Sin(theta), z})
+		out = append(out, [3]float64{r * math.Cos(theta), y, r * math.Sin(theta)})
 	}
 	return out
 }

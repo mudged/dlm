@@ -9,7 +9,7 @@ import (
 // coneTotalLights deterministic count in [500, 1000] (REQ-009).
 const coneTotalLights = 720
 
-// coneDZ steps height rings on the lateral surface.
+// coneDZ steps axis-wise rings on the lateral surface (along +Y).
 const coneDZ = 0.11
 
 // coneLateralSlant is lateral surface area π r ℓ.
@@ -22,27 +22,28 @@ func coneBaseArea() float64 {
 }
 
 // pointOnConeLateral reports whether (x,y,z) lies on the lateral surface (including apex) or is near it.
+// Cone axis is +Y (base in xz at y=0, apex at (0, coneH, 0)).
 func pointOnConeLateral(x, y, z float64) bool {
-	if math.Abs(z-coneH) < 1e-3 && math.Abs(x) < 1e-3 && math.Abs(y) < 1e-3 {
+	if math.Abs(y-coneH) < 1e-3 && math.Abs(x) < 1e-3 && math.Abs(z) < 1e-3 {
 		return true
 	}
-	if z < -1e-3 || z > coneH+1e-3 {
+	if y < -1e-3 || y > coneH+1e-3 {
 		return false
 	}
-	r := math.Hypot(x, y)
-	rExp := coneR * (1 - z/coneH)
+	r := math.Hypot(x, z)
+	rExp := coneR * (1 - y/coneH)
 	if rExp < 1e-6 {
 		return r < 1e-3
 	}
 	return math.Abs(r-rExp) < 5e-3
 }
 
-// pointOnConeBase reports z≈0 and ρ≤coneR (base disk).
+// pointOnConeBase reports y≈0 and √(x²+z²)≤coneR (base disk in xz).
 func pointOnConeBase(x, y, z float64) bool {
-	if math.Abs(z) > 5e-3 {
+	if math.Abs(y) > 5e-3 {
 		return false
 	}
-	return math.Hypot(x, y) <= coneR+5e-3
+	return math.Hypot(x, z) <= coneR+5e-3
 }
 
 // coneBaseSpiral fills the base disk with a polyline from center toward rim (chord-bounded).
@@ -62,9 +63,9 @@ func coneBaseSpiral(nBudget int) [][3]float64 {
 		}
 		theta += chordIdeal / math.Max(rNext, eps)
 		x := rNext * math.Cos(theta)
-		y := rNext * math.Sin(theta)
+		z := rNext * math.Sin(theta)
 		last := pts[len(pts)-1]
-		seg := subdivideEdge(last[0], last[1], last[2], x, y, 0)
+		seg := subdivideEdge(last[0], last[1], last[2], x, 0, z)
 		pts = appendChain(pts, seg[1:])
 		r = rNext
 	}
@@ -74,9 +75,9 @@ func coneBaseSpiral(nBudget int) [][3]float64 {
 // coneLateralToApex stacked rings + ruling to apex (lateral surface only).
 func coneLateralToApex(nBudget int) [][3]float64 {
 	var pts [][3]float64
-	z := 0.0
-	for z < coneH-coneDZ*0.4 && len(pts) < nBudget {
-		ring := coneRingAtZ(z)
+	y := 0.0
+	for y < coneH-coneDZ*0.4 && len(pts) < nBudget {
+		ring := coneRingAtY(y)
 		if len(pts) == 0 {
 			pts = append(pts, ring...)
 		} else {
@@ -85,9 +86,9 @@ func coneLateralToApex(nBudget int) [][3]float64 {
 			pts = appendChain(pts, arc[1:])
 			pts = appendChain(pts, ring[1:])
 		}
-		z += coneDZ
+		y += coneDZ
 	}
-	apex := [3]float64{0, 0, coneH}
+	apex := [3]float64{0, coneH, 0}
 	if len(pts) == 0 {
 		return [][3]float64{apex}
 	}
