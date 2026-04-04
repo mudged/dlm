@@ -255,12 +255,12 @@ Feature: Three.js model view (REQ-010)
     And colour and on off appearance must follow REQ-012 when per light state is available
     And otherwise the sphere must appear white with solid fill
 
-  Scenario: REQ-010 requires B5B5B5 light grey 75 percent transparent segments between consecutive ids
+  Scenario: REQ-010 requires D0D0D0 light grey 85 percent transparent segments between consecutive ids
     Parent requirement: REQ-010
     Given docs/requirements.md defines REQ-005 and REQ-010
     When the REQ-010 scope and business rules about line segments are read
     Then straight segments must connect only consecutive lights i and i plus 1 for ascending ids
-    And segments must use hex colour B5B5B5 as canonical light grey with 75 percent transparency meaning 25 percent opacity
+    And segments must use hex colour D0D0D0 as canonical light grey with 85 percent transparency meaning 15 percent opacity
     And segments must be thin barely visible and less prominent than the light spheres
 
   Scenario: REQ-010 requires every light drawn with previous and next connectivity
@@ -330,11 +330,11 @@ Feature: Visualization reflects light state (REQ-012)
     Then the sphere must appear filled opaque surface fill
     And the appearance must use the current hex colour and brightness from REQ-011
 
-  Scenario: Off lights use B5B5B5 and 75 percent transparency like wire segments
+  Scenario: Off lights use D0D0D0 and 85 percent transparency like wire segments
     Parent requirement: REQ-012
     Given docs/requirements.md defines REQ-010 and REQ-012
     When the REQ-012 business rules for an off light are read
-    Then the sphere must use hex colour B5B5B5 with 75 percent transparency meaning 25 percent opacity
+    Then the sphere must use hex colour D0D0D0 with 85 percent transparency meaning 15 percent opacity
     And the appearance must be consistent with REQ-010 segment styling
     And off lights must not appear more prominent than on lights or than wire segments
 

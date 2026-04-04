@@ -342,11 +342,11 @@ func TestAcceptance_REQ010_threeJsModelView(t *testing.T) {
 	if !strings.Contains(lower, "every") && !strings.Contains(lower, "all") {
 		t.Fatal("REQ-010 must require every/all lights to be drawn")
 	}
-	if !strings.Contains(strings.ToLower(block), "b5b5b5") {
-		t.Fatal("REQ-010 must specify #B5B5B5 for wire segment grey")
+	if !strings.Contains(strings.ToLower(block), "d0d0d0") {
+		t.Fatal("REQ-010 must specify #D0D0D0 for wire segment grey")
 	}
-	if !strings.Contains(lower, "75%") && !strings.Contains(lower, "75 %") {
-		t.Fatal("REQ-010 must state 75% transparency for segments")
+	if !strings.Contains(lower, "85%") && !strings.Contains(lower, "85 %") {
+		t.Fatal("REQ-010 must state 85% transparency for segments")
 	}
 	if !strings.Contains(lower, "thin") {
 		t.Fatal("REQ-010 must require thin segments")
@@ -435,11 +435,11 @@ func TestAcceptance_REQ012_visualizationReflectsLightState(t *testing.T) {
 	if !strings.Contains(lower, "filled") {
 		t.Fatal("REQ-012 must require a filled appearance for on lights")
 	}
-	if !strings.Contains(strings.ToLower(block), "b5b5b5") {
-		t.Fatal("REQ-012 must specify #B5B5B5 for off-light appearance (aligned with segments)")
+	if !strings.Contains(strings.ToLower(block), "d0d0d0") {
+		t.Fatal("REQ-012 must specify #D0D0D0 for off-light appearance (aligned with segments)")
 	}
-	if !strings.Contains(lower, "75%") && !strings.Contains(lower, "75 %") {
-		t.Fatal("REQ-012 must state 75% transparency for off lights")
+	if !strings.Contains(lower, "85%") && !strings.Contains(lower, "85 %") {
+		t.Fatal("REQ-012 must state 85% transparency for off lights")
 	}
 	if !strings.Contains(lower, "brightness") && !strings.Contains(lower, "colour") && !strings.Contains(lower, "color") {
 		t.Fatal("REQ-012 must tie appearance to colour and/or brightness")

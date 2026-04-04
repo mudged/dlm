@@ -33,10 +33,10 @@ type PickData = {
 type TooltipState = { pick: PickData; cx: number; cy: number };
 
 const TAP_PX = 10;
-/** REQ-010: #B5B5B5 at 75% transparency (25% opacity). */
-const VIZ_GREY = 0xb5b5b5;
-const LINE_OPACITY = 0.25;
-const OFF_SPHERE_OPACITY = 0.25;
+/** REQ-010: #D0D0D0 at 85% transparency (15% opacity); matches off-sphere styling (REQ-012). */
+const VIZ_GREY = 0xd0d0d0;
+const LINE_OPACITY = 0.15;
+const OFF_SPHERE_OPACITY = 0.15;
 const HOVER_DECIMALS = 4;
 
 function lightOn(L: Light): boolean {
@@ -61,6 +61,29 @@ function sceneBackgroundColor(): THREE.Color {
       ? 0x0f172a
       : 0xf1f5f9,
   );
+}
+
+/** Low-contrast floor grid aligned with light/dark scene background. */
+function createSubtleGridHelper(
+  size: number,
+  divisions: number,
+): THREE.GridHelper {
+  const dark =
+    typeof window !== "undefined" &&
+    window.matchMedia("(prefers-color-scheme: dark)").matches;
+  const centerLine = dark ? 0x2c3b4f : 0xd2dae3;
+  const gridLine = dark ? 0x1b2638 : 0xebeef2;
+  const grid = new THREE.GridHelper(size, divisions, centerLine, gridLine);
+  const mats = grid.material;
+  const list = Array.isArray(mats) ? mats : [mats];
+  for (const m of list) {
+    if (m instanceof THREE.LineBasicMaterial) {
+      m.transparent = true;
+      m.opacity = dark ? 0.38 : 0.55;
+      m.depthWrite = false;
+    }
+  }
+  return grid;
 }
 
 function formatCoord(n: number): string {
@@ -137,7 +160,7 @@ function ModelLightsCanvas({ lights, cameraPersistenceKey }: Props) {
     controls.update();
 
     const gridSize = Math.max(framedDim * 2.5, 1);
-    const grid = new THREE.GridHelper(gridSize, 12, 0x94a3b8, 0xcbd5e1);
+    const grid = createSubtleGridHelper(gridSize, 12);
     grid.position.set(cx, cy - framedDim * 0.5 - 1e-6, cz);
     scene.add(grid);
 
