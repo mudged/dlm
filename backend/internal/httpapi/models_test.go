@@ -197,3 +197,77 @@ func TestModels_listGetDelete(t *testing.T) {
 		t.Fatalf("get after delete = %d", res.StatusCode)
 	}
 }
+
+func TestModels_lightStateEndpoints(t *testing.T) {
+	st := testStore(t)
+	cfg := &config.Config{
+		HTTPListen:   ":8080",
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		DBPath:       filepath.Join(t.TempDir(), "unused.db"),
+	}
+	srv := httptest.NewServer(NewSiteHandler(cfg, nil, st))
+	t.Cleanup(srv.Close)
+
+	csv := "id,x,y,z\n0,0,0,0\n1,1,0,0\n"
+	res := postModel(t, srv, "lit", csv)
+	var sum store.Summary
+	if err := json.NewDecoder(res.Body).Decode(&sum); err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+
+	res, err := http.Get(srv.URL + "/api/v1/models/" + sum.ID + "/lights/state")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("list state status = %d", res.StatusCode)
+	}
+	var bulk struct {
+		States []store.LightStateDTO `json:"states"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&bulk); err != nil {
+		t.Fatal(err)
+	}
+	if len(bulk.States) != 2 || bulk.States[0].ID != 0 {
+		t.Fatalf("states %+v", bulk.States)
+	}
+
+	patchBody := `{"on":false,"color":"#00aaff"}`
+	req, err := http.NewRequest(http.MethodPatch, srv.URL+"/api/v1/models/"+sum.ID+"/lights/0/state", strings.NewReader(patchBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	res, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(res.Body)
+		t.Fatalf("patch status %d %s", res.StatusCode, b)
+	}
+	var st0 store.LightStateDTO
+	if err := json.NewDecoder(res.Body).Decode(&st0); err != nil {
+		t.Fatal(err)
+	}
+	if st0.On || st0.Color != "#00aaff" {
+		t.Fatalf("patched %+v", st0)
+	}
+
+	res, err = http.Get(srv.URL + "/api/v1/models/" + sum.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	var detail store.Detail
+	if err := json.NewDecoder(res.Body).Decode(&detail); err != nil {
+		t.Fatal(err)
+	}
+	if len(detail.Lights) != 2 || detail.Lights[0].On || detail.Lights[0].Color != "#00aaff" {
+		t.Fatalf("detail lights[0] %+v", detail.Lights[0])
+	}
+}

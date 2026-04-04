@@ -239,12 +239,13 @@ Feature: Three.js model view (REQ-010)
     Then the three.js view is required in the same model view flow as REQ-006
     And mobile, tablet, and desktop usability expectations are stated for the 3D view
 
-  Scenario: REQ-010 requires 1 cm white spheres per light
+  Scenario: REQ-010 requires 1 cm spheres with white default or REQ-012 state appearance
     Parent requirement: REQ-010
-    Given docs/requirements.md exists
-    When the REQ-010 scope and business rules are read
+    Given docs/requirements.md defines REQ-010 and REQ-012
+    When the REQ-010 business rule about sphere diameter and colour is read
     Then each light must be shown as a sphere with diameter 0.01 meters
-    And that sphere must be white
+    And colour and on off appearance must follow REQ-012 when per light state is available
+    And otherwise the sphere must appear white with solid fill
 
   Scenario: REQ-010 requires thin transparent segments between consecutive ids
     Parent requirement: REQ-010
@@ -257,7 +258,7 @@ Feature: Three.js model view (REQ-010)
     Parent requirement: REQ-010
     Given docs/requirements.md exists
     When REQ-010 scope and business rules are read
-    Then every light in the model must be drawn as a 1 cm white sphere
+    Then every light in the model must be drawn as a 1 cm diameter sphere per REQ-010 and REQ-012
     And interior lights along the wire must connect to previous and next via those segments
 
   Scenario: REQ-010 forbids omitting lights when n is at most 1000
@@ -272,6 +273,79 @@ Feature: Three.js model view (REQ-010)
     When the REQ-010 business rules and responsive notes are read
     Then pointer hover over a light sphere must show id and x y z
     And touch-first devices must have an equivalent to show id and coordinates
+
+Feature: Per-light state REST API (REQ-011)
+
+  Scenario: Requirements mandate REST API to query light state
+    Parent requirement: REQ-011
+    Given docs/requirements.md exists
+    When requirement REQ-011 is read
+    Then the product must expose REST operations to read current light state for a model
+    And the API must support reading state for all lights in one response and for a single light by id
+
+  Scenario: Requirements mandate REST API to update each light individually
+    Parent requirement: REQ-011
+    Given docs/requirements.md exists
+    When the REQ-011 business rules are read
+    Then the API must allow updating each light individually by id
+    And updates must support on or off hex colour and brightness percentage
+    And partial field updates must be supported where REST semantics allow
+
+  Scenario: REQ-011 requires hex colour validation and brightness percent range
+    Parent requirement: REQ-011
+    Given docs/requirements.md defines REQ-011
+    When the REQ-011 business rules about colour and brightness are read
+    Then hex colour must use a canonical form defined in architecture
+    And invalid hex values must be rejected with a clear error
+    And brightness must be a percent with 0 minimum and 100 maximum for the on appearance
+
+  Scenario: REQ-011 requires persisted state after successful writes
+    Parent requirement: REQ-011
+    Given docs/requirements.md defines REQ-011
+    When the REQ-011 business rules are read
+    Then successful writes must persist with the model for reloads and other clients
+
+  Scenario: REQ-011 binds default state to architecture consistency
+    Parent requirement: REQ-011
+    Given docs/requirements.md defines REQ-011
+    When the REQ-011 business rules about defaults are read
+    Then default state for lights without prior state must be defined in docs/architecture.md
+    And defaults must be consistent across API and UI
+
+Feature: Visualization reflects light state (REQ-012)
+
+  Scenario: On lights appear filled with hex colour and brightness
+    Parent requirement: REQ-012
+    Given docs/requirements.md defines REQ-012
+    When the REQ-012 business rules for an on light are read
+    Then the sphere must appear filled opaque surface fill
+    And the appearance must use the current hex colour and brightness from REQ-011
+
+  Scenario: Off lights appear hollow and semi transparent
+    Parent requirement: REQ-012
+    Given docs/requirements.md defines REQ-012
+    When the REQ-012 business rules for an off light are read
+    Then the sphere must appear hollow such as wireframe shell rim or transparent shell
+    And the sphere must be semi transparent
+
+  Scenario: Visualization updates after API state changes
+    Parent requirement: REQ-012
+    Given docs/requirements.md defines REQ-012
+    When the REQ-012 business rules about updates are read
+    Then the 3D view must update when light state changes via REQ-011 while viewing the model
+    And sphere appearance must match the latest persisted state without indefinite staleness after a successful write
+
+  Scenario: REQ-012 preserves REQ-010 segments and hover coordinates behavior
+    Parent requirement: REQ-012
+    Given docs/requirements.md defines REQ-010 and REQ-012
+    When REQ-012 business rules are read
+    Then REQ-010 segments and hover or touch id and coordinates behavior remain in force
+
+  Scenario: REQ-012 applies defaults for lights without stored state
+    Parent requirement: REQ-012
+    Given docs/requirements.md defines REQ-011 and REQ-012
+    When the REQ-012 business rule about missing stored state is read
+    Then lights without stored state must use the REQ-011 default and still render per on and off rules
 ```
 
 ---

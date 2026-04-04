@@ -401,7 +401,7 @@ As a user, when I **view** a model, I want **every** light drawn as a **1 cm whi
 1. Whenever the user is **viewing** a single model’s content (lights and metadata context per **REQ-006**), the UI MUST include a **three.js**-based **3D view** that reflects the model’s **x**, **y**, **z** positions for **each** light in the payload (**all lights drawn**).
 2. The **three.js** dependency MUST be a **direct** front-end dependency (declared in the Next.js app’s package manifest), not loaded only indirectly through unrelated packages, so the visualization stack is explicit and auditable.
 3. The 3D view MUST remain **usable** on **mobile**, **tablet**, and **desktop** viewports per **REQ-002** (e.g. visible canvas or viewport, no reliance on desktop-only interaction for basic inspection unless alternatives are documented in architecture).
-4. Each light MUST be represented by a **sphere** with **diameter exactly 0.01 m** (**1 cm**) in **white** (solid fill; exact material or shading is deferred to architecture).
+4. Each light MUST be represented by a **sphere** with **diameter exactly 0.01 m** (**1 cm**). **Colour and on/off appearance** MUST follow **REQ-012** when per-light state is available; until then or where state is not defined, the sphere MUST appear **white** with **solid fill** (exact material or shading is deferred to architecture).
 5. For each **i** from **0** to **n − 2** (where **n** is the light count), a **single straight Euclidean segment** MUST be drawn between the positions of light **i** and light **i + 1** (this realizes **previous**/**next** connectivity along the wire). Segments MUST be **very thin** and **partially transparent**; exact line width and alpha are deferred to architecture within those constraints. If **n ≤ 1**, no segments are required.
 6. When the user moves the **pointer** so that it **hovers** a light’s **sphere** (primary **hit target** for that light), the UI MUST show that light’s **id** and **x**, **y**, **z** (same numeric meaning as the API / **REQ-005**). On **touch-first** devices, the product MUST provide a **documented** equivalent (e.g. **tap** to select the nearest light or the picked light) that surfaces the same **id** and **coordinates** without requiring hover.
 7. The renderer MUST NOT skip or merge lights for performance when **n ≤ 1000** (per **REQ-005**); **all n** spheres and the **n − 1** (or **0**) segments described above MUST be present.
@@ -421,5 +421,92 @@ As a user, when I **view** a model, I want **every** light drawn as a **1 cm whi
 - Minimum three.js **major** version or LTS alignment (if any).
 - Whether **orbit controls** or another interaction model is mandatory vs architecture choice.
 - Preferred **decimal precision** or **formatting** for displayed coordinates (e.g. fixed decimals vs full float).
+
+---
+
+### REQ-011 — REST API for per-light state (query and control)
+
+| Field | Value |
+|-------|-------|
+| **ID** | REQ-011 |
+| **Title** | REST API for per-light state (query and control) |
+| **Priority** | Must |
+| **Actor(s)** | End user; integrator |
+
+**User story**
+
+As a user or integrator, I want a **REST API** on the model that lets me **read** and **individually update** each light’s **state**, so that external tools or the UI can drive and inspect lights programmatically.
+
+**Scope**
+
+- In scope: HTTP **REST** resources or operations scoped to a **model** and **individual lights** (by light **id** per **REQ-005**). **Read** operations that return the **current** state for one or all lights in the model. **Write** operations that set state **per light** (not batch-only). State fields: **on** or **off** (boolean), **colour** as a **hex** RGB string, and **brightness** as a **percentage** (0–100 inclusive, semantics below).
+- Out of scope: Non-REST protocols; authentication and authorization policy (unless already required elsewhere); animation timelines; physical hardware protocols.
+
+**Business rules**
+
+1. The API MUST allow **querying** the **current** state of lights for a model: **all lights** in **one** response **and** the state of **one** light by **id** (exact resource layout deferred to **docs/architecture.md**).
+2. The API MUST allow **updating** the state of **each** light **individually** (by **id**), including **on/off**, **hex colour**, and **brightness** **percentage**; partial updates that change only some fields MUST be supported where REST semantics allow (e.g. **PATCH**-style behavior).
+3. **Hex colour** MUST use a **canonical** form agreed in architecture (e.g. **`#RRGGBB`** with six **hexadecimal** digits); invalid values MUST be rejected with a **clear** error.
+4. **Brightness** MUST be a **number** interpreted as **percent** with **0** = minimum and **100** = maximum for the **on** appearance; behavior when the light is **off** (whether brightness is stored or ignored visually) is defined in **REQ-012**.
+5. Successful **writes** MUST be **persisted** with the model (same durability as model data per architecture) so reloads and other clients see the same state.
+6. **Default** state for lights in a newly created or legacy model without prior state MUST be defined in **docs/architecture.md** (e.g. all **off** or all **on** at **100%** **#FFFFFF**) and MUST be **consistent** across API and UI.
+
+**Responsive / UX notes** *(when UI is involved)*
+
+- Mobile: N/A for API-only requirement; any UI that calls the API MUST remain usable per **REQ-002**.
+- Tablet: N/A
+- Desktop: N/A
+
+**Dependencies**
+
+- REQ-001, REQ-005, REQ-006
+
+**Open questions**
+
+- Whether **bulk** read/write endpoints are **required** in addition to per-light operations.
+- Exact **HTTP methods** and **URL** patterns (architecture).
+
+---
+
+### REQ-012 — Model visualization reflects per-light state
+
+| Field | Value |
+|-------|-------|
+| **ID** | REQ-012 |
+| **Title** | Model visualization reflects per-light state |
+| **Priority** | Must |
+| **Actor(s)** | End user |
+
+**User story**
+
+As a user viewing a model, I want the **3D visualization** to **match** each light’s **stored state**, so that **colour**, **brightness**, and **on/off** are **immediately obvious** from the **spheres** (e.g. **blue** when set to blue, **hollow** when **off**).
+
+**Scope**
+
+- In scope: When viewing a model (**REQ-006**, **REQ-010**), each light’s **sphere** (**0.01 m** diameter) MUST reflect **REQ-011** state: **on** = **filled** appearance using the light’s **hex colour** modulated by **brightness**; **off** = **hollow** appearance with **semi-transparent** material (user can see through or see only a shell—exact technique deferred to architecture). **Any** change to persisted light state via the API (**REQ-011**) MUST be **reflected** in the visualization **without** requiring a full page reload if the client is already viewing that model (e.g. **poll**, **push**, or **same-session** refetch—architecture defines mechanism; the requirement is **timely** consistency from the user’s perspective).
+- Out of scope: Changing **wire segment** styling based on state unless added later; **export** of rendered images.
+
+**Business rules**
+
+1. For a light that is **on**, the **sphere** MUST appear **filled** (solid or equivalent **opaque** **surface** fill) and MUST use the **current** **hex colour** and **brightness** from **REQ-011** (architecture defines how **percentage** maps to rendered colour or intensity).
+2. For a light that is **off**, the **sphere** MUST appear **hollow** (e.g. **wireframe** shell, **rim**, or **transparent** shell) and MUST be **semi-transparent** so it reads as **not lit** while still marking the **position**.
+3. The visualization MUST **update** when light state changes from **REQ-011** while the user is viewing the affected model, so the **sphere** **appearance** matches the **latest** **persisted** state within a **reasonable** delay (architecture may set bounds; **stale** display after a successful write is **not** acceptable indefinitely).
+4. **REQ-010** **segments** and **hover**/**touch** **id** and **coordinates** behavior remain in force; state fields (**on/off**, **colour**, **brightness**) MAY be shown on hover/tap in addition if architecture chooses.
+5. Lights **without** stored state yet MUST follow the **default** defined for **REQ-011** and still render per rules **1** and **2** above.
+
+**Responsive / UX notes** *(when UI is involved)*
+
+- Mobile: On/off and colour cues MUST remain **discernible** at small viewports (contrast, transparency level tuned per **REQ-002**).
+- Tablet: Same as mobile.
+- Desktop: Same; **hover** may also show state fields if implemented.
+
+**Dependencies**
+
+- REQ-002, REQ-010, REQ-011
+
+**Open questions**
+
+- Maximum acceptable **latency** after an API update before the 3D view refreshes.
+- Whether **hover**/**tap** must display **brightness** and **colour** in addition to **id**/**coordinates**.
 
 ---

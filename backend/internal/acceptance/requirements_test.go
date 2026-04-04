@@ -364,3 +364,93 @@ func TestAcceptance_REQ010_threeJsModelView(t *testing.T) {
 		t.Fatal("REQ-010 metadata must state priority Must")
 	}
 }
+
+func TestAcceptance_REQ011_restLightStateAPI(t *testing.T) {
+	doc := readRequirements(t)
+	block := requirementBlock(doc, "REQ-011")
+	if block == "" {
+		t.Fatal("requirements must contain ### REQ-011 section")
+	}
+	lower := strings.ToLower(block)
+	if !strings.Contains(lower, "rest") {
+		t.Fatal("REQ-011 must require a REST API")
+	}
+	if !strings.Contains(lower, "query") && !strings.Contains(lower, "read") {
+		t.Fatal("REQ-011 must allow querying or reading current light state")
+	}
+	if !strings.Contains(lower, "updat") && !strings.Contains(lower, "write") {
+		t.Fatal("REQ-011 must allow updating or writing light state")
+	}
+	if !strings.Contains(lower, "individual") && !strings.Contains(lower, "each") {
+		t.Fatal("REQ-011 must require per-light (individual or each) control")
+	}
+	if !strings.Contains(lower, "hex") {
+		t.Fatal("REQ-011 must mention hex colour")
+	}
+	if !strings.Contains(lower, "brightness") || !strings.Contains(lower, "percent") {
+		t.Fatal("REQ-011 must mention brightness as a percentage")
+	}
+	if !strings.Contains(lower, "**on**") || !strings.Contains(lower, "**off**") {
+		t.Fatal("REQ-011 must state on and off light state (e.g. **on** / **off** in scope)")
+	}
+	if !strings.Contains(lower, "boolean") {
+		t.Fatal("REQ-011 must describe on/off as boolean where stated in scope")
+	}
+	if !strings.Contains(lower, "patch") {
+		t.Fatal("REQ-011 must mention PATCH-style partial updates")
+	}
+	if !strings.Contains(lower, "persist") {
+		t.Fatal("REQ-011 must require successful writes to be persisted")
+	}
+	if !strings.Contains(lower, "docs/architecture.md") {
+		t.Fatal("REQ-011 must defer URL layout or defaults to docs/architecture.md")
+	}
+	if !strings.Contains(lower, "req-001") || !strings.Contains(lower, "req-005") || !strings.Contains(lower, "req-006") {
+		t.Fatal("REQ-011 dependencies must reference REQ-001, REQ-005, and REQ-006")
+	}
+	if !strings.Contains(block, "| **Priority** | Must |") {
+		t.Fatal("REQ-011 metadata must state priority Must")
+	}
+}
+
+func TestAcceptance_REQ012_visualizationReflectsLightState(t *testing.T) {
+	doc := readRequirements(t)
+	block := requirementBlock(doc, "REQ-012")
+	if block == "" {
+		t.Fatal("requirements must contain ### REQ-012 section")
+	}
+	lower := strings.ToLower(block)
+	if !strings.Contains(lower, "visual") && !strings.Contains(lower, "3d") {
+		t.Fatal("REQ-012 must address visualization or 3D view")
+	}
+	if !strings.Contains(lower, "req-011") {
+		t.Fatal("REQ-012 must reference REQ-011 for stored state")
+	}
+	if !strings.Contains(lower, "filled") {
+		t.Fatal("REQ-012 must require a filled appearance for on lights")
+	}
+	if !strings.Contains(lower, "hollow") {
+		t.Fatal("REQ-012 must require a hollow appearance for off lights")
+	}
+	if !strings.Contains(lower, "semi-transparent") && !strings.Contains(lower, "semi transparent") {
+		t.Fatal("REQ-012 must require semi-transparent off markers")
+	}
+	if !strings.Contains(lower, "brightness") && !strings.Contains(lower, "colour") && !strings.Contains(lower, "color") {
+		t.Fatal("REQ-012 must tie appearance to colour and/or brightness")
+	}
+	if !strings.Contains(lower, "reload") {
+		t.Fatal("REQ-012 must address refresh without full page reload")
+	}
+	if !strings.Contains(lower, "req-010") {
+		t.Fatal("REQ-012 must reference REQ-010 (segments / hover baseline)")
+	}
+	if !strings.Contains(lower, "req-002") {
+		t.Fatal("REQ-012 responsive notes must reference REQ-002")
+	}
+	if !strings.Contains(block, "0.01") {
+		t.Fatal("REQ-012 must preserve 0.01 m sphere diameter (REQ-010 alignment)")
+	}
+	if !strings.Contains(block, "| **Priority** | Must |") {
+		t.Fatal("REQ-012 metadata must state priority Must")
+	}
+}

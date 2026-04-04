@@ -5,6 +5,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { boundingFromLights } from "@/lib/lightBounds";
 import type { Light } from "@/lib/models";
+import { colorFromHexAndBrightness } from "@/lib/lightAppearance";
 import {
   buildWireSegmentPositions,
   SPHERE_RADIUS_M,
@@ -14,13 +15,35 @@ type Props = {
   lights: Light[];
 };
 
-type PickData = { id: number; x: number; y: number; z: number };
+type PickData = {
+  id: number;
+  x: number;
+  y: number;
+  z: number;
+  on: boolean;
+  color: string;
+  brightness_pct: number;
+};
 /** Client coordinates for `position: fixed` tooltip (avoids overflow clipping). */
 type TooltipState = { pick: PickData; cx: number; cy: number };
 
 const TAP_PX = 10;
 const LINE_OPACITY = 0.28;
 const HOVER_DECIMALS = 4;
+const OFF_WIREFRAME_OPACITY = 0.36;
+
+function lightOn(L: Light): boolean {
+  return L.on !== false;
+}
+
+function lightColor(L: Light): string {
+  return L.color ?? "#ffffff";
+}
+
+function lightBrightness(L: Light): number {
+  const v = L.brightness_pct;
+  return typeof v === "number" && Number.isFinite(v) ? v : 100;
+}
 
 function sceneBackgroundColor(): THREE.Color {
   if (typeof window === "undefined") {
@@ -105,26 +128,74 @@ function ModelLightsCanvas({ lights }: Props) {
     scene.add(dir);
 
     const sphereGeom = new THREE.SphereGeometry(SPHERE_RADIUS_M, 20, 16);
-    const sphereMat = new THREE.MeshStandardMaterial({
+    const matOn = new THREE.MeshBasicMaterial({ vertexColors: true });
+    const matOff = new THREE.MeshBasicMaterial({
       color: 0xffffff,
-      metalness: 0.05,
-      roughness: 0.45,
+      wireframe: true,
+      transparent: true,
+      opacity: OFF_WIREFRAME_OPACITY,
+      depthWrite: false,
     });
 
-    let instanced: THREE.InstancedMesh | null = null;
+    const onSortedIdx: number[] = [];
+    const offSortedIdx: number[] = [];
+    for (let i = 0; i < n; i++) {
+      if (lightOn(sorted[i])) {
+        onSortedIdx.push(i);
+      } else {
+        offSortedIdx.push(i);
+      }
+    }
+
+    let instOn: THREE.InstancedMesh | null = null;
+    let instOff: THREE.InstancedMesh | null = null;
     const dummy = new THREE.Object3D();
 
-    if (n > 0) {
-      instanced = new THREE.InstancedMesh(sphereGeom, sphereMat, n);
-      instanced.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-      for (let i = 0; i < n; i++) {
-        const L = sorted[i];
+    if (onSortedIdx.length > 0) {
+      const c = onSortedIdx.length;
+      instOn = new THREE.InstancedMesh(sphereGeom, matOn, c);
+      instOn.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      instOn.instanceColor = new THREE.InstancedBufferAttribute(
+        new Float32Array(c * 3),
+        3,
+      );
+      instOn.instanceColor.setUsage(THREE.DynamicDrawUsage);
+      for (let j = 0; j < c; j++) {
+        const L = sorted[onSortedIdx[j]!];
         dummy.position.set(L.x, L.y, L.z);
         dummy.updateMatrix();
-        instanced.setMatrixAt(i, dummy.matrix);
+        instOn.setMatrixAt(j, dummy.matrix);
+        const col = colorFromHexAndBrightness(
+          lightColor(L),
+          lightBrightness(L),
+        );
+        instOn.instanceColor!.setXYZ(j, col.r, col.g, col.b);
       }
-      instanced.instanceMatrix.needsUpdate = true;
-      scene.add(instanced);
+      instOn.instanceMatrix.needsUpdate = true;
+      instOn.instanceColor.needsUpdate = true;
+      scene.add(instOn);
+    }
+
+    if (offSortedIdx.length > 0) {
+      const c = offSortedIdx.length;
+      instOff = new THREE.InstancedMesh(sphereGeom, matOff, c);
+      instOff.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      for (let j = 0; j < c; j++) {
+        const L = sorted[offSortedIdx[j]!];
+        dummy.position.set(L.x, L.y, L.z);
+        dummy.updateMatrix();
+        instOff.setMatrixAt(j, dummy.matrix);
+      }
+      instOff.instanceMatrix.needsUpdate = true;
+      scene.add(instOff);
+    }
+
+    const pickTargets: THREE.InstancedMesh[] = [];
+    if (instOn) {
+      pickTargets.push(instOn);
+    }
+    if (instOff) {
+      pickTargets.push(instOff);
     }
 
     const segPos = buildWireSegmentPositions(lights);
@@ -146,7 +217,7 @@ function ModelLightsCanvas({ lights }: Props) {
     const ndc = new THREE.Vector2();
 
     function pickInstance(clientX: number, clientY: number): PickData | null {
-      if (!instanced || n === 0) {
+      if (pickTargets.length === 0 || n === 0) {
         return null;
       }
       const canvas = renderer.domElement;
@@ -154,13 +225,28 @@ function ModelLightsCanvas({ lights }: Props) {
       ndc.x = ((clientX - cr.left) / cr.width) * 2 - 1;
       ndc.y = -((clientY - cr.top) / cr.height) * 2 + 1;
       raycaster.setFromCamera(ndc, camera);
-      const hits = raycaster.intersectObject(instanced, false);
-      if (hits.length === 0 || hits[0].instanceId === undefined) {
+      const hits = raycaster.intersectObjects(pickTargets, false);
+      const hit = hits[0];
+      const j = hit?.instanceId;
+      if (hit === undefined || j === undefined) {
         return null;
       }
-      const i = hits[0].instanceId;
-      const L = sorted[i];
-      return { id: L.id, x: L.x, y: L.y, z: L.z };
+      let si: number;
+      if (hit.object === instOn) {
+        si = onSortedIdx[j]!;
+      } else {
+        si = offSortedIdx[j]!;
+      }
+      const L = sorted[si]!;
+      return {
+        id: L.id,
+        x: L.x,
+        y: L.y,
+        z: L.z,
+        on: lightOn(L),
+        color: lightColor(L),
+        brightness_pct: lightBrightness(L),
+      };
     }
 
     let rafHover = 0;
@@ -283,7 +369,8 @@ function ModelLightsCanvas({ lights }: Props) {
       wrap.removeEventListener("pointerleave", onPointerLeave);
       controls.dispose();
       sphereGeom.dispose();
-      sphereMat.dispose();
+      matOn.dispose();
+      matOff.dispose();
       if (lineSegments) {
         lineSegments.geometry.dispose();
         (lineSegments.material as THREE.Material).dispose();
@@ -321,6 +408,11 @@ function ModelLightsCanvas({ lights }: Props) {
             y {formatCoord(tip.pick.y)}
             <br />
             z {formatCoord(tip.pick.z)}
+            <br />
+            <span className="text-slate-600 dark:text-slate-300">
+              {tip.pick.on ? "on" : "off"} · {tip.pick.color} ·{" "}
+              {tip.pick.brightness_pct}%
+            </span>
           </div>
         </div>
       ) : null}
