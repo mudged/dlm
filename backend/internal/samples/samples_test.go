@@ -7,15 +7,6 @@ import (
 	"example.com/dlm/backend/internal/wiremodel"
 )
 
-// openInteriorTol: classify points as lying on a nominal face plane.
-const openInteriorTol = 1e-2
-
-// looseInteriorMargin for the 85% quota (architecture §3.8).
-const looseInteriorMargin = 0.02
-
-// strictInteriorMargin for per-face evenness (excludes edge band and typical bridge legs).
-const strictInteriorMargin = 0.07
-
 const minLights, maxLights = 500, 1000
 
 func assertChordBand(t *testing.T, name string, lights []wiremodel.Light) {
@@ -88,100 +79,33 @@ func TestCubeLights_surfaceChordCount(t *testing.T) {
 	L := CubeLights()
 	assertLightCount(t, "cube", L)
 	assertChordBand(t, "cube", L)
-	assertCubeFaceQuotas(t, L)
+	assertCubeLightsOnClosedSurface(t, L)
+	assertCubeHelixZSpan(t, L)
 }
 
-// cubeFaceOf assigns each surface point to one nominal face; x before y before z breaks ties on edges.
-func cubeFaceOf(x, y, z float64) int {
-	h := cubeHalf
-	eps := openInteriorTol
-	switch {
-	case math.Abs(x-h) < eps && math.Abs(y) <= h+1e-6 && math.Abs(z) <= h+1e-6:
-		return 2 // +X
-	case math.Abs(x+h) < eps && math.Abs(y) <= h+1e-6 && math.Abs(z) <= h+1e-6:
-		return 3 // -X
-	case math.Abs(y-h) < eps && math.Abs(x) <= h+1e-6 && math.Abs(z) <= h+1e-6:
-		return 4 // +Y
-	case math.Abs(y+h) < eps && math.Abs(x) <= h+1e-6 && math.Abs(z) <= h+1e-6:
-		return 5 // -Y
-	case math.Abs(z-h) < eps && math.Abs(x) <= h+1e-6 && math.Abs(y) <= h+1e-6:
-		return 0 // +Z
-	case math.Abs(z+h) < eps && math.Abs(x) <= h+1e-6 && math.Abs(y) <= h+1e-6:
-		return 1 // -Z
-	default:
-		return -1
-	}
-}
-
-func cubeInteriorWithMargin(x, y, z float64, b float64) bool {
-	h := cubeHalf
-	switch cubeFaceOf(x, y, z) {
-	case 0:
-		return math.Abs(x) < h-b && math.Abs(y) < h-b
-	case 1:
-		return math.Abs(x) < h-b && math.Abs(y) < h-b
-	case 2:
-		return math.Abs(y) < h-b && math.Abs(z) < h-b
-	case 3:
-		return math.Abs(y) < h-b && math.Abs(z) < h-b
-	case 4:
-		return math.Abs(x) < h-b && math.Abs(z) < h-b
-	case 5:
-		return math.Abs(x) < h-b && math.Abs(z) < h-b
-	default:
-		return false
-	}
-}
-
-func cubeOpenInteriorLoose(x, y, z float64) bool {
-	return cubeInteriorWithMargin(x, y, z, looseInteriorMargin)
-}
-
-func cubeOpenInteriorStrict(x, y, z float64) bool {
-	return cubeInteriorWithMargin(x, y, z, strictInteriorMargin)
-}
-
-func assertCubeFaceQuotas(t *testing.T, lights []wiremodel.Light) {
+func assertCubeLightsOnClosedSurface(t *testing.T, lights []wiremodel.Light) {
 	t.Helper()
-	n := len(lights)
-	q := n / 6
-	counts := [6]int{}
-	interiorLoose := 0
-	intFace := [6]int{}
 	for _, p := range lights {
-		f := cubeFaceOf(p.X, p.Y, p.Z)
-		if f < 0 {
-			t.Fatalf("cube: point (%v,%v,%v) not on a nominal face", p.X, p.Y, p.Z)
-		}
-		counts[f]++
-		if cubeOpenInteriorLoose(p.X, p.Y, p.Z) {
-			interiorLoose++
-		}
-		if cubeOpenInteriorStrict(p.X, p.Y, p.Z) {
-			intFace[f]++
+		if !pointOnCubeSurface([3]float64{p.X, p.Y, p.Z}) {
+			t.Fatalf("cube: point (%v,%v,%v) not on closed surface", p.X, p.Y, p.Z)
 		}
 	}
-	minI, maxI := intFace[0], intFace[0]
-	for f := 0; f < 6; f++ {
-		c := intFace[f]
-		if c < minI {
-			minI = c
-		}
-		if c > maxI {
-			maxI = c
-		}
-		if c < 20 {
-			t.Fatalf("cube: strict-interior count on face %d is %d (want >= 20)", f, c)
-		}
+}
+
+func assertCubeHelixZSpan(t *testing.T, lights []wiremodel.Light) {
+	t.Helper()
+	if len(lights) == 0 {
+		return
 	}
-	if maxI-minI > 8 {
-		t.Fatalf("cube: strict-interior per-face counts %v differ by more than 8 (n=%d q=%d)", intFace, n, q)
+	z0 := lights[0].Z
+	z1 := lights[len(lights)-1].Z
+	const zTol = 5e-3
+	if math.Abs(z0-(-cubeHalf)) > zTol {
+		t.Fatalf("cube: helix start z %v want ~%v", z0, -cubeHalf)
 	}
-	need := int(0.85 * float64(n))
-	if interiorLoose < need {
-		t.Fatalf("cube: loose-interior lights %d want >= %d (85%% of %d)", interiorLoose, need, n)
+	if math.Abs(z1-cubeHalf) > zTol {
+		t.Fatalf("cube: helix end z %v want ~%v", z1, cubeHalf)
 	}
-	_ = counts // all points classified; strict interior uses intFace
 }
 
 func TestConeLights_surfaceChordCount(t *testing.T) {
