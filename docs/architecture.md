@@ -1,6 +1,6 @@
 # Architecture
 
-This document defines technical structure and deployment for the product described in `docs/requirements.md` (**REQ-001–REQ-020**). It satisfies **REQ-001** (Go + Next.js + Tailwind), **REQ-002** (responsive, client-interactive UI), **REQ-003** (Raspberry Pi 4 Model B, **ARM64**, resource awareness), **REQ-004** (**one runnable executable** per release target; **no** mandatory Docker/OCI/compose packaging at this stage), **REQ-005** (wire light **chain** model: **CSV** interchange, **metadata**, **at most two** logical neighbors per light by **consecutive id**—**endpoints** have **one**), **REQ-006** (list / view / delete / create via CSV upload; **delete blocked** with **409** when the model is **referenced** by **one or more** **scenes**, with an **actionable** **error** payload), **REQ-007** (server-side CSV validation and actionable errors), **REQ-008** (single command to build UI and run the Go server locally), **REQ-009** (default **sphere**, **cube**, **cone** samples: lights on **exterior** nominal surfaces with **even** coverage of **face planes** (**cube**) and **surface area** (**sphere** / **cone**), **not** **edge-only** or **single-curve-only** layouts; consecutive spacing **0.05–0.10 m**; **500–1000** lights each; **≤ 0.03 m** surface deviation; **~2 m** characteristic size), **REQ-010** (**three.js** **3D** view on **model detail**: **every** light as **2 cm** sphere; **all** lights drawn for **n ≤ 1000**; **wire** segments **only** between **consecutive** **ids**; segments **`#D0D0D0`** at **85% transparency** (**15% opacity**), **subtler** than spheres; **hover** / **touch** disclosure of **id** and **coordinates**), **REQ-011** (**REST** **read/write** of per-light **on/off**, **hex** **#RRGGBB** colour, **brightness** **0–100%**, persisted in **SQLite**), **REQ-012** (**3D** **spheres** reflect state: **on** = **opaque** **filled** **colour** × **brightness**; **off** = **`#D0D0D0`** at **85% transparency** matching segments; **timely** UI sync after **writes**), **REQ-013** (**model detail**: **paginated** light **list** with **page-size** control and **go to id**; **multi-select** and **bulk apply** via **batch** **PATCH**), **REQ-014** (**default** all lights **off**, **`#FFFFFF`**, **100%** brightness on create/seed; **reset** control + **authoritative** API to restore that state for **all** lights in **one** action), **REQ-015** (**scenes**: **named** **composite** **3D** **space**; **create** with **≥ 1** **model** **and** **server-computed** **integer** **offsets** **(no** **client-supplied** **offsets** **on** **create)**; **canonical** **`lights.x/y/z`** **unchanged** **by** **scenes**; **derived** **`sx/sy/sz`** **=** **canonical** **+** **offset** **for** **API**/**UI** **in** **scene** **context**; **non-negative** **containment** **+** **≥ 1 m** **margin** **beyond** **max** **extent** **per** **axis**; **three.js** **composite** **view** **reusing** **REQ-010**/**012** **per** **model**; **add**/**remove**/**optional** **placement** **edit** **after** **create**; **last** **model** **→** **confirm** **then** **delete** **scene**; **+X** **default** **for** **models** **added** **after** **create**), **REQ-016** (**camera reset** on **model** and **scene** **three.js** views: **client-only** restore of **default** **framing**; **no** **persisted** **data** **changes**), **REQ-017** (**Options** **UI** with **factory reset**: **confirmed** **wipe** of **all** **SQLite** **application** **data** **then** **re-seed** **§3.8** **samples** **to** **match** **fresh** **install**), **REQ-018** (**application** **shell**: **light**/**dark** **themes** (**white**/dark **grey** **surfaces**, **dark**/ **white** **primary** **text**); **collapsible** **left** **nav** **with** **burger** **toggle**; **branding** **title** **`Domestic Light & Magic`** **+** **Font Awesome** **classic** **regular** **lightbulb** **logo**; **Font Awesome** **icons** **on** **action** **buttons** **throughout** **the** **UI** **per** **§4.11**; **default** **theme** **follows** **`prefers-color-scheme`** **until** **the** **user** **overrides** **with** **a** **persisted** **choice**), **REQ-019** (**model** **and** **scene** **three.js** **views**; **fixed** **dark-grey** **WebGL** **backdrop** **in** **both** **shell** **themes**; **§4.7** **and** **§4.9**), and **REQ-020** (**scene spatial API** for **dimensions**, **all-lights retrieval**, **cuboid/sphere filtering**, and **cuboid/sphere bulk updates** computed in **scene coordinates** without rewriting canonical model coordinates; **§3.15**, **§8.15**).
+This document defines technical structure and deployment for the product described in `docs/requirements.md` (**REQ-001–REQ-021**). It satisfies **REQ-001** (Go + Next.js + Tailwind), **REQ-002** (responsive, client-interactive UI), **REQ-003** (Raspberry Pi 4 Model B, **ARM64**, resource awareness), **REQ-004** (**one runnable executable** per release target; **no** mandatory Docker/OCI/compose packaging at this stage), **REQ-005** (wire light **chain** model: **CSV** interchange, **metadata**, **at most two** logical neighbors per light by **consecutive id**—**endpoints** have **one**), **REQ-006** (list / view / delete / create via CSV upload; **delete blocked** with **409** when the model is **referenced** by **one or more** **scenes**, with an **actionable** **error** payload), **REQ-007** (server-side CSV validation and actionable errors), **REQ-008** (single command to build UI and run the Go server locally), **REQ-009** (default **sphere**, **cube**, **cone** samples: lights on **exterior** nominal surfaces with **even** coverage of **face planes** (**cube**) and **surface area** (**sphere** / **cone**), **not** **edge-only** or **single-curve-only** layouts; consecutive spacing **0.05–0.10 m**; **500–1000** lights each; **≤ 0.03 m** surface deviation; **~2 m** characteristic size), **REQ-010** (**three.js** **3D** view on **model detail**: **every** light as **2 cm** sphere; **all** lights drawn for **n ≤ 1000**; **wire** segments **only** between **consecutive** **ids**; segments **`#D0D0D0`** at **85% transparency** (**15% opacity**), **subtler** than spheres; **hover** / **touch** disclosure of **id** and **coordinates**), **REQ-011** (**REST** **read/write** of per-light **on/off**, **hex** **#RRGGBB** colour, **brightness** **0–100%**, persisted in **SQLite**), **REQ-012** (**3D** **spheres** reflect state: **on** = **opaque** **filled** **colour** × **brightness**; **off** = **`#D0D0D0`** at **85% transparency** matching segments; **timely** UI sync after **writes**), **REQ-013** (**model detail**: **paginated** light **list** with **page-size** control and **go to id**; **multi-select** and **bulk apply** via **batch** **PATCH**), **REQ-014** (**default** all lights **off**, **`#FFFFFF`**, **100%** brightness on create/seed; **reset** control + **authoritative** API to restore that state for **all** lights in **one** action), **REQ-015** (**scenes**: **named** **composite** **3D** **space**; **create** with **≥ 1** **model** **and** **server-computed** **integer** **offsets** **(no** **client-supplied** **offsets** **on** **create)**; **canonical** **`lights.x/y/z`** **unchanged** **by** **scenes**; **derived** **`sx/sy/sz`** **=** **canonical** **+** **offset** **for** **API**/**UI** **in** **scene** **context**; **non-negative** **containment** **+** **≥ 1 m** **margin** **beyond** **max** **extent** **per** **axis**; **three.js** **composite** **view** **reusing** **REQ-010**/**012** **per** **model**; **add**/**remove**/**optional** **placement** **edit** **after** **create**; **last** **model** **→** **confirm** **then** **delete** **scene**; **+X** **default** **for** **models** **added** **after** **create**), **REQ-016** (**camera reset** on **model** and **scene** **three.js** views: **client-only** restore of **default** **framing**; **no** **persisted** **data** **changes**), **REQ-017** (**Options** **UI** with **factory reset**: **confirmed** **wipe** of **all** **SQLite** **application** **data** **then** **re-seed** **§3.8** **samples** **to** **match** **fresh** **install**), **REQ-018** (**application** **shell**: **light**/**dark** **themes** (**white**/dark **grey** **surfaces**, **dark**/ **white** **primary** **text**); **collapsible** **left** **nav** **with** **burger** **toggle**; **branding** **title** **`Domestic Light & Magic`** **+** **Font Awesome** **classic** **regular** **lightbulb** **logo**; **Font Awesome** **icons** **on** **action** **buttons** **throughout** **the** **UI** **per** **§4.11**; **default** **theme** **follows** **`prefers-color-scheme`** **until** **the** **user** **overrides** **with** **a** **persisted** **choice**), **REQ-019** (**model** **and** **scene** **three.js** **views**; **fixed** **dark-grey** **WebGL** **backdrop** **in** **both** **shell** **themes**; **§4.7** **and** **§4.9**), **REQ-020** (**scene spatial API** for **dimensions**, **all-lights retrieval**, **cuboid/sphere filtering**, **cuboid/sphere bulk updates**, **whole-scene** **`…/state/scene`**, **and** **per-light** **`…/state/batch`** **in** **§3.15**, **all** in **scene coordinates** without rewriting canonical model coordinates; **§3.15**, **§8.15**), and **REQ-021** (**scene** **routines**: **persisted** **definitions**; **start**/**stop** **runs** **per** **scene**; **in-process** **scheduler** **uses** **only** **§3.15** **scene** **state** **endpoints** **(shared** **`store`** **with** **HTTP** **handlers)** **—** **not** **`/models/.../lights`** **for** **routine** **effects**; **one** **active** **run** **per** **scene**; **first** **type** **`random_colour_cycle_all`**; **§3.14**, **§3.16**, **§4.12**, **§8.16**).
 
 ## Architectural resolution: REQ-004 (single binary) vs Next.js
 
@@ -36,10 +36,11 @@ This meets REQ-004 rule 1 (**no separate Node.js runtime** in the distribution) 
 | REQ-014 | **Insert defaults** **on=false**, **`color="#ffffff"`**, **`brightness_pct=100`** (**§3.9**); **`POST …/lights/state/reset`** (**§3.11**); **model detail** **Reset** button (non–hover-only) calls reset then merges **`states`** into **UI** + **§4.7** (**§4.6**, **§8.9**). |
 | REQ-015 | **`scenes`** + **`scene_models`** (**§3.12**); **`POST /scenes`** **computes** **all** **offsets** **from** **ordered** **`model_id`** **list**; **`GET /models/{id}`** **unchanged** **(canonical** **coords)**; **`GET /scenes/{id}`** **returns** **`x,y,z`** **+** **`sx,sy,sz`** (**§3.13**); **composite** **three.js** **§4.9**; **409** **`model_in_scenes`** (**§3.2**, **§8.4**). |
 | REQ-016 | **§4.7** / **§4.9**: **`Reset camera`** **control** **re-applies** **`applyDefaultFraming`** **(same** **pure** **function** **as** **initial** **load** **from** **current** **bounds**)**; **`OrbitControls`** **target** **+** **camera** **position** **+** **`update()`**; **does** **not** **call** **API**. **§4.10** **IA** **optional** **link** **only**—**primary** **placement** **adjacent** **to** **viewport**. |
-| REQ-017 | **`POST /api/v1/system/factory-reset`** (**§3.2**, **§3.14**); **`store.FactoryReset`** **transaction** **then** **`SeedDefaultSamples`**; **Options** **route** **§4.10** **+** **modal** **before** **POST**; **post-success** **navigate** **`/models`** **+** **success** **message** (**architectural** **default** **for** **REQ-017** **open** **question**). |
+| REQ-017 | **`POST /api/v1/system/factory-reset`** (**§3.2**, **§3.14**); **`store.FactoryReset`** **transaction** **deletes** **`routine_runs`** **+** **`routines`** **before** **scenes**/**models** **then** **`SeedDefaultSamples`**; **Options** **route** **§4.10** **+** **modal** **before** **POST**; **post-success** **navigate** **`/models`** **+** **success** **message** (**architectural** **default** **for** **REQ-017** **open** **question**). |
 | REQ-018 | **§4.11**: **Tailwind** **`dark:`** **variant** on **`html`** (**add**/**remove** **`class="dark"`** **or** **`data-theme="dark"`** **per** **Tailwind** **v4**/**v3** **config**); **before** **any** **stored** **user** **choice**, **derive** **initial** **light**/**dark** **from** **`window.matchMedia('(prefers-color-scheme: dark)')`** **(or** **equivalent**)** **when** **available**; **fallback** **to** **light** **if** **the** **platform** **does** **not** **expose** **a** **scheme**; **after** **the** **user** **toggles** **theme**, **persist** **`light`** **or** **`dark`** **in** **`localStorage`** **key** **`dlm-theme`** **and** **re-apply** **on** **load** **before** **first** **paint** **(inline** **blocking** **script** **in** **`layout`** **recommended** **to** **avoid** **flash**)** **so** **the** **persisted** **value** **overrides** **`prefers-color-scheme`** **until** **cleared** **or** **changed**; **shell** **tokens**: **light** **`bg-white`** **+** **`text-gray-900`**; **dark** **`bg-gray-900`** **+** **`text-white`** (**dark** **grey** **background**, **not** **mandating** **`#000`**); **`AppShell`**: **header** **(burger,** **`faLightbulb`** **regular** **logo,** **exact** **title** **`Domestic Light & Magic`**, **theme** **toggle** **with** **icons)** **+** **collapsible** **left** **`<aside>`** **nav** **+** **`main`**; **Font Awesome** **Free** **`@fortawesome/fontawesome-svg-core`**, **`@fortawesome/react-fontawesome`**, **`@fortawesome/free-regular-svg-icons`**, **`@fortawesome/free-solid-svg-icons`**; **buttons** **and** **button-styled** **controls** **include** **a** **visible** **Font Awesome** **icon** **+** **accessible** **name**. |
 | REQ-019 | **§4.7**, **§4.9**: **`ModelLightsCanvas`** **/** **`SceneLightsCanvas`** **set** **a** **fixed** **dark-grey** **clear** **/** **scene** **background** **and** **matching** **letterbox** **wrapper** **(see** **§4.7** **viewport** **subsection**)** **independent** **of** **`html`** **`dark`** **class**; **does** **not** **replace** **REQ-018** **shell** **tokens** **for** **`main`** **chrome**. |
-| REQ-020 | **§3.2**, **§3.12**, **§3.13**, **§3.15**, **§8.15**: scene-space API endpoints for dimensions + full/filtered light retrieval (cuboid/sphere) + transactional bulk updates by cuboid/sphere region, all computed from derived scene coordinates (**`sx/sy/sz`**) and validated with explicit geometry rules. |
+| REQ-020 | **§3.2**, **§3.12**, **§3.13**, **§3.15**, **§8.15**: scene-space API for dimensions + full/filtered light retrieval (cuboid/sphere) + transactional bulk updates (cuboid/sphere + **whole-scene** **`PATCH …/lights/state/scene`**), all computed from derived scene coordinates (**`sx/sy/sz`**) and validated with explicit geometry rules. |
+| REQ-021 | **§3.2**, **§3.14**, **§3.15**, **§3.16**, **§4.9**, **§4.11**, **§4.12**, **§8.16**: routine definitions CRUD + scene-scoped start/stop + in-process run scheduler calling **only** **§3.15** scene endpoints for automation; type **`random_colour_cycle_all`**; **one** active run per scene; **409** on delete while active. |
 
 **Assumed Pi context:** Raspberry Pi 4 Model B, **64-bit OS**, **ARM64** userspace. **2–8 GB RAM** — with **no Node** at runtime, **4 GB** is practical for modest traffic; **off-device** `next export` builds recommended.
 
@@ -90,9 +91,9 @@ dlm/
 - **Module path:** `example.com/dlm/backend` (or successor); unchanged conceptually.
 - **`cmd/server`:** Load config; construct **`http.Server`**; mount **API sub-router** and **static file server** from **`embed`**; graceful **SIGINT/SIGTERM** shutdown.
 - **`internal/config`:** **Env-based** listen address, timeouts, optional **CORS** (primarily for **dev** when UI dev server uses another origin); production **same-origin** reduces CORS; **SQLite** path via **`DLM_DB_PATH`** and/or **`DLM_DATA_DIR`** (**§3.3**).
-- **`internal/httpapi`:** Middleware (**request ID**, **slog**, **recover**, optional **CORS**); **JSON** handlers and error envelope `{ "error": { "code", "message", "details"? } }`; **models**, **light-state**, and **scenes** routes (including **batch** **PATCH** per **§3.10** and **scene-region** query/update routes per **§3.15**) delegate to **`internal/store`** and **`internal/wiremodel`**.
+- **`internal/httpapi`:** Middleware (**request ID**, **slog**, **recover**, optional **CORS**); **JSON** handlers and error envelope `{ "error": { "code", "message", "details"? } }`; **models**, **light-state**, **scenes**, **scene-region** routes (**§3.15**), and **routines**/**routine-runs** (**§3.16**) delegate to **`internal/store`** and **`internal/wiremodel`**; **routine** **scheduler** (**§3.16**) runs **inside** **`cmd/server`** (same process as HTTP).
 - **`internal/wiremodel`:** Parses and validates uploaded **CSV** per **§3.6**; returns structured errors for HTTP **400** responses (**REQ-007**).
-- **`internal/store`:** **SQLite** repository (see **§3.3**, **§3.12**); opened at process start; migrations or `CREATE IF NOT EXISTS` for schema (**REQ-006**); **idempotent default seed** when no models exist (**§3.8**, **REQ-009**); **scene** CRUD and **reference** checks for **model** **delete** (**REQ-015**, **REQ-006** rule **5**).
+- **`internal/store`:** **SQLite** repository (see **§3.3**, **§3.12**, **§3.16**); opened at process start; migrations or `CREATE IF NOT EXISTS` for schema (**REQ-006**); **idempotent default seed** when no models exist (**§3.8**, **REQ-009**); **scene** CRUD and **reference** checks for **model** **delete** (**REQ-015**, **REQ-006** rule **5**); **routines** and **`routine_runs`** persistence (**§3.16**).
 - **`internal/samples`:** Pure functions that return **`[]wiremodel.Light`** (sequential **id**s from **0**) for the three canonical shapes: **on-surface** positions, **even** coverage per **§3.8**, consecutive **dᵢ** in band; no I/O (**REQ-009**).
 
 ### 3.2 HTTP surface
@@ -117,6 +118,14 @@ dlm/
 | API | `POST /api/v1/scenes/{id}/lights/query/sphere` | Return only lights inside a caller-supplied sphere in scene space. **REQ-020** |
 | API | `PATCH /api/v1/scenes/{id}/lights/state/cuboid` | Transactional bulk state update for all lights inside a cuboid in scene space; state semantics match **REQ-011**. **REQ-020** |
 | API | `PATCH /api/v1/scenes/{id}/lights/state/sphere` | Transactional bulk state update for all lights inside a sphere in scene space; state semantics match **REQ-011**. **REQ-020** |
+| API | `PATCH /api/v1/scenes/{id}/lights/state/scene` | Transactional bulk state update for **every** light currently in the scene (all derived **`sx/sy/sz`**); body is **only** **`on`**, **`color`**, **`brightness_pct`** (at least one required); **no** geometry object. **REQ-020** (**uniform** **whole-scene** **patch** **for** **routines** **§3.16**) |
+| API | `PATCH /api/v1/scenes/{id}/lights/state/batch` | Transactional **per-light** **updates** **within** **one** **scene**: body **`{ "updates": [ { "model_id", "light_id", "on"?, "color"?, "brightness_pct"? }, … ] }`** — **each** **object** **identifies** **one** **light** **by** **`model_id` + `light_id` (idx)** **and** **must** **be** **a** **member** **of** **the** **scene** **at** **request** **time** **else** **`400`**; **at** **least** **one** **state** **field** **per** **element**; **partial** **merge** **per** **row** **like** **§3.9**; **all** **or** **nothing** **in** **one** **transaction**. **REQ-020** (**scene-level** **batch** **for** **routines** **and** **integrators** **§3.15**) |
+| API | `GET /api/v1/routines` | List routine definitions (**id**, **name**, **description**, **type**, **created_at**). **REQ-021** |
+| API | `POST /api/v1/routines` | Create definition: **`{ "name", "description", "type" }`** — **`name`** and **`type`** **non-empty** **trimmed**; **`description`** **string** **(may** **be** **`""`)**. **201** + full row. Unknown **`type`** → **400**. **REQ-021** |
+| API | `DELETE /api/v1/routines/{id}` | Delete definition. **204** / **404**. **409** **`routine_run_active`** if a **persisted** **run** **row** **exists** **with** **`status=running`** **for** **this** **`routine_id`** (**§3.16**). **REQ-021** |
+| API | `POST /api/v1/scenes/{id}/routines/{routineId}/start` | Start (or **idempotently** **confirm**) an **automated** **run** **of** **`routineId`** **on** **scene** **`id`**. **201** **`{ "run_id", "scene_id", "routine_id", "status" }`** **or** **200** **if** **already** **running** **same** **pair** **(see** **§3.16**)**. **404** missing scene or routine; **409** **`scene_routine_conflict`** if **another** **routine** **already** **has** **`status=running`** **on** **this** **scene**. **REQ-021** |
+| API | `POST /api/v1/scenes/{id}/routines/runs/{runId}/stop` | Stop **run** **`runId`** **if** **it** **belongs** **to** **scene** **`id`**. **200** **`{ "run_id", "status": "stopped" }`** **or** **204**. **404** if **mismatch** **or** **unknown**. **REQ-021** |
+| API | `GET /api/v1/scenes/{id}/routines/runs` | **`200`**: **`{ "runs": [ { "id", "routine_id", "routine_name", "status" } ] }`** — **only** **`status=running`** **rows** **for** **this** **scene** (**empty** **array** **or** **one** **element** **per** **§3.16** **concurrency** **rule**). **REQ-021** |
 | API | `GET /api/v1/models/{id}/lights/state` | **All** lights’ **state** for the model (**ordered** by **`id`**). **REQ-011** |
 | API | `GET /api/v1/models/{id}/lights/{lightId}/state` | **One** light’s **state** (**404** if model or **lightId** missing). **REQ-011** |
 | API | `PATCH /api/v1/models/{id}/lights/{lightId}/state` | **Partial** update of **`on`**, **`color`**, **`brightness_pct`** (JSON body; omitted fields unchanged). **200** returns the **full** **updated** **state** object. **REQ-011** |
@@ -126,7 +135,7 @@ dlm/
 | API | `/api/v1/*` | Other versioned **JSON** endpoints as the product grows. |
 | Static | `/`, `/*.html`, **`/_next/**`**, other export assets | **Next static export** tree from embed; **SPA / HTML5** fallback policy: serve **`index.html`** for unmatched **non-API** GET if needed (implementor defines exact fallback rules). |
 
-**Ordering:** Register **API** routes **before** static/`NotFound` handling so `/api/v1` is never swallowed by UI fallback.
+**Ordering:** Register **API** routes **before** static/`NotFound` handling so `/api/v1` is never swallowed by UI fallback. Register **literal** **path** **segments** **`routines`**, **`start`**, **`stop`**, **`factory-reset`**, **`reset`**, **`state`**, **`batch`**, **`system`** **before** **any** **`{id}`** **pattern** **that** **could** **swallow** **them**.
 
 ### 3.3 Persistence (**REQ-006**)
 
@@ -384,14 +393,16 @@ Requirements demand **both** **even** **2D/area** placement **and** **consecutiv
 **Store API (conceptual):** **`FactoryReset(ctx) error`** **in** **`internal/store`:**
 
 1. **`BEGIN IMMEDIATE`**.
-2. **`DELETE FROM scene_models`** **(order** **deletes** **to** **satisfy** **foreign** **keys** **—** **child** **tables** **first** **per** **actual** **`ON DELETE`** **clauses**)**.**
-3. **`DELETE FROM scenes`**.
-4. **`DELETE FROM lights`**.
-5. **`DELETE FROM models`**.
-6. **Run** **the** **same** **insert** **logic** **as** **`SeedDefaultSamples`** **(**§3.8**)** **inside** **this** **transaction** **—** **if** **today’s** **`SeedDefaultSamples`** **opens** **its** **own** **transaction**, **refactor** **so** **the** **insert** **path** **can** **run** **on** **a** **supplied** **`*sql.Tx`** **(or** **equivalent**)** **without** **an** **intermediate** **`COMMIT`**.
-7. **`COMMIT`**.
+2. **`DELETE FROM routine_runs`** **(or** **equivalent** **child** **table** **name** **—** **must** **clear** **before** **`routines`** **if** **FK** **from** **runs** **→** **routines**)**.**
+3. **`DELETE FROM routines`**.
+4. **`DELETE FROM scene_models`** **(order** **deletes** **to** **satisfy** **foreign** **keys** **—** **child** **tables** **first** **per** **actual** **`ON DELETE`** **clauses**)**.**
+5. **`DELETE FROM scenes`**.
+6. **`DELETE FROM lights`**.
+7. **`DELETE FROM models`**.
+8. **Run** **the** **same** **insert** **logic** **as** **`SeedDefaultSamples`** **(**§3.8**)** **inside** **this** **transaction** **—** **if** **today’s** **`SeedDefaultSamples`** **opens** **its** **own** **transaction**, **refactor** **so** **the** **insert** **path** **can** **run** **on** **a** **supplied** **`*sql.Tx`** **(or** **equivalent**)** **without** **an** **intermediate** **`COMMIT`**.
+9. **`COMMIT`**.
 
-**Invariants:** **No** **commit** **unless** **steps** **2–6** **all** **succeed**; **on** **error**, **`ROLLBACK`** **and** **return** **500** **with** **a** **generic** **message** **(client** **may** **offer** **retry** **copy**)**.** **After** **200**, **`GET /api/v1/models`** **lists** **only** **the** **three** **samples**; **`GET /api/v1/scenes`** **is** **empty**.
+**Invariants:** **No** **commit** **unless** **steps** **2–8** **all** **succeed**; **on** **error**, **`ROLLBACK`** **and** **return** **500** **with** **a** **generic** **message** **(client** **may** **offer** **retry** **copy**)**.** **After** **200**, **`GET /api/v1/models`** **lists** **only** **the** **three** **samples**; **`GET /api/v1/scenes`** **is** **empty**; **`GET /api/v1/routines`** **is** **empty**.
 
 **Security / abuse:** **Endpoint** **is** **unauthenticated** **(same** **as** **the** **rest** **of** **the** **MVP** **API**)**.** **Operator** **documentation** **should** **state** **that** **any** **client** **that** **can** **reach** **the** **server** **can** **invoke** **factory** **reset**; **future** **auth** **may** **protect** **this** **route** **first**.
 
@@ -441,7 +452,19 @@ This section extends **REQ-015** scene composition with explicit API contracts f
 
 - **`PATCH /api/v1/scenes/{id}/lights/state/cuboid`**
 - **`PATCH /api/v1/scenes/{id}/lights/state/sphere`**
-- Request body = geometry payload + at least one state field (`on`, `color`, `brightness_pct`).
+- **`PATCH /api/v1/scenes/{id}/lights/state/scene`** — **whole-scene** **uniform** update (**REQ-020** **+** **REQ-021**):
+  - **Body:** **`{ "on"?, "color"?, "brightness_pct"? }`** with **at least one** field present (**same** **partial-merge** **semantics** **as** **per-light** **PATCH** **§3.9** **—** **omitted** **fields** **leave** **existing** **DB** **values** **unchanged**).
+  - **Matching set:** **every** **light** **row** **reachable** **through** **current** **`scene_models`** **for** **`scene_id`** **(zero** **lights** **is** **valid** **—** **`updated_count: 0`**).
+  - **Transaction:** **one** **`UPDATE`** **wave** **(or** **batched** **updates)** **per** **matched** **`(model_id, idx)`**; **rollback** **on** **any** **validation** **failure** **(e.g.** **invalid** **hex** **after** **merge**)**.
+  - **Response:** **same** **shape** **as** **region** **bulk** **updates** **(recommended** **`updated_count` + `states[]`)** **—** **MAY** **omit** **`sx/sy/sz`** **in** **`states`** **if** **payload** **size** **is** **a** **concern**.
+
+- **`PATCH /api/v1/scenes/{id}/lights/state/batch`** — **per-light** **updates** **scoped** **to** **one** **scene** (**REQ-020** **extension** **for** **REQ-021** **and** **integrators**):
+  - **Body:** **`{ "updates": [ { "model_id": "<uuid>", "light_id": <int>, "on"?, "color"?, "brightness_pct"? }, … ] }`**.
+  - **Rules:** **`updates`** **non-empty**; **no** **duplicate** **`(model_id, light_id)`** **in** **the** **array**; **each** **`(model_id, light_id)`** **must** **exist** **in** **`lights`** **and** **`scene_models`** **for** **`scene_id`**; **each** **element** **has** **≥ 1** **of** **`on`**, **`color`**, **`brightness_pct`**; **validate** **merged** **state** **per** **row** **like** **§3.9**/**§3.10**.
+  - **Transaction:** **all** **rows** **updated** **in** **one** **`BEGIN…COMMIT`**; **on** **any** **error**, **rollback** **(no** **partial** **apply**)**.
+  - **Response:** **`{ "updated_count": <int>, "states": [ { "model_id", "id", "on", "color", "brightness_pct" }, … ] }`** **in** **request** **order** **or** **sorted** **by** **`model_id`** **then** **`id`** **(document** **chosen** **order**)**.
+
+- Request body for **cuboid**/**sphere** = geometry payload + at least one state field (`on`, `color`, `brightness_pct`).
 - Execution model:
   1. Validate scene id exists and geometry/state payload is valid.
   2. Resolve matching lights by derived coordinates (`sx/sy/sz`) from current scene composition.
@@ -456,6 +479,41 @@ This section extends **REQ-015** scene composition with explicit API contracts f
 - Geometry validation failure → **`400`** with `error.code = "validation_failed"` and actionable `details`.
 - Scene missing → **`404`**.
 - Any transactional failure after validation → **`500`** with generic message (no partial writes committed).
+
+### 3.16 Scene routines — persistence, HTTP, scheduler (**REQ-021**)
+
+**Resolved requirements open questions (architecture):**
+
+- **Machine-readable type** for the **first** routine: **`random_colour_cycle_all`** (display name **“Random colour cycle (all lights)”** **or** **equivalent** **in** **UI** **copy**).
+- **Concurrency:** **At most one** **`routine_runs`** row with **`status = 'running'`** **per** **`scene_id`**. **Starting** a **second** **routine** **on** **the** **same** **scene** **while** **one** **is** **running** → **`409`** **`scene_routine_conflict`** **with** **actionable** **`details`** **(existing** **`run_id`**, **`routine_id`)**.
+- **Delete while running:** **`DELETE /api/v1/routines/{id}`** **is** **blocked** **`409`** **`routine_run_active`** **if** **any** **`routine_runs`** row **for** **that** **`routine_id`** **has** **`status = 'running'`**. **Stop** **the** **run** **first** **(or** **delete** **the** **scene** **after** **stopping**)**.
+
+**Tables (logical, SQLite):**
+
+| Table | Columns | Notes |
+|-------|---------|--------|
+| **`routines`** | `id` (TEXT **UUID** PK), `name` (TEXT **NOT NULL**), `description` (TEXT **NOT NULL**, **allow** **`""`**), `type` (TEXT **NOT NULL** — **machine** **identifier** **e.g.** **`random_colour_cycle_all`**), `created_at` (TEXT **RFC3339** UTC) | **No** **FK** **to** **scenes** **(definitions** **are** **global**)**. |
+| **`routine_runs`** | `id` (TEXT **UUID** PK), `routine_id` (TEXT **FK** → **`routines.id`** **ON DELETE RESTRICT**), `scene_id` (TEXT **FK** → **`scenes.id`** **ON DELETE CASCADE**), `status` (TEXT **NOT NULL**: **`running`** \| **`stopped`**), `started_at`, `stopped_at` (TEXT **RFC3339** **nullable** **for** **`stopped_at`**) | **UNIQUE** **partial** **index** **recommended:** **at** **most** **one** **`running`** **row** **per** **`scene_id`** **(enforce** **in** **store** **transaction** **+** **index** **or** **`UNIQUE(scene_id)`** **where** **`status='running'`** **if** **SQLite** **version** **supports** **partial** **UNIQUE**)**. **When** **scene** **deleted**, **runs** **for** **that** **scene** **cascade** **away** **(scheduler** **drops** **in-memory** **handle** **on** **next** **tick** **or** **via** **explicit** **cancel** **hook**)**. |
+
+**Routine types (extensibility):**
+
+- **`random_colour_cycle_all`:** **REQ-021** **step** **(a)** **then** **(b)** **map** **to** **HTTP** **as** **follows** **(same** **semantics** **if** **the** **scheduler** **calls** **shared** **`store`** **code** **without** **loopback** **HTTP** **—** **see** **below**)**:**
+  1. **Turn** **every** **light** **on** **at** **100%** **brightness** **with** **a** **valid** **hex** **colour:** **`PATCH /api/v1/scenes/{id}/lights/state/scene`** **with** **`{ "on": true, "brightness_pct": 100, "color": "#ffffff" }`** **(or** **any** **valid** **fixed** **hex**)**.
+  2. **Assign** **each** **light** **an** **independent** **uniform** **random** **`#rrggbb`:** **build** **`updates[]`** **with** **one** **object** **per** **light** **`(model_id, light_id)`** **in** **the** **scene**, **each** **with** **`on: true`**, **`brightness_pct: 100`**, **`color`** **drawn** **uniformly** **from** **24-bit** **RGB** **(e.g.** **`crypto/rand`** **or** **`math/rand`** **seeded** **once** **at** **process** **start** **—** **document** **choice**)** **and** **validated** **with** **the** **same** **function** **as** **REQ-011** **writes**. **Apply** **`PATCH /api/v1/scenes/{id}/lights/state/batch`** **with** **that** **`updates`** **array** **(§3.15)**.
+  3. **On** **each** **subsequent** **scheduler** **tick** **while** **`running`:** **repeat** **step** **2** **with** **fresh** **random** **`color`** **values** **(still** **`on: true`**, **`brightness_pct: 100`** **on** **every** **row** **so** **external** **off** **commands** **do** **not** **strand** **lights** **off** **while** **the** **routine** **runs**)**.
+
+**REQ-021 rule 3 (scene API only):** **Routine** **automation** **MUST** **not** **use** **`PATCH /api/v1/models/{id}/lights/…`** **for** **effects** **that** **are** **part** **of** **the** **routine**. **Use** **only** **`PATCH /api/v1/scenes/{id}/lights/state/*`** **endpoints** **(including** **`…/scene`** **and** **`…/batch`** **in** **§3.15**)**. **Preferred** **implementation** **in** **`cmd/server`:** **a** **single** **shared** **`store`** **function** **invoked** **by** **both** **the** **HTTP** **handlers** **and** **the** **routine** **scheduler** **(no** **`http.Client`** **to** **localhost**)** **so** **validation** **and** **SQL** **stay** **identical**.
+
+**Timer cadence (REQ-021 rule 5):** **`cmd/server`** **starts** **one** **`time.Ticker`** **with** **period** **`1s`** **after** **the** **HTTP** **server** **is** **ready**. **Each** **tick:** **for** **each** **`routine_runs`** **row** **with** **`status='running'`** **(or** **an** **in-memory** **set** **mirrored** **from** **DB** **on** **start/stop**)** **run** **the** **type** **handler**. **Ticks** **are** **not** **aligned** **to** **UTC** **second** **boundaries**; **at** **most** **one** **colour** **advance** **per** **~1** **s** **of** **scheduler** **time**. **Under** **CPU** **load** **on** **Pi**, **a** **tick** **may** **slip** **(document** **best-effort** **timing** **in** **README**)**.
+
+**Start/stop semantics:**
+
+- **`POST …/start`:** **Validate** **scene** **+** **routine** **exist** **and** **`type`** **is** **implemented**. **If** **a** **`running`** **row** **already** **exists** **for** **`(scene_id, routine_id)`:** **`200`** **idempotent** **`{ "run_id", "status": "running" }`** **(no** **new** **row**)**. **Else** **if** **another** **`running`** **row** **exists** **for** **`scene_id`:** **`409`**. **Else** **insert** **`routine_runs`** **`running`**, **then** **before** **`201`:** **run** **steps** **1** **and** **2** **above** **synchronously** **(shared** **`store`** **or** **internal** **call** **chain)** **so** **the** **client** **sees** **all** **lights** **on** **with** **per-light** **random** **colours** **immediately**; **on** **failure**, **rollback** **the** **insert** **and** **return** **`4xx`/`5xx`** **without** **leaving** **a** **`running`** **row**.
+- **`POST …/stop`:** **Set** **`status=stopped`**, **`stopped_at=now`**. **Idempotent** **if** **already** **stopped**. **Scheduler** **skips** **stopped** **rows**.
+
+**Scene deletion:** **`ON DELETE CASCADE`** **on** **`routine_runs.scene_id`** **cleans** **DB** **rows**; **server** **MUST** **remove** **any** **in-memory** **scheduler** **subscription** **for** **that** **`scene_id`** **(e.g.** **on** **next** **tick** **diff** **or** **`DeleteScene`** **callback**)**.
+
+**UI support:** **§4.12**.
 
 ---
 
@@ -492,7 +550,7 @@ Unchanged intent: **Tailwind breakpoints**, **touch targets**, **`"use client"`*
 - **Routes (App Router):** e.g. **`/models`** (list), **`/models/new`** (upload form: **name** text input + **file** input), **`/models/[id]`** (detail: metadata; **§4.8** **paginated** light **table** + **§4.7** **3D** view; per-light or bulk controls per **REQ-011** / **REQ-013**; **Reset lights** **button** calling **`POST …/lights/state/reset`** per **§3.11** (**REQ-014**), **reachable** on **mobile** / **tablet** / **desktop** without **hover-only** use). **Model** **delete** **control:** on **`409`** **`model_in_scenes`**, **show** **`error.message`** **and** **`details.scenes`** (names/links to **`/scenes/{id}`**) per **§3.13**.
 - **Client data:** **`"use client"`** pages/components call **`fetch`** with **`GET`**, **`POST`** (**`FormData`** for multipart), **`DELETE`**, and **`PATCH`** (**JSON**) against **`/api/v1/models…`** on the **same origin** (**§4.3**).
 - **Feedback:** Inline / banner display of **400** / **409** **`message`** from API; loading states on list, detail, upload, and delete (**REQ-002**).
-- **Navigation:** **Primary** **IA** **is** **the** **collapsible** **left** **nav** **in** **§4.11** (**Models**, **Scenes**, **Options**, **home** **`/`** **if** **distinct**); **no** **hover-only** **paths** **to** **these** **destinations** (**REQ-002**, **REQ-018**).
+- **Navigation:** **Primary** **IA** **is** **the** **collapsible** **left** **nav** **in** **§4.11** (**Models**, **Scenes**, **Routines**, **Options**, **home** **`/`** **if** **distinct**); **no** **hover-only** **paths** **to** **these** **destinations** (**REQ-002**, **REQ-018**).
 
 ### 4.7 Three.js visualization on model detail (**REQ-010**, **REQ-012**, **REQ-016**, **REQ-019**)
 
@@ -564,10 +622,12 @@ Unchanged intent: **Tailwind breakpoints**, **touch targets**, **`"use client"`*
 
 **Accessibility / responsive:** Table **MAY** **stack** as **cards** on **narrow** **viewports**; **checkboxes** and **bulk** **panel** remain **reachable** **without** **hover-only** **affordances** (**REQ-013** rule 7).
 
-### 4.9 Scenes UI and composite three.js (**REQ-015**, **REQ-010**, **REQ-012**, **REQ-016**, **REQ-019**)
+### 4.9 Scenes UI and composite three.js (**REQ-015**, **REQ-010**, **REQ-012**, **REQ-016**, **REQ-019**, **REQ-021**)
 
 - **Routes:** **`/scenes`** (list), **`/scenes/new`** (**create** **flow**: **scene** **name** + **ordered** **multi-select** **of** **≥ 1** **model** **—** **no** **per-row** **offset** **inputs**; **submit** **`POST /api/v1/scenes`** **with** **`models`** **in** **that** **order** **and** **let** **the** **server** **compute** **offsets** **per** **§3.12**), **`/scenes/[id]`** (**detail** **composite** **view** **+** **optional** **offset** **editing** **via** **`PATCH …/models/{modelId}`** **after** **create**).
+- **Routines on scene detail (REQ-021):** **Panel** **or** **toolbar** **region** **with** **`GET /api/v1/routines`** **(populate** **a** **`<select>`** **or** **list** **of** **definitions**)**; **`POST …/scenes/{id}/routines/{routineId}/start`** **and** **`POST …/scenes/{id}/routines/runs/{runId}/stop`** **with** **Font Awesome** **icons** **on** **buttons**. **After** **`GET /api/v1/scenes/{id}/routines/runs`**, **show** **active** **run** **(routine** **name** **+** **Stop**)** **or** **“No** **routine** **running”**. **On** **`409`** **`scene_routine_conflict`**, **surface** **`error.message`** **and** **suggest** **stopping** **the** **other** **routine** **first**.
 - **Data:** **`GET /api/v1/scenes`**, **`POST /api/v1/scenes`**, **`GET /api/v1/scenes/{id}`**, **`POST …/models`**, **`PATCH …/models/{modelId}`**, **`DELETE …/models/{modelId}`**, **`DELETE /api/v1/scenes/{id}`** per **§3.13**. **On** **`409`** **`scene_last_model`**, **show** **modal** **copy** **that** **removing** **the** **last** **model** **deletes** **the** **entire** **scene**; **on** **confirm**, **`DELETE /api/v1/scenes/{id}`** **then** **redirect** **to** **`/scenes`**.
+- **Live updates while a routine runs:** **While** **`/scenes/[id]`** **is** **mounted** **and** **`GET …/routines/runs`** **shows** **`running`**, **poll** **`GET /api/v1/scenes/{id}`** **every** **`≤ 2 s`** **(architectural** **default** **between** **§4.7** **5** **s** **and** **routine** **1** **s** **cadence**)** **and** **merge** **`items[].lights`** **into** **`SceneLightsCanvas`** **state** **so** **REQ-012** **is** **not** **indefinitely** **stale** **during** **automation**. **Stop** **polling** **when** **no** **run** **is** **active** **or** **on** **unmount**.
 - **Composite** **three.js:** **Refactor** **or** **duplicate** **§4.7** **patterns** **into** **a** **`SceneLightsCanvas`** **(or** **extend** **`ModelLightsCanvas`**) **that** **accepts** **`items[]`**: **for** **each** **model**, **build** **the** **same** **2** **cm** **spheres** **and** **`#D0D0D0`** **`opacity`** **0.15** **segments** **between** **consecutive** **`id`** **only** **within** **that** **model**, **using** **`sx`, `sy`, `sz`** **from** **API** **(or** **client-composed** **positions** **identical** **to** **server** **rules**). **No** **segments** **between** **models**. **Per-light** **state** **materials** **match** **§4.7** (**REQ-012**). **Apply** **the** **same** **REQ-019** **fixed** **dark-grey** **viewport** **treatment** **as** **§4.7** **(scene** **background** **+** **renderer** **clear** **+** **letterbox** **wrapper**)**. **Picking** **must** **identify** **which** **model** **and** **which** **light** **id** **for** **hover**/**tap** **(show** **scene** **coordinates** **and** **model** **id** **+** **light** **`id`** **as** **needed**).
 - **Framing (REQ-016):** **Fit** **camera** **to** **§3.12** **AABB** **`[0,0,0]`** **–** **`(Mmax+1)`** **per** **axis** **plus** **marker** **radius** **margin** **using** **the** **same** **`applyDefaultFraming`** **pattern** **as** **§4.7** **but** **with** **bounds** **derived** **from** **scene-space** **positions** **`(sx,sy,sz)`** **for** **all** **lights**. **A** **“Reset camera”** **control** **on** **the** **scene** **canvas** **re-invokes** **that** **same** **fit** **(no** **API** **call**)**.**
 - **Add** **model** **control:** **calls** **`POST …/scenes/{id}/models`** **without** **offsets** **to** **get** **default** **+X** **placement** **or** **with** **explicit** **integers** **after** **user** **edit**. **Placement** **inputs** **validate** **≥ 0** **client-side** **for** **fast** **feedback**; **authoritative** **errors** **from** **API** **400**.
@@ -577,11 +637,11 @@ Unchanged intent: **Tailwind breakpoints**, **touch targets**, **`"use client"`*
 
 **Route:** **`/options`** **(App Router)** **or** **equivalent** **single** **page** **with** **`<h1>Options</h1>`** **(or** **product** **title** **+** **“Options”**)** **and** **a** **short** **explanation** **that** **this** **area** **holds** **destructive** **maintenance** **actions**.
 
-**Information architecture:** **“Options”** **lives** **in** **the** **same** **collapsible** **left** **navigation** **as** **Models** **and** **Scenes** (**§4.11**); **when** **the** **aside** **is** **collapsed** **on** **mobile**, **open** **it** **with** **the** **burger** **to** **reach** **all** **three** **(REQ-002**, **REQ-018**).
+**Information architecture:** **“Options”** **lives** **in** **the** **same** **collapsible** **left** **navigation** **as** **Models**, **Scenes**, **and** **Routines** (**§4.11**); **when** **the** **aside** **is** **collapsed** **on** **mobile**, **open** **it** **with** **the** **burger** **to** **reach** **primary** **destinations** **(REQ-002**, **REQ-018**).
 
 **Factory reset row:** **Primary** **button** **or** **destructive-styled** **control** **labeled** **Factory reset** **(or** **Reset all data**)** **opens** **a** **native** **`<dialog>`** **or** **modal** **with:**
 - **Title** **e.g.** **“Erase all data?”**
-- **Body** **text** **stating** **explicitly** **that** **all** **models** **(including** **uploads**)** **and** **all** **scenes** **will** **be** **permanently** **deleted**, **that** **the** **action** **cannot** **be** **undone**, **and** **that** **after** **completion** **only** **the** **three** **default** **sample** **models** **will** **remain**.
+- **Body** **text** **stating** **explicitly** **that** **all** **models** **(including** **uploads**)** **,** **all** **scenes**, **and** **all** **saved** **routines** **(including** **any** **routine** **run** **records**)** **will** **be** **permanently** **deleted**, **that** **the** **action** **cannot** **be** **undone**, **and** **that** **after** **completion** **only** **the** **three** **default** **sample** **models** **will** **remain**.
 - **Cancel** **(default** **focus** **on** **desktop** **where** **appropriate**)** **closes** **with** **no** **request**.
 - **Confirm** **(e.g.** **button** **label** **Erase everything**)** **submits** **`POST /api/v1/system/factory-reset`** **(disable** **while** **in-flight** **to** **prevent** **double** **submit**)**.**
 
@@ -604,7 +664,7 @@ Unchanged intent: **Tailwind breakpoints**, **touch targets**, **`"use client"`*
   - **Branding** **(after** **burger):** **`FontAwesomeIcon`** **with** **`faLightbulb`** **from** **`@fortawesome/free-regular-svg-icons`** — **same** **glyph** **as** [Font Awesome lightbulb classic regular](https://fontawesome.com/icons/lightbulb?f=classic&s=regular). **Adjacent** **visible** **title** **text** **must** **be** **exactly** **`Domestic Light & Magic`** **(REQ-018** **rule** **5**)**.**
   - **Theme** **toggle** **`<button>`** **(right** **or** **next** **to** **branding** **per** **space):** **icons** **`faSun`**/**`faMoon`** **(solid)** **or** **one** **icon** **that** **flips** **with** **`aria-pressed`**; **toggle** **between** **light** **and** **dark** **modes**.
 - **Left** **`<aside>`** **(primary** **navigation):**
-  - **When** **expanded:** **vertical** **list** **of** **`next/link`** **entries** **(or** **buttons** **that** **`router.push`**) **for** **`/`** **(home),** **`/models`**, **`/scenes`**, **`/options`** — **each** **row** **is** **a** **button-styled** **control** **with** **a** **Font Awesome** **icon** **+** **label** **(REQ-018** **rule** **7**)**.**
+  - **When** **expanded:** **vertical** **list** **of** **`next/link`** **entries** **(or** **buttons** **that** **`router.push`**) **for** **`/`** **(home),** **`/models`**, **`/scenes`**, **`/routines`**, **`/options`** — **each** **row** **is** **a** **button-styled** **control** **with** **a** **Font Awesome** **icon** **+** **label** **(REQ-018** **rule** **7**)**.**
   - **When** **collapsed** **(narrow** **viewport):** **aside** **is** **off-screen** **or** **`hidden`** **except** **as** **an** **overlay** **drawer** **(full-height** **`fixed`** **panel** **`z-index`** **above** **`main`**) **opened** **by** **burger**; **tapping** **a** **backdrop** **or** **a** **close** **control** **dismisses** **the** **drawer** **(REQ-018** **responsive** **notes** — **no** **focus** **trap** **without** **escape**)**.**
   - **When** **collapsed** **(wide** **desktop):** **optional** **pattern** **—** **narrow** **rail** **(icons** **only)** **vs** **full** **labels**; **burger** **still** **toggles** **between** **those** **two** **widths** **so** **REQ-018** **“collapsible** **left** **menu”** **is** **satisfied** **even** **if** **default** **is** **expanded** **at** **`lg+`**.**
 - **`<main>`** **fills** **remaining** **width** **with** **page** **content**; **apply** **shell** **background**/**text** **tokens** **here** **per** **REQ-018**. **three.js** **viewports** **(REQ-019)** **do** **not** **inherit** **shell** **background** **for** **the** **WebGL** **clear** **/** **scene** **fill**:** **they** **use** **the** **fixed** **dark-grey** **policy** **in** **§4.7** **regardless** **of** **light**/**dark** **shell**.
@@ -626,7 +686,7 @@ Unchanged intent: **Tailwind breakpoints**, **touch targets**, **`"use client"`*
 
 #### Interaction with existing sections
 
-- **§4.6–§4.9:** **Replace** **ad-hoc** **page** **headers** **with** **reliance** **on** **`AppShell`** **title** **area** **where** **redundant**; **page** **`<h1>`** **MAY** **remain** **for** **route** **topic** **(e.g.** **“Models”)** **below** **the** **global** **brand** **strip** **or** **omit** **if** **the** **nav** **already** **disambiguates** **(implementor** **chooses** **minimal** **duplication**)**.**
+- **§4.6–§4.9, §4.12:** **Replace** **ad-hoc** **page** **headers** **with** **reliance** **on** **`AppShell`** **title** **area** **where** **redundant**; **page** **`<h1>`** **MAY** **remain** **for** **route** **topic** **(e.g.** **“Models”)** **below** **the** **global** **brand** **strip** **or** **omit** **if** **the** **nav** **already** **disambiguates** **(implementor** **chooses** **minimal** **duplication**)**.**
 - **§4.7** **/§4.9** **“Reset** **camera”** **and** **other** **toolbar** **buttons:** **each** **gets** **a** **Font Awesome** **icon** **per** **above**.
 
 #### Static export note
@@ -664,6 +724,14 @@ sequenceDiagram
   Shell->>Shell: setNavOpen true or false
   Shell-->>User: Aside drawer or rail expands or collapses
 ```
+
+### 4.12 Routines management UI (**REQ-021**)
+
+- **Route:** **`/routines`** **(App Router)** — **list** **`GET /api/v1/routines`** **in** **a** **table** **or** **card** **list** **(name**, **type**, **description** **truncated**, **created** **date**)**.
+- **Create:** **Form** **POST** **`/api/v1/routines`** **with** **name** **(required)**, **description** **(optional** **empty** **string)**, **type** **`<select>`** **with** **at** **least** **`random_colour_cycle_all`** **(label** **e.g.** **“Random** **colour** **cycle** **(all** **lights)”)** **—** **reject** **unknown** **types** **client-side** **to** **match** **server** **400**.
+- **Delete:** **Per-row** **delete** **button** **`DELETE /api/v1/routines/{id}`**; **on** **`409`** **`routine_run_active`**, **show** **message** **to** **stop** **the** **run** **on** **the** **scene** **first** **(user** **navigates** **via** **scene** **detail** **§4.9**)**.
+- **Run**/**stop** **are** **not** **required** **on** **this** **page** **(optional** **“Open** **scenes”** **link**)**; **primary** **run** **UX** **is** **§4.9** **scene** **detail**.
+- **REQ-002**/**REQ-018:** **All** **actions** **use** **buttons** **with** **Font Awesome** **icons**; **no** **hover-only** **essential** **steps**.
 
 ---
 
@@ -726,7 +794,7 @@ flowchart TB
   B -->|"HTTPS or HTTP"| P
   P -->|"all paths -> one upstream"| G
   B -.->|"Dev: direct to Go :8080"| G
-  G --> DB[(SQLite models + lights + scenes + scene_models)]
+  G --> DB[(SQLite models + lights + scenes + scene_models + routines + routine_runs)]
 ```
 
 ---
@@ -1087,7 +1155,7 @@ sequenceDiagram
   B->>P: POST /api/v1/system/factory-reset
   P->>G: POST
   alt success
-    G->>S: BEGIN; DELETE scene data, lights, models; SeedDefaultSamples; COMMIT
+    G->>S: BEGIN; DELETE routine_runs, routines, scene_models, scenes, lights, models; SeedDefaultSamples; COMMIT
     S-->>G: OK
     G-->>P: 200 { ok: true }
     P-->>B: 200
@@ -1153,6 +1221,51 @@ sequenceDiagram
   end
 ```
 
+### 8.16 Scene routine start, server tick, and stop (**REQ-021**, **§3.16**)
+
+```mermaid
+sequenceDiagram
+  actor User as User device
+  participant B as Browser
+  participant P as Reverse proxy (optional)
+  participant G as Go binary
+  participant T as Routine scheduler (in-process ticker)
+  participant S as SQLite store
+
+  User->>B: Create routine definition
+  B->>P: POST /api/v1/routines
+  P->>G: POST
+  G->>S: INSERT routines row
+  S-->>G: OK
+  G-->>P: 201 routine json
+  P-->>B: 201
+
+  User->>B: Start routine on scene
+  B->>P: POST /api/v1/scenes/{sid}/routines/{rid}/start
+  P->>G: POST
+  G->>S: BEGIN; INSERT routine_runs running; COMMIT
+  G->>S: Shared store: PATCH scene lights/state/scene then state/batch (initial colours)
+  S-->>G: OK
+  G-->>P: 201 run json
+  P-->>B: 201
+
+  loop Each 1s tick while running
+    T->>S: SELECT running routine_runs
+    S-->>T: rows
+    T->>S: Shared store: scene lights/state/batch per random_colour_cycle_all
+    S-->>T: OK
+  end
+
+  User->>B: Stop routine
+  B->>P: POST /api/v1/scenes/{sid}/routines/runs/{runId}/stop
+  P->>G: POST
+  G->>S: UPDATE routine_runs set stopped
+  S-->>G: OK
+  G-->>P: 200
+  P-->>B: 200
+  T->>S: Next tick finds no running row for scene; no further updates
+```
+
 ---
 
 ## 9. Security notes (baseline)
@@ -1161,6 +1274,7 @@ sequenceDiagram
 - **Secrets** via env only; **no** secrets baked into client bundles beyond **public** constants.
 - **No** mandatory **container** trust boundary from the product’s perspective (REQ-004).
 - **Upload limits:** Enforce a **maximum request body size** on **`POST /api/v1/models`** (e.g. **`http.MaxBytesReader`** or server limit) large enough for **1000** CSV rows but small enough to bound **memory** and **DoS** risk on the Pi.
+- **Scene batch updates:** **`PATCH /api/v1/scenes/{id}/lights/state/batch`** **can** **carry** **one** **JSON** **object** **per** **light** **(up** **to** **~1000** **per** **scene** **in** **worst** **case**)**; **enforce** **a** **reasonable** **max** **body** **size** **(e.g.** **several** **MB** **below** **Pi** **RAM** **headroom**)** **and** **reject** **oversize** **with** **`413`** **or** **`400`** **before** **full** **parse** **if** **needed**.
 - **SQLite file:** Treat **`DLM_DB_PATH`** as **persistent** storage on the Pi (e.g. SD card or USB); operators should **back up** the DB file with normal file backup practices.
 - **Factory reset:** **`POST /api/v1/system/factory-reset`** **is** **destructive** **and** **unauthenticated** **in** **MVP**; **treat** **network** **exposure** **accordingly** **(see** **§3.14**)**.**
 
@@ -1187,10 +1301,11 @@ sequenceDiagram
 | REQ-015 | §1, §3.1, §3.2, §3.12–§3.13, §4.6, §4.9, §7 (DB), §8.10–§8.12 |
 | REQ-016 | §1, §4.7, §4.9, §8.14 |
 | REQ-017 | §1, §3.2, §3.14, §4.6, §4.10, §8.13, §9 |
-| REQ-018 | §1, §2, §4.5, §4.6, §4.7, §4.9, §4.10, §4.11, §8.1 (inline theme + hydration), §10 |
+| REQ-018 | §1, §2, §4.5, §4.6, §4.7, §4.9, §4.10, §4.11, §4.12, §8.1 (inline theme + hydration), §10 |
 | REQ-019 | §1, §4.7, §4.9, §4.11 (contrast note), §8.5, §8.11, §10 |
 | REQ-020 | §1, §3.2, §3.12, §3.13, §3.15, §8.15 |
+| REQ-021 | §1, §3.2, §3.14, §3.15, §3.16, §4.9, §4.11, §4.12, §7, §8.16 |
 
 ---
 
-**Next step:** Invoke **`@implementor`** to implement the architecture updates, including the **REQ-020** scene spatial API in **§3.15** (dimensions, cuboid/sphere query, cuboid/sphere bulk update in scene coordinates), plus any remaining **REQ-018/REQ-019** shell and viewport items. After implementation, invoke **`@verifier`** to audit, run tests, and update **`docs/traceability_matrix.md`**.
+**Next step:** Invoke **`@implementor`** to implement **§3.15** extensions (**`PATCH …/lights/state/scene`**, **`PATCH …/lights/state/batch`**) and **§3.16** (**routines** tables, HTTP routes, in-process **1** **s** scheduler, **`random_colour_cycle_all`**), plus **§4.9**/**§4.12** UI and **factory** **reset** **ordering** for **`routine_runs`**/**`routines`**. After implementation, invoke **`@verifier`** to audit, run tests, and update **`docs/traceability_matrix.md`**.
