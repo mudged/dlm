@@ -11,7 +11,8 @@ import (
 	"example.com/dlm/backend/internal/store"
 )
 
-const maxSceneJSONBytes = 1 << 18 // 256 KiB
+const maxSceneJSONBytes = 1 << 18      // 256 KiB
+const maxSceneLightsBatchBytes = 4 << 20 // 4 MiB (large per-light batch payloads)
 
 type createSceneBody struct {
 	Name   string            `json:"name"`
@@ -55,6 +56,24 @@ type sceneSpherePatchBody struct {
 	On            *bool            `json:"on"`
 	Color         *string          `json:"color"`
 	BrightnessPct *float64         `json:"brightness_pct"`
+}
+
+type sceneWholePatchBody struct {
+	On            *bool    `json:"on"`
+	Color         *string  `json:"color"`
+	BrightnessPct *float64 `json:"brightness_pct"`
+}
+
+type sceneLightsBatchPatchBody struct {
+	Updates []sceneBatchUpdateItem `json:"updates"`
+}
+
+type sceneBatchUpdateItem struct {
+	ModelID       string   `json:"model_id"`
+	LightID       int      `json:"light_id"`
+	On            *bool    `json:"on"`
+	Color         *string  `json:"color"`
+	BrightnessPct *float64 `json:"brightness_pct"`
 }
 
 func (a *apiDeps) listScenes(w http.ResponseWriter, r *http.Request) {
@@ -546,6 +565,106 @@ func (a *apiDeps) patchSceneLightsStateSphere(w http.ResponseWriter, r *http.Req
 		return
 	}
 	if errors.Is(err, store.ErrSceneInvalidGeometry) || isSceneStateValidationError(err) {
+		writeAPIError(w, http.StatusBadRequest, "validation_failed", err.Error())
+		return
+	}
+	if err != nil {
+		writeAPIError(w, http.StatusInternalServerError, "internal_error", "could not update scene lights")
+		return
+	}
+	if out.States == nil {
+		out.States = []store.ScenePatchedState{}
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (a *apiDeps) patchSceneLightsStateScene(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPatch {
+		writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	sceneID := r.PathValue("id")
+	if sceneID == "" {
+		writeAPIError(w, http.StatusBadRequest, "bad_request", "missing scene id")
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxSceneJSONBytes)
+	raw, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeAPIError(w, http.StatusBadRequest, "bad_request", "could not read body")
+		return
+	}
+	var body sceneWholePatchBody
+	if err := json.Unmarshal(raw, &body); err != nil {
+		writeAPIError(w, http.StatusBadRequest, "bad_request", "invalid JSON")
+		return
+	}
+	out, err := a.store.PatchSceneLightsScene(r.Context(), sceneID, store.LightStatePatch{
+		On:            body.On,
+		Color:         body.Color,
+		BrightnessPct: body.BrightnessPct,
+	})
+	if errors.Is(err, store.ErrSceneNotFound) {
+		writeAPIError(w, http.StatusNotFound, "not_found", "scene not found")
+		return
+	}
+	if isSceneStateValidationError(err) {
+		writeAPIError(w, http.StatusBadRequest, "validation_failed", err.Error())
+		return
+	}
+	if err != nil {
+		writeAPIError(w, http.StatusInternalServerError, "internal_error", "could not update scene lights")
+		return
+	}
+	if out.States == nil {
+		out.States = []store.ScenePatchedState{}
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (a *apiDeps) patchSceneLightsStateBatch(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPatch {
+		writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	sceneID := r.PathValue("id")
+	if sceneID == "" {
+		writeAPIError(w, http.StatusBadRequest, "bad_request", "missing scene id")
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxSceneLightsBatchBytes)
+	raw, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeAPIError(w, http.StatusBadRequest, "bad_request", "could not read body")
+		return
+	}
+	var body sceneLightsBatchPatchBody
+	if err := json.Unmarshal(raw, &body); err != nil {
+		writeAPIError(w, http.StatusBadRequest, "bad_request", "invalid JSON")
+		return
+	}
+	updates := make([]store.SceneBatchLightUpdate, 0, len(body.Updates))
+	for _, u := range body.Updates {
+		updates = append(updates, store.SceneBatchLightUpdate{
+			ModelID: strings.TrimSpace(u.ModelID),
+			LightID: u.LightID,
+			Patch: store.LightStatePatch{
+				On:            u.On,
+				Color:         u.Color,
+				BrightnessPct: u.BrightnessPct,
+			},
+		})
+	}
+	out, err := a.store.PatchSceneLightsBatch(r.Context(), sceneID, updates)
+	if errors.Is(err, store.ErrSceneNotFound) {
+		writeAPIError(w, http.StatusNotFound, "not_found", "scene not found")
+		return
+	}
+	if errors.Is(err, store.ErrSceneLightNotInScene) {
+		writeAPIError(w, http.StatusBadRequest, "validation_failed", "one or more lights are not in this scene")
+		return
+	}
+	if isSceneStateValidationError(err) || (err != nil && strings.Contains(strings.ToLower(err.Error()), "duplicate")) {
 		writeAPIError(w, http.StatusBadRequest, "validation_failed", err.Error())
 		return
 	}
