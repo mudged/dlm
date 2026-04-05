@@ -31,6 +31,32 @@ type patchSceneModelBody struct {
 	OffsetZ int `json:"offset_z"`
 }
 
+type sceneCuboidBody struct {
+	Position   store.ScenePoint          `json:"position"`
+	Dimensions store.SceneDimensionsSize `json:"dimensions"`
+}
+
+type sceneSphereBody struct {
+	Center store.ScenePoint `json:"center"`
+	Radius float64          `json:"radius"`
+}
+
+type sceneCuboidPatchBody struct {
+	Position      store.ScenePoint          `json:"position"`
+	Dimensions    store.SceneDimensionsSize `json:"dimensions"`
+	On            *bool                     `json:"on"`
+	Color         *string                   `json:"color"`
+	BrightnessPct *float64                  `json:"brightness_pct"`
+}
+
+type sceneSpherePatchBody struct {
+	Center        store.ScenePoint `json:"center"`
+	Radius        float64          `json:"radius"`
+	On            *bool            `json:"on"`
+	Color         *string          `json:"color"`
+	BrightnessPct *float64         `json:"brightness_pct"`
+}
+
 func (a *apiDeps) listScenes(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
@@ -294,4 +320,241 @@ func (a *apiDeps) deleteSceneModel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (a *apiDeps) getSceneDimensions(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	sceneID := r.PathValue("id")
+	if sceneID == "" {
+		writeAPIError(w, http.StatusBadRequest, "bad_request", "missing scene id")
+		return
+	}
+	dims, err := a.store.GetSceneDimensions(r.Context(), sceneID)
+	if errors.Is(err, store.ErrSceneNotFound) {
+		writeAPIError(w, http.StatusNotFound, "not_found", "scene not found")
+		return
+	}
+	if err != nil {
+		writeAPIError(w, http.StatusInternalServerError, "internal_error", "could not load scene dimensions")
+		return
+	}
+	writeJSON(w, http.StatusOK, dims)
+}
+
+func (a *apiDeps) listSceneLights(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	sceneID := r.PathValue("id")
+	if sceneID == "" {
+		writeAPIError(w, http.StatusBadRequest, "bad_request", "missing scene id")
+		return
+	}
+	lights, err := a.store.ListSceneLights(r.Context(), sceneID)
+	if errors.Is(err, store.ErrSceneNotFound) {
+		writeAPIError(w, http.StatusNotFound, "not_found", "scene not found")
+		return
+	}
+	if err != nil {
+		writeAPIError(w, http.StatusInternalServerError, "internal_error", "could not load scene lights")
+		return
+	}
+	if lights == nil {
+		lights = []store.SceneLightFlat{}
+	}
+	writeJSON(w, http.StatusOK, lights)
+}
+
+func (a *apiDeps) postSceneLightsQueryCuboid(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	sceneID := r.PathValue("id")
+	if sceneID == "" {
+		writeAPIError(w, http.StatusBadRequest, "bad_request", "missing scene id")
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxSceneJSONBytes)
+	raw, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeAPIError(w, http.StatusBadRequest, "bad_request", "could not read body")
+		return
+	}
+	var body sceneCuboidBody
+	if err := json.Unmarshal(raw, &body); err != nil {
+		writeAPIError(w, http.StatusBadRequest, "bad_request", "invalid JSON")
+		return
+	}
+	lights, err := a.store.QuerySceneLightsCuboid(r.Context(), sceneID, store.SceneCuboid{
+		Position:   body.Position,
+		Dimensions: body.Dimensions,
+	})
+	if errors.Is(err, store.ErrSceneNotFound) {
+		writeAPIError(w, http.StatusNotFound, "not_found", "scene not found")
+		return
+	}
+	if errors.Is(err, store.ErrSceneInvalidGeometry) {
+		writeAPIError(w, http.StatusBadRequest, "validation_failed", err.Error())
+		return
+	}
+	if err != nil {
+		writeAPIError(w, http.StatusInternalServerError, "internal_error", "could not query scene lights")
+		return
+	}
+	if lights == nil {
+		lights = []store.SceneLightFlat{}
+	}
+	writeJSON(w, http.StatusOK, lights)
+}
+
+func (a *apiDeps) postSceneLightsQuerySphere(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	sceneID := r.PathValue("id")
+	if sceneID == "" {
+		writeAPIError(w, http.StatusBadRequest, "bad_request", "missing scene id")
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxSceneJSONBytes)
+	raw, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeAPIError(w, http.StatusBadRequest, "bad_request", "could not read body")
+		return
+	}
+	var body sceneSphereBody
+	if err := json.Unmarshal(raw, &body); err != nil {
+		writeAPIError(w, http.StatusBadRequest, "bad_request", "invalid JSON")
+		return
+	}
+	lights, err := a.store.QuerySceneLightsSphere(r.Context(), sceneID, store.SceneSphere{
+		Center: body.Center,
+		Radius: body.Radius,
+	})
+	if errors.Is(err, store.ErrSceneNotFound) {
+		writeAPIError(w, http.StatusNotFound, "not_found", "scene not found")
+		return
+	}
+	if errors.Is(err, store.ErrSceneInvalidGeometry) {
+		writeAPIError(w, http.StatusBadRequest, "validation_failed", err.Error())
+		return
+	}
+	if err != nil {
+		writeAPIError(w, http.StatusInternalServerError, "internal_error", "could not query scene lights")
+		return
+	}
+	if lights == nil {
+		lights = []store.SceneLightFlat{}
+	}
+	writeJSON(w, http.StatusOK, lights)
+}
+
+func isSceneStateValidationError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "at least one of on, color, brightness_pct") ||
+		strings.Contains(msg, "color must") ||
+		strings.Contains(msg, "brightness_pct")
+}
+
+func (a *apiDeps) patchSceneLightsStateCuboid(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPatch {
+		writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	sceneID := r.PathValue("id")
+	if sceneID == "" {
+		writeAPIError(w, http.StatusBadRequest, "bad_request", "missing scene id")
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxSceneJSONBytes)
+	raw, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeAPIError(w, http.StatusBadRequest, "bad_request", "could not read body")
+		return
+	}
+	var body sceneCuboidPatchBody
+	if err := json.Unmarshal(raw, &body); err != nil {
+		writeAPIError(w, http.StatusBadRequest, "bad_request", "invalid JSON")
+		return
+	}
+	out, err := a.store.PatchSceneLightsCuboid(r.Context(), sceneID, store.SceneCuboid{
+		Position:   body.Position,
+		Dimensions: body.Dimensions,
+	}, store.LightStatePatch{
+		On:            body.On,
+		Color:         body.Color,
+		BrightnessPct: body.BrightnessPct,
+	})
+	if errors.Is(err, store.ErrSceneNotFound) {
+		writeAPIError(w, http.StatusNotFound, "not_found", "scene not found")
+		return
+	}
+	if errors.Is(err, store.ErrSceneInvalidGeometry) || isSceneStateValidationError(err) {
+		writeAPIError(w, http.StatusBadRequest, "validation_failed", err.Error())
+		return
+	}
+	if err != nil {
+		writeAPIError(w, http.StatusInternalServerError, "internal_error", "could not update scene lights")
+		return
+	}
+	if out.States == nil {
+		out.States = []store.ScenePatchedState{}
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (a *apiDeps) patchSceneLightsStateSphere(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPatch {
+		writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	sceneID := r.PathValue("id")
+	if sceneID == "" {
+		writeAPIError(w, http.StatusBadRequest, "bad_request", "missing scene id")
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxSceneJSONBytes)
+	raw, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeAPIError(w, http.StatusBadRequest, "bad_request", "could not read body")
+		return
+	}
+	var body sceneSpherePatchBody
+	if err := json.Unmarshal(raw, &body); err != nil {
+		writeAPIError(w, http.StatusBadRequest, "bad_request", "invalid JSON")
+		return
+	}
+	out, err := a.store.PatchSceneLightsSphere(r.Context(), sceneID, store.SceneSphere{
+		Center: body.Center,
+		Radius: body.Radius,
+	}, store.LightStatePatch{
+		On:            body.On,
+		Color:         body.Color,
+		BrightnessPct: body.BrightnessPct,
+	})
+	if errors.Is(err, store.ErrSceneNotFound) {
+		writeAPIError(w, http.StatusNotFound, "not_found", "scene not found")
+		return
+	}
+	if errors.Is(err, store.ErrSceneInvalidGeometry) || isSceneStateValidationError(err) {
+		writeAPIError(w, http.StatusBadRequest, "validation_failed", err.Error())
+		return
+	}
+	if err != nil {
+		writeAPIError(w, http.StatusInternalServerError, "internal_error", "could not update scene lights")
+		return
+	}
+	if out.States == nil {
+		out.States = []store.ScenePatchedState{}
+	}
+	writeJSON(w, http.StatusOK, out)
 }

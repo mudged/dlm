@@ -13,6 +13,7 @@ import (
 )
 
 const sceneCoordEps = 1e-9
+const sceneBoundsMarginM = 1.0
 
 // ErrSceneNotFound is returned when a scene id does not exist.
 var ErrSceneNotFound = errors.New("scene not found")
@@ -25,6 +26,9 @@ var ErrSceneLastModel = errors.New("last model in scene requires scene deletion"
 
 // ErrModelAlreadyInScene is returned when adding a model that is already in the scene.
 var ErrModelAlreadyInScene = errors.New("model already in scene")
+
+// ErrSceneInvalidGeometry is returned when scene cuboid/sphere geometry is invalid.
+var ErrSceneInvalidGeometry = errors.New("invalid scene geometry")
 
 // SceneRef is a minimal scene reference for error payloads.
 type SceneRef struct {
@@ -87,6 +91,189 @@ type SceneDetail struct {
 	Name      string            `json:"name"`
 	CreatedAt time.Time         `json:"created_at"`
 	Items     []SceneItemDetail `json:"items"`
+}
+
+// ScenePoint is a point in scene space.
+type ScenePoint struct {
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
+	Z float64 `json:"z"`
+}
+
+// SceneDimensionsSize is a width/height/depth triple in scene space.
+type SceneDimensionsSize struct {
+	Width  float64 `json:"width"`
+	Height float64 `json:"height"`
+	Depth  float64 `json:"depth"`
+}
+
+// SceneDimensions describes scene-space extents used for spatial querying.
+type SceneDimensions struct {
+	Origin  ScenePoint          `json:"origin"`
+	Size    SceneDimensionsSize `json:"size"`
+	Max     ScenePoint          `json:"max"`
+	MarginM float64             `json:"margin_m"`
+}
+
+// SceneCuboid is a cuboid query/update geometry in scene space.
+type SceneCuboid struct {
+	Position   ScenePoint          `json:"position"`
+	Dimensions SceneDimensionsSize `json:"dimensions"`
+}
+
+// SceneSphere is a sphere query/update geometry in scene space.
+type SceneSphere struct {
+	Center ScenePoint `json:"center"`
+	Radius float64    `json:"radius"`
+}
+
+// SceneLightFlat is a flattened scene light record for scene-space endpoints.
+type SceneLightFlat struct {
+	SceneID       string  `json:"scene_id"`
+	ModelID       string  `json:"model_id"`
+	LightID       int     `json:"light_id"`
+	X             float64 `json:"x"`
+	Y             float64 `json:"y"`
+	Z             float64 `json:"z"`
+	Sx            float64 `json:"sx"`
+	Sy            float64 `json:"sy"`
+	Sz            float64 `json:"sz"`
+	On            bool    `json:"on"`
+	Color         string  `json:"color"`
+	BrightnessPct float64 `json:"brightness_pct"`
+}
+
+// ScenePatchedState is one updated state item for scene-space bulk updates.
+type ScenePatchedState struct {
+	ModelID       string  `json:"model_id"`
+	ID            int     `json:"id"`
+	On            bool    `json:"on"`
+	Color         string  `json:"color"`
+	BrightnessPct float64 `json:"brightness_pct"`
+	Sx            float64 `json:"sx"`
+	Sy            float64 `json:"sy"`
+	Sz            float64 `json:"sz"`
+}
+
+// SceneBulkPatchResult is the response payload for scene-space bulk updates.
+type SceneBulkPatchResult struct {
+	UpdatedCount int                `json:"updated_count"`
+	States       []ScenePatchedState `json:"states"`
+}
+
+func isFiniteFloat64(v float64) bool {
+	return !math.IsNaN(v) && !math.IsInf(v, 0)
+}
+
+func validateSceneCuboid(c SceneCuboid) error {
+	if !isFiniteFloat64(c.Position.X) || !isFiniteFloat64(c.Position.Y) || !isFiniteFloat64(c.Position.Z) {
+		return fmt.Errorf("%w: cuboid position must contain finite numbers", ErrSceneInvalidGeometry)
+	}
+	if !isFiniteFloat64(c.Dimensions.Width) || !isFiniteFloat64(c.Dimensions.Height) || !isFiniteFloat64(c.Dimensions.Depth) {
+		return fmt.Errorf("%w: cuboid dimensions must contain finite numbers", ErrSceneInvalidGeometry)
+	}
+	if c.Dimensions.Width <= 0 || c.Dimensions.Height <= 0 || c.Dimensions.Depth <= 0 {
+		return fmt.Errorf("%w: cuboid dimensions must be positive", ErrSceneInvalidGeometry)
+	}
+	return nil
+}
+
+func validateSceneSphere(sph SceneSphere) error {
+	if !isFiniteFloat64(sph.Center.X) || !isFiniteFloat64(sph.Center.Y) || !isFiniteFloat64(sph.Center.Z) {
+		return fmt.Errorf("%w: sphere center must contain finite numbers", ErrSceneInvalidGeometry)
+	}
+	if !isFiniteFloat64(sph.Radius) {
+		return fmt.Errorf("%w: sphere radius must be a finite number", ErrSceneInvalidGeometry)
+	}
+	if sph.Radius <= 0 {
+		return fmt.Errorf("%w: sphere radius must be positive", ErrSceneInvalidGeometry)
+	}
+	return nil
+}
+
+func validateScenePatch(patch LightStatePatch) error {
+	if patch.On == nil && patch.Color == nil && patch.BrightnessPct == nil {
+		return fmt.Errorf("at least one of on, color, brightness_pct is required")
+	}
+	if patch.Color != nil {
+		if _, err := ValidateColor(*patch.Color); err != nil {
+			return err
+		}
+	}
+	if patch.BrightnessPct != nil {
+		if err := ValidateBrightnessPct(*patch.BrightnessPct); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func cuboidContains(c SceneCuboid, L SceneLightFlat) bool {
+	maxX := c.Position.X + c.Dimensions.Width
+	maxY := c.Position.Y + c.Dimensions.Height
+	maxZ := c.Position.Z + c.Dimensions.Depth
+	return L.Sx >= c.Position.X-sceneCoordEps && L.Sx <= maxX+sceneCoordEps &&
+		L.Sy >= c.Position.Y-sceneCoordEps && L.Sy <= maxY+sceneCoordEps &&
+		L.Sz >= c.Position.Z-sceneCoordEps && L.Sz <= maxZ+sceneCoordEps
+}
+
+func sphereContains(sph SceneSphere, L SceneLightFlat) bool {
+	dx := L.Sx - sph.Center.X
+	dy := L.Sy - sph.Center.Y
+	dz := L.Sz - sph.Center.Z
+	dist2 := dx*dx + dy*dy + dz*dz
+	return dist2 <= sph.Radius*sph.Radius+sceneCoordEps
+}
+
+func (s *Store) sceneExistsTx(ctx context.Context, tx *sql.Tx, sceneID string) (bool, error) {
+	var row *sql.Row
+	if tx != nil {
+		row = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM scenes WHERE id = ?`, sceneID)
+	} else {
+		row = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM scenes WHERE id = ?`, sceneID)
+	}
+	var n int
+	if err := row.Scan(&n); err != nil {
+		return false, err
+	}
+	return n > 0, nil
+}
+
+func (s *Store) listSceneLightsTx(ctx context.Context, tx *sql.Tx, sceneID string) ([]SceneLightFlat, error) {
+	ok, err := s.sceneExistsTx(ctx, tx, sceneID)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, ErrSceneNotFound
+	}
+	pls, err := s.loadScenePlacementsWithLights(ctx, tx, sceneID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]SceneLightFlat, 0)
+	for _, p := range pls {
+		for _, L := range p.lights {
+			sx := sceneSpaceCoord(L.X, p.offsetX)
+			sy := sceneSpaceCoord(L.Y, p.offsetY)
+			sz := sceneSpaceCoord(L.Z, p.offsetZ)
+			out = append(out, SceneLightFlat{
+				SceneID:       sceneID,
+				ModelID:       p.modelID,
+				LightID:       L.ID,
+				X:             L.X,
+				Y:             L.Y,
+				Z:             L.Z,
+				Sx:            sx,
+				Sy:            sy,
+				Sz:            sz,
+				On:            L.On,
+				Color:         L.Color,
+				BrightnessPct: L.BrightnessPct,
+			})
+		}
+	}
+	return out, nil
 }
 
 func (s *Store) listScenesReferencingModel(ctx context.Context, modelID string) ([]SceneRef, error) {
@@ -166,20 +353,41 @@ func (s *Store) loadScenePlacementsWithLights(ctx context.Context, tx *sql.Tx, s
 	}
 	defer rows.Close()
 
-	var out []scenePlacementLights
+	type placementRow struct {
+		modelID string
+		offX    int
+		offY    int
+		offZ    int
+	}
+	var baseRows []placementRow
 	for rows.Next() {
-		var p scenePlacementLights
-		if err := rows.Scan(&p.modelID, &p.offsetX, &p.offsetY, &p.offsetZ); err != nil {
+		var pr placementRow
+		if err := rows.Scan(&pr.modelID, &pr.offX, &pr.offY, &pr.offZ); err != nil {
 			return nil, err
 		}
-		d, err := s.getDetailTx(ctx, tx, p.modelID)
+		baseRows = append(baseRows, pr)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// Load model details after the placement cursor has been consumed to avoid
+	// nested queries on the same connection while rows are still open.
+	out := make([]scenePlacementLights, 0, len(baseRows))
+	for _, pr := range baseRows {
+		d, err := s.getDetailTx(ctx, tx, pr.modelID)
 		if err != nil {
 			return nil, err
 		}
-		p.lights = d.Lights
-		out = append(out, p)
+		out = append(out, scenePlacementLights{
+			modelID: pr.modelID,
+			offsetX: pr.offX,
+			offsetY: pr.offY,
+			offsetZ: pr.offZ,
+			lights:  d.Lights,
+		})
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
 func (s *Store) getDetailTx(ctx context.Context, tx *sql.Tx, modelID string) (*Detail, error) {
@@ -683,4 +891,169 @@ func (s *Store) RemoveSceneModel(ctx context.Context, sceneID, modelID string) e
 		return err
 	}
 	return tx.Commit()
+}
+
+// GetSceneDimensions returns scene-space dimensions used for region queries.
+func (s *Store) GetSceneDimensions(ctx context.Context, sceneID string) (*SceneDimensions, error) {
+	lights, err := s.listSceneLightsTx(ctx, nil, sceneID)
+	if err != nil {
+		return nil, err
+	}
+	var mx, my, mz float64
+	for _, L := range lights {
+		if L.Sx > mx {
+			mx = L.Sx
+		}
+		if L.Sy > my {
+			my = L.Sy
+		}
+		if L.Sz > mz {
+			mz = L.Sz
+		}
+	}
+	maxX := mx + sceneBoundsMarginM
+	maxY := my + sceneBoundsMarginM
+	maxZ := mz + sceneBoundsMarginM
+	return &SceneDimensions{
+		Origin:  ScenePoint{X: 0, Y: 0, Z: 0},
+		Size:    SceneDimensionsSize{Width: maxX, Height: maxY, Depth: maxZ},
+		Max:     ScenePoint{X: maxX, Y: maxY, Z: maxZ},
+		MarginM: sceneBoundsMarginM,
+	}, nil
+}
+
+// ListSceneLights returns all scene lights in a flattened scene-space form.
+func (s *Store) ListSceneLights(ctx context.Context, sceneID string) ([]SceneLightFlat, error) {
+	return s.listSceneLightsTx(ctx, nil, sceneID)
+}
+
+// QuerySceneLightsCuboid returns scene lights contained in the supplied cuboid (inclusive boundaries).
+func (s *Store) QuerySceneLightsCuboid(ctx context.Context, sceneID string, cuboid SceneCuboid) ([]SceneLightFlat, error) {
+	if err := validateSceneCuboid(cuboid); err != nil {
+		return nil, err
+	}
+	all, err := s.listSceneLightsTx(ctx, nil, sceneID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]SceneLightFlat, 0)
+	for _, L := range all {
+		if cuboidContains(cuboid, L) {
+			out = append(out, L)
+		}
+	}
+	return out, nil
+}
+
+// QuerySceneLightsSphere returns scene lights contained in the supplied sphere (inclusive boundary).
+func (s *Store) QuerySceneLightsSphere(ctx context.Context, sceneID string, sph SceneSphere) ([]SceneLightFlat, error) {
+	if err := validateSceneSphere(sph); err != nil {
+		return nil, err
+	}
+	all, err := s.listSceneLightsTx(ctx, nil, sceneID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]SceneLightFlat, 0)
+	for _, L := range all {
+		if sphereContains(sph, L) {
+			out = append(out, L)
+		}
+	}
+	return out, nil
+}
+
+func (s *Store) patchSceneLightsByRegion(ctx context.Context, sceneID string, patch LightStatePatch, include func(SceneLightFlat) bool) (*SceneBulkPatchResult, error) {
+	if err := validateScenePatch(patch); err != nil {
+		return nil, err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	all, err := s.listSceneLightsTx(ctx, tx, sceneID)
+	if err != nil {
+		return nil, err
+	}
+
+	var colorNorm *string
+	if patch.Color != nil {
+		c, err := ValidateColor(*patch.Color)
+		if err != nil {
+			return nil, err
+		}
+		colorNorm = &c
+	}
+	var brightnessNorm *float64
+	if patch.BrightnessPct != nil {
+		if err := ValidateBrightnessPct(*patch.BrightnessPct); err != nil {
+			return nil, err
+		}
+		b := *patch.BrightnessPct
+		brightnessNorm = &b
+	}
+
+	updated := make([]ScenePatchedState, 0)
+	for _, L := range all {
+		if !include(L) {
+			continue
+		}
+		on := L.On
+		color := L.Color
+		brightness := L.BrightnessPct
+		if patch.On != nil {
+			on = *patch.On
+		}
+		if colorNorm != nil {
+			color = *colorNorm
+		}
+		if brightnessNorm != nil {
+			brightness = *brightnessNorm
+		}
+		if _, err := tx.ExecContext(ctx, `
+			UPDATE lights SET "on" = ?, color = ?, brightness_pct = ? WHERE model_id = ? AND idx = ?
+		`, boolToInt(on), color, brightness, L.ModelID, L.LightID); err != nil {
+			return nil, err
+		}
+		updated = append(updated, ScenePatchedState{
+			ModelID:       L.ModelID,
+			ID:            L.LightID,
+			On:            on,
+			Color:         color,
+			BrightnessPct: brightness,
+			Sx:            L.Sx,
+			Sy:            L.Sy,
+			Sz:            L.Sz,
+		})
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return &SceneBulkPatchResult{
+		UpdatedCount: len(updated),
+		States:       updated,
+	}, nil
+}
+
+// PatchSceneLightsCuboid bulk-updates lights inside a cuboid (inclusive boundaries).
+func (s *Store) PatchSceneLightsCuboid(ctx context.Context, sceneID string, cuboid SceneCuboid, patch LightStatePatch) (*SceneBulkPatchResult, error) {
+	if err := validateSceneCuboid(cuboid); err != nil {
+		return nil, err
+	}
+	return s.patchSceneLightsByRegion(ctx, sceneID, patch, func(L SceneLightFlat) bool {
+		return cuboidContains(cuboid, L)
+	})
+}
+
+// PatchSceneLightsSphere bulk-updates lights inside a sphere (inclusive boundary).
+func (s *Store) PatchSceneLightsSphere(ctx context.Context, sceneID string, sph SceneSphere, patch LightStatePatch) (*SceneBulkPatchResult, error) {
+	if err := validateSceneSphere(sph); err != nil {
+		return nil, err
+	}
+	return s.patchSceneLightsByRegion(ctx, sceneID, patch, func(L SceneLightFlat) bool {
+		return sphereContains(sph, L)
+	})
 }

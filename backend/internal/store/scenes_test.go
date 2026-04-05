@@ -117,3 +117,158 @@ func TestScenes_CreateScenePreservesModelOrder(t *testing.T) {
 		t.Fatalf("want order [beta, alpha], got %q then %q", d.Items[0].ModelID, d.Items[1].ModelID)
 	}
 }
+
+func TestScenes_SpatialQueriesAndDimensions(t *testing.T) {
+	ctx := context.Background()
+	s := testDB(t)
+
+	sum, err := s.Create(ctx, "spatial", []wiremodel.Light{
+		{ID: 0, X: 0, Y: 0, Z: 0},
+		{ID: 1, X: 1, Y: 1, Z: 1},
+		{ID: 2, X: 2, Y: 2, Z: 2},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sc, err := s.CreateScene(ctx, "scene-spatial", []string{sum.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.PatchSceneModelOffsets(ctx, sc.ID, sum.ID, 10, 0, 0); err != nil {
+		t.Fatal(err)
+	}
+
+	dims, err := s.GetSceneDimensions(ctx, sc.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dims.Origin.X != 0 || dims.Origin.Y != 0 || dims.Origin.Z != 0 {
+		t.Fatalf("origin = %+v", dims.Origin)
+	}
+	if dims.Max.X != 13 || dims.Max.Y != 3 || dims.Max.Z != 3 {
+		t.Fatalf("max = %+v", dims.Max)
+	}
+	if dims.Size.Width != 13 || dims.Size.Height != 3 || dims.Size.Depth != 3 {
+		t.Fatalf("size = %+v", dims.Size)
+	}
+	if dims.MarginM != 1 {
+		t.Fatalf("margin_m = %v", dims.MarginM)
+	}
+
+	allLights, err := s.ListSceneLights(ctx, sc.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(allLights) != 3 {
+		t.Fatalf("all lights len = %d", len(allLights))
+	}
+	if allLights[0].Sx != 10 || allLights[0].Sy != 0 || allLights[0].Sz != 0 {
+		t.Fatalf("first scene-space light = %+v", allLights[0])
+	}
+
+	cuboidLights, err := s.QuerySceneLightsCuboid(ctx, sc.ID, SceneCuboid{
+		Position: ScenePoint{X: 10, Y: 0, Z: 0},
+		Dimensions: SceneDimensionsSize{
+			Width:  1,
+			Height: 1,
+			Depth:  1,
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cuboidLights) != 2 {
+		t.Fatalf("cuboid lights len = %d", len(cuboidLights))
+	}
+	if cuboidLights[0].LightID != 0 || cuboidLights[1].LightID != 1 {
+		t.Fatalf("cuboid lights = %+v", cuboidLights)
+	}
+
+	sphereLights, err := s.QuerySceneLightsSphere(ctx, sc.ID, SceneSphere{
+		Center: ScenePoint{X: 10, Y: 0, Z: 0},
+		Radius: 0.1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sphereLights) != 1 || sphereLights[0].LightID != 0 {
+		t.Fatalf("sphere lights = %+v", sphereLights)
+	}
+}
+
+func TestScenes_SpatialBulkUpdateAndInvalidGeometry(t *testing.T) {
+	ctx := context.Background()
+	s := testDB(t)
+
+	sum, err := s.Create(ctx, "spatial-update", []wiremodel.Light{
+		{ID: 0, X: 0, Y: 0, Z: 0},
+		{ID: 1, X: 1, Y: 1, Z: 1},
+		{ID: 2, X: 2, Y: 2, Z: 2},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sc, err := s.CreateScene(ctx, "scene-spatial-update", []string{sum.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.PatchSceneModelOffsets(ctx, sc.ID, sum.ID, 10, 0, 0); err != nil {
+		t.Fatal(err)
+	}
+
+	on := true
+	color := "#112233"
+	brightness := 42.0
+	updated, err := s.PatchSceneLightsCuboid(ctx, sc.ID, SceneCuboid{
+		Position: ScenePoint{X: 10, Y: 0, Z: 0},
+		Dimensions: SceneDimensionsSize{
+			Width:  1,
+			Height: 1,
+			Depth:  1,
+		},
+	}, LightStatePatch{
+		On:            &on,
+		Color:         &color,
+		BrightnessPct: &brightness,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.UpdatedCount != 2 || len(updated.States) != 2 {
+		t.Fatalf("updated = %+v", updated)
+	}
+
+	detail, err := s.Get(ctx, sum.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !detail.Lights[0].On || !detail.Lights[1].On || detail.Lights[2].On {
+		t.Fatalf("unexpected on/off values: %+v", detail.Lights)
+	}
+	if detail.Lights[0].Color != "#112233" || detail.Lights[1].Color != "#112233" || detail.Lights[2].Color != "#ffffff" {
+		t.Fatalf("unexpected colors: %+v", detail.Lights)
+	}
+	if detail.Lights[0].BrightnessPct != 42 || detail.Lights[1].BrightnessPct != 42 || detail.Lights[2].BrightnessPct != 100 {
+		t.Fatalf("unexpected brightness: %+v", detail.Lights)
+	}
+	if detail.Lights[0].X != 0 || detail.Lights[1].X != 1 || detail.Lights[2].X != 2 {
+		t.Fatalf("canonical model coordinates changed: %+v", detail.Lights)
+	}
+
+	off := false
+	_, err = s.PatchSceneLightsSphere(ctx, sc.ID, SceneSphere{
+		Center: ScenePoint{X: 10, Y: 0, Z: 0},
+		Radius: -1,
+	}, LightStatePatch{On: &off})
+	if !errors.Is(err, ErrSceneInvalidGeometry) {
+		t.Fatalf("want ErrSceneInvalidGeometry, got %v", err)
+	}
+
+	detailAfter, err := s.Get(ctx, sum.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !detailAfter.Lights[0].On || !detailAfter.Lights[1].On || detailAfter.Lights[2].On {
+		t.Fatalf("state changed after invalid geometry: %+v", detailAfter.Lights)
+	}
+}
