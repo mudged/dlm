@@ -77,11 +77,11 @@ type SceneLightDTO struct {
 
 // SceneItemDetail is one model block inside GET scene.
 type SceneItemDetail struct {
-	ModelID string         `json:"model_id"`
-	Name    string         `json:"name"`
-	OffsetX int            `json:"offset_x"`
-	OffsetY int            `json:"offset_y"`
-	OffsetZ int            `json:"offset_z"`
+	ModelID string          `json:"model_id"`
+	Name    string          `json:"name"`
+	OffsetX int             `json:"offset_x"`
+	OffsetY int             `json:"offset_y"`
+	OffsetZ int             `json:"offset_z"`
 	Lights  []SceneLightDTO `json:"lights"`
 }
 
@@ -157,7 +157,7 @@ type ScenePatchedState struct {
 
 // SceneBulkPatchResult is the response payload for scene-space bulk updates.
 type SceneBulkPatchResult struct {
-	UpdatedCount int                `json:"updated_count"`
+	UpdatedCount int                 `json:"updated_count"`
 	States       []ScenePatchedState `json:"states"`
 }
 
@@ -316,12 +316,12 @@ func validateLightsContainment(lights []LightDTO, ox, oy, oz int) error {
 }
 
 type scenePlacementLights struct {
-	modelID       string
-	offsetX       int
-	offsetY       int
-	offsetZ       int
-	lights        []LightDTO
-	skipModelID   string // when validating hypothetical removal
+	modelID     string
+	offsetX     int
+	offsetY     int
+	offsetZ     int
+	lights      []LightDTO
+	skipModelID string // when validating hypothetical removal
 }
 
 func validateScenePlacements(pls []scenePlacementLights) error {
