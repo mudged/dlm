@@ -47,6 +47,29 @@ export async function fetchScene(id: string): Promise<SceneDetail> {
   return res.json() as Promise<SceneDetail>;
 }
 
+/** REQ-014 / REQ-027 — reset every light in the scene to default state. */
+export async function patchSceneLightsStateScene(
+  sceneId: string,
+  body: { on: boolean; color: string; brightness_pct: number },
+): Promise<void> {
+  const res = await fetch(
+    `/api/v1/scenes/${encodeURIComponent(sceneId)}/lights/state/scene`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+  if (!res.ok) {
+    const j = (await res.json().catch(() => null)) as {
+      error?: { message?: string };
+    };
+    throw new Error(
+      j?.error?.message ?? `scene lights reset failed (${res.status})`,
+    );
+  }
+}
+
 export async function createScene(body: {
   name: string;
   models: { model_id: string }[];

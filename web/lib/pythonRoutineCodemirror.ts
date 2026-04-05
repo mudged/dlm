@@ -2,50 +2,9 @@ import { autocompletion, type CompletionContext } from "@codemirror/autocomplete
 import { linter, type Diagnostic } from "@codemirror/lint";
 import type { Text } from "@codemirror/state";
 import { lintPythonSource, type PyLintDiagnostic } from "@/lib/pythonEditorWorker";
+import { SCENE_API_COMPLETIONS } from "@/lib/pythonSceneApiCatalog";
 
-/** Architecture §3.17 / §4.13 — static `scene` API surface for completion. */
-export const SCENE_API_COMPLETIONS: {
-  label: string;
-  detail: string;
-  type: string;
-}[] = [
-  { label: "height", detail: "float (m)", type: "property" },
-  {
-    label: "get_all_lights",
-    detail: "() → await",
-    type: "function",
-  },
-  {
-    label: "get_lights_within_sphere",
-    detail: "(center, radius) → await",
-    type: "function",
-  },
-  {
-    label: "get_lights_within_cuboid",
-    detail: "(position, dimensions) → await",
-    type: "function",
-  },
-  {
-    label: "set_all_lights",
-    detail: "(patch) → await",
-    type: "function",
-  },
-  {
-    label: "set_lights_in_sphere",
-    detail: "(center, radius, patch) → await",
-    type: "function",
-  },
-  {
-    label: "set_lights_in_cuboid",
-    detail: "(position, dimensions, patch) → await",
-    type: "function",
-  },
-  {
-    label: "update_lights_batch",
-    detail: "(updates) → await",
-    type: "function",
-  },
-];
+export { SCENE_API_COMPLETIONS };
 
 function sceneCompletions(context: CompletionContext) {
   const before = context.matchBefore(/scene\.[\w]*/);
