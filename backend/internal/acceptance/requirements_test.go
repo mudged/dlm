@@ -891,3 +891,96 @@ func TestAcceptance_REQ018_applicationShellThemesNavAndFontAwesome(t *testing.T)
 		t.Fatal("REQ-018 metadata must state priority Must")
 	}
 }
+
+func repoRoot(t *testing.T) string {
+	t.Helper()
+	abs, err := filepath.Abs(filepath.Join("..", "..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return abs
+}
+
+func TestAcceptance_REQ022_pythonSceneRoutinesAndCodeMirror6(t *testing.T) {
+	doc := readRequirements(t)
+	block := requirementBlock(doc, "REQ-022")
+	if block == "" {
+		t.Fatal("requirements must contain ### REQ-022 section")
+	}
+	lower := strings.ToLower(block)
+	if !strings.Contains(lower, "codemirror") {
+		t.Fatal("REQ-022 must require CodeMirror for the in-browser Python editor")
+	}
+	if !strings.Contains(lower, "@codemirror") {
+		t.Fatal("REQ-022 must reference the @codemirror package ecosystem")
+	}
+	if !strings.Contains(lower, "browser") {
+		t.Fatal("REQ-022 must state browser editing for Python routines")
+	}
+	if !strings.Contains(lower, "req-021") {
+		t.Fatal("REQ-022 must reference REQ-021 for routine coexistence")
+	}
+	if !strings.Contains(lower, "req-002") {
+		t.Fatal("REQ-022 must reference REQ-002 for responsive / non-hover-only editor UX")
+	}
+	if !strings.Contains(block, "| **Priority** | Must |") {
+		t.Fatal("REQ-022 metadata must state priority Must")
+	}
+
+	root := repoRoot(t)
+	pkgPath := filepath.Join(root, "web", "package.json")
+	pkgBytes, err := os.ReadFile(pkgPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", pkgPath, err)
+	}
+	pkg := string(pkgBytes)
+	pkgLower := strings.ToLower(pkg)
+	if strings.Contains(pkgLower, "monaco") {
+		t.Fatal("web/package.json must not depend on Monaco for REQ-022 (CodeMirror 6 only)")
+	}
+	for _, dep := range []string{
+		`"@codemirror/lang-python"`,
+		`"@codemirror/lint"`,
+		`"@codemirror/autocomplete"`,
+		`"codemirror"`,
+	} {
+		if !strings.Contains(pkg, dep) {
+			t.Fatalf("web/package.json must include dependency %s for REQ-022 CodeMirror 6 stack", dep)
+		}
+	}
+	if !strings.Contains(pkg, `"@codemirror/lang-python": "^6`) && !strings.Contains(pkg, `"@codemirror/lang-python": "6`) {
+		t.Fatal("web/package.json must pin @codemirror/lang-python to major version 6")
+	}
+	if strings.Contains(pkgLower, "@uiw/react-codemirror") || strings.Contains(pkg, `"@uiw/react-codemirror"`) {
+		t.Fatal("web/package.json must not depend on @uiw/react-codemirror when using the codemirror package + EditorView")
+	}
+
+	editorPath := filepath.Join(root, "web", "app", "routines", "python", "PythonRoutineEditorClient.tsx")
+	ed, err := os.ReadFile(editorPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", editorPath, err)
+	}
+	edStr := string(ed)
+	if strings.Contains(edStr, "@uiw/react-codemirror") {
+		t.Fatal("PythonRoutineEditorClient must not import @uiw/react-codemirror")
+	}
+	if !strings.Contains(edStr, "PythonCodeMirrorEditor") {
+		t.Fatal("PythonRoutineEditorClient must render PythonCodeMirrorEditor (CodeMirror 6 EditorView host)")
+	}
+	if !strings.Contains(edStr, "@codemirror/lang-python") {
+		t.Fatal("PythonRoutineEditorClient must use @codemirror/lang-python")
+	}
+
+	cmPath := filepath.Join(root, "web", "components", "PythonCodeMirrorEditor.tsx")
+	cmBytes, err := os.ReadFile(cmPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", cmPath, err)
+	}
+	cmStr := string(cmBytes)
+	if !strings.Contains(cmStr, "EditorView") {
+		t.Fatal("PythonCodeMirrorEditor must use CodeMirror 6 EditorView")
+	}
+	if !strings.Contains(cmStr, `from "codemirror"`) {
+		t.Fatal("PythonCodeMirrorEditor must import from the codemirror package (e.g. basicSetup)")
+	}
+}

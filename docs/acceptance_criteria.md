@@ -743,9 +743,16 @@ Feature: Python scene routines editor API docs and execution (REQ-022)
     Given docs/requirements.md defines REQ-022
     When the REQ-022 scope and business rules about the editor are read
     Then the product must provide an in-browser Python code editor with full syntax highlighting
+    And the Python authoring editor must use CodeMirror major version 6 in the browser for the editable buffer
     And the editor must surface syntax or static issues to the user without requiring a separate desktop tool
     And code completion appropriate for Python and the scene API must be enabled by default where technically feasible
     And automatic code formatting must be available and enabled by default where the product supports it
+
+  Scenario: REQ-022 mandates CodeMirror 6 for browser Python editing
+    Parent requirement: REQ-022
+    Given docs/requirements.md defines REQ-022
+    When the REQ-022 business rules about the in-browser editor stack are read
+    Then the application must use CodeMirror 6 for Python editing in the browser on the Python routine authoring surface
 
   Scenario: REQ-022 requires save load duplicate and delete for Python routine definitions
     Parent requirement: REQ-022

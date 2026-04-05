@@ -1,8 +1,10 @@
 "use client";
 
+// REQ-022 / architecture §4.13 — CodeMirror 6 (`EditorView` + `codemirror` package).
+
 import { python } from "@codemirror/lang-python";
 import { lintGutter } from "@codemirror/lint";
-import CodeMirror from "@uiw/react-codemirror";
+import { PythonCodeMirrorEditor } from "@/components/PythonCodeMirrorEditor";
 import {
   faBook,
   faCopy,
@@ -291,20 +293,11 @@ export default function PythonRoutineEditorClient() {
               </code>{" "}
               for methods that call the server.
             </p>
-            <div className="overflow-hidden rounded-lg border border-slate-300 dark:border-slate-600">
-              <CodeMirror
-                value={code}
-                height="min(50vh, 420px)"
-                theme="dark"
-                extensions={extensions}
-                onChange={(v) => setCode(v)}
-                basicSetup={{
-                  lineNumbers: true,
-                  foldGutter: true,
-                  closeBrackets: true,
-                }}
-              />
-            </div>
+            <PythonCodeMirrorEditor
+              value={code}
+              onChange={setCode}
+              extensions={extensions}
+            />
           </div>
         </div>
 
