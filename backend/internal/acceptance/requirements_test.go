@@ -523,6 +523,101 @@ func TestAcceptance_REQ013_modelViewPaginationAndBulkSettings(t *testing.T) {
 	}
 }
 
+func TestAcceptance_REQ014_defaultLightStateAndReset(t *testing.T) {
+	doc := readRequirements(t)
+	block := requirementBlock(doc, "REQ-014")
+	if block == "" {
+		t.Fatal("requirements must contain ### REQ-014 section")
+	}
+	lower := strings.ToLower(block)
+	if !strings.Contains(lower, "off") {
+		t.Fatal("REQ-014 must require lights to start off")
+	}
+	if !strings.Contains(lower, "100") {
+		t.Fatal("REQ-014 must require 100 percent default brightness")
+	}
+	if !strings.Contains(block, "#FFFFFF") && !strings.Contains(block, "#ffffff") {
+		t.Fatal("REQ-014 must require default hex colour #FFFFFF")
+	}
+	if !strings.Contains(lower, "reset") {
+		t.Fatal("REQ-014 must require a reset control")
+	}
+	if !strings.Contains(lower, "all") {
+		t.Fatal("REQ-014 must require reset to apply to all lights")
+	}
+	if !strings.Contains(lower, "persist") {
+		t.Fatal("REQ-014 must require reset persistence")
+	}
+	if !strings.Contains(lower, "req-011") || !strings.Contains(lower, "req-012") || !strings.Contains(lower, "req-013") {
+		t.Fatal("REQ-014 must reference REQ-011, REQ-012, and REQ-013")
+	}
+	if !strings.Contains(lower, "req-002") {
+		t.Fatal("REQ-014 must reference REQ-002 for non-hover-only operability")
+	}
+	for _, kw := range []string{"mobile", "tablet", "desktop"} {
+		if !strings.Contains(lower, kw) {
+			t.Fatalf("REQ-014 responsive notes must mention %q", kw)
+		}
+	}
+	if !strings.Contains(lower, "hover-only") && !strings.Contains(lower, "hover only") {
+		t.Fatal("REQ-014 must forbid hover-only reset interaction")
+	}
+	if !strings.Contains(block, "| **Priority** | Must |") {
+		t.Fatal("REQ-014 metadata must state priority Must")
+	}
+}
+
+func TestAcceptance_REQ015_scenesCompositeSpaceAndManagement(t *testing.T) {
+	doc := readRequirements(t)
+	block := requirementBlock(doc, "REQ-015")
+	if block == "" {
+		t.Fatal("requirements must contain ### REQ-015 section")
+	}
+	lower := strings.ToLower(block)
+	for _, kw := range []string{"scene", "create", "list", "delete", "open"} {
+		if !strings.Contains(lower, kw) {
+			t.Fatalf("REQ-015 must mention %q", kw)
+		}
+	}
+	if !strings.Contains(lower, "automatically") || !strings.Contains(lower, "offset") {
+		t.Fatal("REQ-015 must require automatic placement offsets on create")
+	}
+	if !strings.Contains(lower, "integer") {
+		t.Fatal("REQ-015 must require integer placement offsets")
+	}
+	if !strings.Contains(lower, "non-negative") {
+		t.Fatal("REQ-015 must require non-negative scene-space containment")
+	}
+	if !strings.Contains(lower, "1 meter") && !strings.Contains(lower, "1 m") {
+		t.Fatal("REQ-015 must require at least 1 meter margin")
+	}
+	if !strings.Contains(lower, "three.js") {
+		t.Fatal("REQ-015 must require three.js scene rendering")
+	}
+	if !strings.Contains(lower, "derived") || !strings.Contains(lower, "canonical") {
+		t.Fatal("REQ-015 must distinguish derived scene coordinates from canonical model coordinates")
+	}
+	if !strings.Contains(lower, "confirm") || !strings.Contains(lower, "last") {
+		t.Fatal("REQ-015 must require confirmation when removing the last model")
+	}
+	if !strings.Contains(lower, "to the") || !strings.Contains(lower, "right") {
+		t.Fatal("REQ-015 must require default placement to the right when adding models")
+	}
+	for _, dep := range []string{"req-002", "req-005", "req-006", "req-010", "req-011", "req-012"} {
+		if !strings.Contains(lower, dep) {
+			t.Fatalf("REQ-015 dependencies must include %s", strings.ToUpper(dep))
+		}
+	}
+	for _, kw := range []string{"mobile", "tablet", "desktop"} {
+		if !strings.Contains(lower, kw) {
+			t.Fatalf("REQ-015 responsive notes must mention %q", kw)
+		}
+	}
+	if !strings.Contains(block, "| **Priority** | Must |") {
+		t.Fatal("REQ-015 metadata must state priority Must")
+	}
+}
+
 func TestAcceptance_REQ016_cameraResetModelAndSceneViews(t *testing.T) {
 	doc := readRequirements(t)
 	block := requirementBlock(doc, "REQ-016")
@@ -573,6 +668,91 @@ func TestAcceptance_REQ016_cameraResetModelAndSceneViews(t *testing.T) {
 	}
 	if !strings.Contains(block, "| **Priority** | Must |") {
 		t.Fatal("REQ-016 metadata must state priority Must")
+	}
+}
+
+func TestAcceptance_REQ019_fixedDarkGreyThreeJSViewport(t *testing.T) {
+	doc := readRequirements(t)
+	block := requirementBlock(doc, "REQ-019")
+	if block == "" {
+		t.Fatal("requirements must contain ### REQ-019 section")
+	}
+	lower := strings.ToLower(block)
+	if !strings.Contains(lower, "three.js") {
+		t.Fatal("REQ-019 must reference three.js model and scene views")
+	}
+	if !strings.Contains(lower, "dark") || (!strings.Contains(lower, "grey") && !strings.Contains(lower, "gray")) {
+		t.Fatal("REQ-019 must require a dark-grey viewport background")
+	}
+	if !strings.Contains(lower, "light") || !strings.Contains(lower, "dark") {
+		t.Fatal("REQ-019 must require same viewport policy in light and dark shell modes")
+	}
+	if !strings.Contains(lower, "req-018") {
+		t.Fatal("REQ-019 must reference REQ-018 shell theme behavior")
+	}
+	if !strings.Contains(lower, "req-010") || !strings.Contains(lower, "req-015") {
+		t.Fatal("REQ-019 dependencies must include REQ-010 and REQ-015")
+	}
+	if !strings.Contains(lower, "req-002") {
+		t.Fatal("REQ-019 must reference REQ-002 for responsive controls")
+	}
+	for _, kw := range []string{"mobile", "tablet", "desktop"} {
+		if !strings.Contains(lower, kw) {
+			t.Fatalf("REQ-019 responsive notes must mention %q", kw)
+		}
+	}
+	if !strings.Contains(lower, "hover-only") && !strings.Contains(lower, "hover only") {
+		t.Fatal("REQ-019 must forbid hover-only essential 3D interactions")
+	}
+	if !strings.Contains(block, "| **Priority** | Must |") {
+		t.Fatal("REQ-019 metadata must state priority Must")
+	}
+}
+
+func TestAcceptance_REQ020_sceneSpatialAPI(t *testing.T) {
+	doc := readRequirements(t)
+	block := requirementBlock(doc, "REQ-020")
+	if block == "" {
+		t.Fatal("requirements must contain ### REQ-020 section")
+	}
+	lower := strings.ToLower(block)
+	if !strings.Contains(lower, "dimension") {
+		t.Fatal("REQ-020 must require a scene dimensions read operation")
+	}
+	if !strings.Contains(lower, "all lights") {
+		t.Fatal("REQ-020 must require retrieving all scene lights")
+	}
+	if !strings.Contains(lower, "cuboid") {
+		t.Fatal("REQ-020 must require cuboid query/update operations")
+	}
+	if !strings.Contains(lower, "sphere") {
+		t.Fatal("REQ-020 must require sphere query/update operations")
+	}
+	if !strings.Contains(lower, "bulk") || !strings.Contains(lower, "update") {
+		t.Fatal("REQ-020 must require bulk update operations")
+	}
+	if !strings.Contains(lower, "scene space") {
+		t.Fatal("REQ-020 must require scene-space coordinates")
+	}
+	if !strings.Contains(lower, "must not") || !strings.Contains(lower, "canonical") {
+		t.Fatal("REQ-020 must require canonical model coordinates to remain unchanged")
+	}
+	if !strings.Contains(lower, "invalid geometry") || !strings.Contains(lower, "non-positive") {
+		t.Fatal("REQ-020 must require invalid geometry rejection")
+	}
+	if !strings.Contains(lower, "partial") {
+		t.Fatal("REQ-020 must forbid partial updates on invalid geometry")
+	}
+	for _, dep := range []string{"req-005", "req-011", "req-015"} {
+		if !strings.Contains(lower, dep) {
+			t.Fatalf("REQ-020 dependencies must include %s", strings.ToUpper(dep))
+		}
+	}
+	if !strings.Contains(lower, "n/a") || !strings.Contains(lower, "req-002") {
+		t.Fatal("REQ-020 must include API-only responsive notes with REQ-002 linkage")
+	}
+	if !strings.Contains(block, "| **Priority** | Must |") {
+		t.Fatal("REQ-020 metadata must state priority Must")
 	}
 }
 
