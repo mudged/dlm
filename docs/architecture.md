@@ -1,6 +1,6 @@
 # Architecture
 
-This document defines technical structure and deployment for the product described in `docs/requirements.md` (**REQ-001–REQ-019**). It satisfies **REQ-001** (Go + Next.js + Tailwind), **REQ-002** (responsive, client-interactive UI), **REQ-003** (Raspberry Pi 4 Model B, **ARM64**, resource awareness), **REQ-004** (**one runnable executable** per release target; **no** mandatory Docker/OCI/compose packaging at this stage), **REQ-005** (wire light **chain** model: **CSV** interchange, **metadata**, **at most two** logical neighbors per light by **consecutive id**—**endpoints** have **one**), **REQ-006** (list / view / delete / create via CSV upload; **delete blocked** with **409** when the model is **referenced** by **one or more** **scenes**, with an **actionable** **error** payload), **REQ-007** (server-side CSV validation and actionable errors), **REQ-008** (single command to build UI and run the Go server locally), **REQ-009** (default **sphere**, **cube**, **cone** samples: lights on **exterior** nominal surfaces with **even** coverage of **face planes** (**cube**) and **surface area** (**sphere** / **cone**), **not** **edge-only** or **single-curve-only** layouts; consecutive spacing **0.05–0.10 m**; **500–1000** lights each; **≤ 0.03 m** surface deviation; **~2 m** characteristic size), **REQ-010** (**three.js** **3D** view on **model detail**: **every** light as **2 cm** sphere; **all** lights drawn for **n ≤ 1000**; **wire** segments **only** between **consecutive** **ids**; segments **`#D0D0D0`** at **85% transparency** (**15% opacity**), **subtler** than spheres; **hover** / **touch** disclosure of **id** and **coordinates**), **REQ-011** (**REST** **read/write** of per-light **on/off**, **hex** **#RRGGBB** colour, **brightness** **0–100%**, persisted in **SQLite**), **REQ-012** (**3D** **spheres** reflect state: **on** = **opaque** **filled** **colour** × **brightness**; **off** = **`#D0D0D0`** at **85% transparency** matching segments; **timely** UI sync after **writes**), **REQ-013** (**model detail**: **paginated** light **list** with **page-size** control and **go to id**; **multi-select** and **bulk apply** via **batch** **PATCH**), **REQ-014** (**default** all lights **off**, **`#FFFFFF`**, **100%** brightness on create/seed; **reset** control + **authoritative** API to restore that state for **all** lights in **one** action), **REQ-015** (**scenes**: **named** **composite** **3D** **space**; **create** with **≥ 1** **model** **and** **server-computed** **integer** **offsets** **(no** **client-supplied** **offsets** **on** **create)**; **canonical** **`lights.x/y/z`** **unchanged** **by** **scenes**; **derived** **`sx/sy/sz`** **=** **canonical** **+** **offset** **for** **API**/**UI** **in** **scene** **context**; **non-negative** **containment** **+** **≥ 1 m** **margin** **beyond** **max** **extent** **per** **axis**; **three.js** **composite** **view** **reusing** **REQ-010**/**012** **per** **model**; **add**/**remove**/**optional** **placement** **edit** **after** **create**; **last** **model** **→** **confirm** **then** **delete** **scene**; **+X** **default** **for** **models** **added** **after** **create**), **REQ-016** (**camera reset** on **model** and **scene** **three.js** views: **client-only** restore of **default** **framing**; **no** **persisted** **data** **changes**), **REQ-017** (**Options** **UI** with **factory reset**: **confirmed** **wipe** of **all** **SQLite** **application** **data** **then** **re-seed** **§3.8** **samples** **to** **match** **fresh** **install**), **REQ-018** (**application** **shell**: **light**/**dark** **themes** (**white**/dark **grey** **surfaces**, **dark**/ **white** **primary** **text**); **collapsible** **left** **nav** **with** **burger** **toggle**; **branding** **title** **`Domestic Light & Magic`** **+** **Font Awesome** **classic** **regular** **lightbulb** **logo**; **Font Awesome** **icons** **on** **action** **buttons** **throughout** **the** **UI** **per** **§4.11**; **default** **theme** **follows** **`prefers-color-scheme`** **until** **the** **user** **overrides** **with** **a** **persisted** **choice**), and **REQ-019** (**model** **and** **scene** **three.js** **views**; **fixed** **dark-grey** **WebGL** **backdrop** **in** **both** **shell** **themes**; **§4.7** **and** **§4.9**).
+This document defines technical structure and deployment for the product described in `docs/requirements.md` (**REQ-001–REQ-020**). It satisfies **REQ-001** (Go + Next.js + Tailwind), **REQ-002** (responsive, client-interactive UI), **REQ-003** (Raspberry Pi 4 Model B, **ARM64**, resource awareness), **REQ-004** (**one runnable executable** per release target; **no** mandatory Docker/OCI/compose packaging at this stage), **REQ-005** (wire light **chain** model: **CSV** interchange, **metadata**, **at most two** logical neighbors per light by **consecutive id**—**endpoints** have **one**), **REQ-006** (list / view / delete / create via CSV upload; **delete blocked** with **409** when the model is **referenced** by **one or more** **scenes**, with an **actionable** **error** payload), **REQ-007** (server-side CSV validation and actionable errors), **REQ-008** (single command to build UI and run the Go server locally), **REQ-009** (default **sphere**, **cube**, **cone** samples: lights on **exterior** nominal surfaces with **even** coverage of **face planes** (**cube**) and **surface area** (**sphere** / **cone**), **not** **edge-only** or **single-curve-only** layouts; consecutive spacing **0.05–0.10 m**; **500–1000** lights each; **≤ 0.03 m** surface deviation; **~2 m** characteristic size), **REQ-010** (**three.js** **3D** view on **model detail**: **every** light as **2 cm** sphere; **all** lights drawn for **n ≤ 1000**; **wire** segments **only** between **consecutive** **ids**; segments **`#D0D0D0`** at **85% transparency** (**15% opacity**), **subtler** than spheres; **hover** / **touch** disclosure of **id** and **coordinates**), **REQ-011** (**REST** **read/write** of per-light **on/off**, **hex** **#RRGGBB** colour, **brightness** **0–100%**, persisted in **SQLite**), **REQ-012** (**3D** **spheres** reflect state: **on** = **opaque** **filled** **colour** × **brightness**; **off** = **`#D0D0D0`** at **85% transparency** matching segments; **timely** UI sync after **writes**), **REQ-013** (**model detail**: **paginated** light **list** with **page-size** control and **go to id**; **multi-select** and **bulk apply** via **batch** **PATCH**), **REQ-014** (**default** all lights **off**, **`#FFFFFF`**, **100%** brightness on create/seed; **reset** control + **authoritative** API to restore that state for **all** lights in **one** action), **REQ-015** (**scenes**: **named** **composite** **3D** **space**; **create** with **≥ 1** **model** **and** **server-computed** **integer** **offsets** **(no** **client-supplied** **offsets** **on** **create)**; **canonical** **`lights.x/y/z`** **unchanged** **by** **scenes**; **derived** **`sx/sy/sz`** **=** **canonical** **+** **offset** **for** **API**/**UI** **in** **scene** **context**; **non-negative** **containment** **+** **≥ 1 m** **margin** **beyond** **max** **extent** **per** **axis**; **three.js** **composite** **view** **reusing** **REQ-010**/**012** **per** **model**; **add**/**remove**/**optional** **placement** **edit** **after** **create**; **last** **model** **→** **confirm** **then** **delete** **scene**; **+X** **default** **for** **models** **added** **after** **create**), **REQ-016** (**camera reset** on **model** and **scene** **three.js** views: **client-only** restore of **default** **framing**; **no** **persisted** **data** **changes**), **REQ-017** (**Options** **UI** with **factory reset**: **confirmed** **wipe** of **all** **SQLite** **application** **data** **then** **re-seed** **§3.8** **samples** **to** **match** **fresh** **install**), **REQ-018** (**application** **shell**: **light**/**dark** **themes** (**white**/dark **grey** **surfaces**, **dark**/ **white** **primary** **text**); **collapsible** **left** **nav** **with** **burger** **toggle**; **branding** **title** **`Domestic Light & Magic`** **+** **Font Awesome** **classic** **regular** **lightbulb** **logo**; **Font Awesome** **icons** **on** **action** **buttons** **throughout** **the** **UI** **per** **§4.11**; **default** **theme** **follows** **`prefers-color-scheme`** **until** **the** **user** **overrides** **with** **a** **persisted** **choice**), **REQ-019** (**model** **and** **scene** **three.js** **views**; **fixed** **dark-grey** **WebGL** **backdrop** **in** **both** **shell** **themes**; **§4.7** **and** **§4.9**), and **REQ-020** (**scene spatial API** for **dimensions**, **all-lights retrieval**, **cuboid/sphere filtering**, and **cuboid/sphere bulk updates** computed in **scene coordinates** without rewriting canonical model coordinates; **§3.15**, **§8.15**).
 
 ## Architectural resolution: REQ-004 (single binary) vs Next.js
 
@@ -39,6 +39,7 @@ This meets REQ-004 rule 1 (**no separate Node.js runtime** in the distribution) 
 | REQ-017 | **`POST /api/v1/system/factory-reset`** (**§3.2**, **§3.14**); **`store.FactoryReset`** **transaction** **then** **`SeedDefaultSamples`**; **Options** **route** **§4.10** **+** **modal** **before** **POST**; **post-success** **navigate** **`/models`** **+** **success** **message** (**architectural** **default** **for** **REQ-017** **open** **question**). |
 | REQ-018 | **§4.11**: **Tailwind** **`dark:`** **variant** on **`html`** (**add**/**remove** **`class="dark"`** **or** **`data-theme="dark"`** **per** **Tailwind** **v4**/**v3** **config**); **before** **any** **stored** **user** **choice**, **derive** **initial** **light**/**dark** **from** **`window.matchMedia('(prefers-color-scheme: dark)')`** **(or** **equivalent**)** **when** **available**; **fallback** **to** **light** **if** **the** **platform** **does** **not** **expose** **a** **scheme**; **after** **the** **user** **toggles** **theme**, **persist** **`light`** **or** **`dark`** **in** **`localStorage`** **key** **`dlm-theme`** **and** **re-apply** **on** **load** **before** **first** **paint** **(inline** **blocking** **script** **in** **`layout`** **recommended** **to** **avoid** **flash**)** **so** **the** **persisted** **value** **overrides** **`prefers-color-scheme`** **until** **cleared** **or** **changed**; **shell** **tokens**: **light** **`bg-white`** **+** **`text-gray-900`**; **dark** **`bg-gray-900`** **+** **`text-white`** (**dark** **grey** **background**, **not** **mandating** **`#000`**); **`AppShell`**: **header** **(burger,** **`faLightbulb`** **regular** **logo,** **exact** **title** **`Domestic Light & Magic`**, **theme** **toggle** **with** **icons)** **+** **collapsible** **left** **`<aside>`** **nav** **+** **`main`**; **Font Awesome** **Free** **`@fortawesome/fontawesome-svg-core`**, **`@fortawesome/react-fontawesome`**, **`@fortawesome/free-regular-svg-icons`**, **`@fortawesome/free-solid-svg-icons`**; **buttons** **and** **button-styled** **controls** **include** **a** **visible** **Font Awesome** **icon** **+** **accessible** **name**. |
 | REQ-019 | **§4.7**, **§4.9**: **`ModelLightsCanvas`** **/** **`SceneLightsCanvas`** **set** **a** **fixed** **dark-grey** **clear** **/** **scene** **background** **and** **matching** **letterbox** **wrapper** **(see** **§4.7** **viewport** **subsection**)** **independent** **of** **`html`** **`dark`** **class**; **does** **not** **replace** **REQ-018** **shell** **tokens** **for** **`main`** **chrome**. |
+| REQ-020 | **§3.2**, **§3.12**, **§3.13**, **§3.15**, **§8.15**: scene-space API endpoints for dimensions + full/filtered light retrieval (cuboid/sphere) + transactional bulk updates by cuboid/sphere region, all computed from derived scene coordinates (**`sx/sy/sz`**) and validated with explicit geometry rules. |
 
 **Assumed Pi context:** Raspberry Pi 4 Model B, **64-bit OS**, **ARM64** userspace. **2–8 GB RAM** — with **no Node** at runtime, **4 GB** is practical for modest traffic; **off-device** `next export` builds recommended.
 
@@ -89,7 +90,7 @@ dlm/
 - **Module path:** `example.com/dlm/backend` (or successor); unchanged conceptually.
 - **`cmd/server`:** Load config; construct **`http.Server`**; mount **API sub-router** and **static file server** from **`embed`**; graceful **SIGINT/SIGTERM** shutdown.
 - **`internal/config`:** **Env-based** listen address, timeouts, optional **CORS** (primarily for **dev** when UI dev server uses another origin); production **same-origin** reduces CORS; **SQLite** path via **`DLM_DB_PATH`** and/or **`DLM_DATA_DIR`** (**§3.3**).
-- **`internal/httpapi`:** Middleware (**request ID**, **slog**, **recover**, optional **CORS**); **JSON** handlers and error envelope `{ "error": { "code", "message", "details"? } }`; **models**, **light-state**, and **scenes** routes (including **batch** **PATCH** per **§3.10**) delegate to **`internal/store`** and **`internal/wiremodel`**.
+- **`internal/httpapi`:** Middleware (**request ID**, **slog**, **recover**, optional **CORS**); **JSON** handlers and error envelope `{ "error": { "code", "message", "details"? } }`; **models**, **light-state**, and **scenes** routes (including **batch** **PATCH** per **§3.10** and **scene-region** query/update routes per **§3.15**) delegate to **`internal/store`** and **`internal/wiremodel`**.
 - **`internal/wiremodel`:** Parses and validates uploaded **CSV** per **§3.6**; returns structured errors for HTTP **400** responses (**REQ-007**).
 - **`internal/store`:** **SQLite** repository (see **§3.3**, **§3.12**); opened at process start; migrations or `CREATE IF NOT EXISTS` for schema (**REQ-006**); **idempotent default seed** when no models exist (**§3.8**, **REQ-009**); **scene** CRUD and **reference** checks for **model** **delete** (**REQ-015**, **REQ-006** rule **5**).
 - **`internal/samples`:** Pure functions that return **`[]wiremodel.Light`** (sequential **id**s from **0**) for the three canonical shapes: **on-surface** positions, **even** coverage per **§3.8**, consecutive **dᵢ** in band; no I/O (**REQ-009**).
@@ -110,6 +111,12 @@ dlm/
 | API | `POST /api/v1/scenes/{id}/models` | **Add** a **model** to an **existing** scene: **`{ "model_id", "offset_x"?, "offset_y"?, "offset_z"? }`** — if **offsets** **omitted**, server **computes** **default** **“to** **the** **right”** **placement** (**§3.13**). **201** / **400** / **404** / **409** (duplicate model in scene). |
 | API | `PATCH /api/v1/scenes/{id}/models/{modelId}` | **Update** **integer** **offsets** **`{ "offset_x", "offset_y", "offset_z" }`** (all required or **PATCH** **semantics** per implementor—**must** **re-validate** **containment**). **200** with **updated** **placement** + **optional** **derived** **bounds** **metadata**. |
 | API | `DELETE /api/v1/scenes/{id}/models/{modelId}` | **Remove** **model** **from** **scene**. If **> 1** models: **204**. If **this** **is** **the** **last** **model**: **409** **`scene_last_model`** — **no** **mutation**; **message** **states** **that** **confirming** **will** **delete** **the** **entire** **scene**; client **shows** **modal** then calls **`DELETE /api/v1/scenes/{id}`** (**§3.13**). |
+| API | `GET /api/v1/scenes/{id}/dimensions` | Return scene-space dimensions used for region queries: **`origin`**, **`size`**, **`max`**, and **`margin_m`** (see **§3.15**). **REQ-020** |
+| API | `GET /api/v1/scenes/{id}/lights` | Return all scene lights as a flattened list in scene coordinates (**`sx/sy/sz`**) plus model/light identity. **REQ-020** |
+| API | `POST /api/v1/scenes/{id}/lights/query/cuboid` | Return only lights inside a caller-supplied cuboid in scene space. **REQ-020** |
+| API | `POST /api/v1/scenes/{id}/lights/query/sphere` | Return only lights inside a caller-supplied sphere in scene space. **REQ-020** |
+| API | `PATCH /api/v1/scenes/{id}/lights/state/cuboid` | Transactional bulk state update for all lights inside a cuboid in scene space; state semantics match **REQ-011**. **REQ-020** |
+| API | `PATCH /api/v1/scenes/{id}/lights/state/sphere` | Transactional bulk state update for all lights inside a sphere in scene space; state semantics match **REQ-011**. **REQ-020** |
 | API | `GET /api/v1/models/{id}/lights/state` | **All** lights’ **state** for the model (**ordered** by **`id`**). **REQ-011** |
 | API | `GET /api/v1/models/{id}/lights/{lightId}/state` | **One** light’s **state** (**404** if model or **lightId** missing). **REQ-011** |
 | API | `PATCH /api/v1/models/{id}/lights/{lightId}/state` | **Partial** update of **`on`**, **`color`**, **`brightness_pct`** (JSON body; omitted fields unchanged). **200** returns the **full** **updated** **state** object. **REQ-011** |
@@ -389,6 +396,66 @@ Requirements demand **both** **even** **2D/area** placement **and** **consecutiv
 **Security / abuse:** **Endpoint** **is** **unauthenticated** **(same** **as** **the** **rest** **of** **the** **MVP** **API**)**.** **Operator** **documentation** **should** **state** **that** **any** **client** **that** **can** **reach** **the** **server** **can** **invoke** **factory** **reset**; **future** **auth** **may** **protect** **this** **route** **first**.
 
 **HTTP:** **`POST /api/v1/system/factory-reset`** **—** **empty** **body** **or** **`{}`** **accepted**; **200** **`{ "ok": true }`**. **Idempotent** **in** **effect:** **repeated** **calls** **still** **yield** **three** **deterministic** **samples** **per** **§3.8**.
+
+### 3.15 Scene spatial API (dimensions, region queries, and region bulk updates) (**REQ-020**)
+
+This section extends **REQ-015** scene composition with explicit API contracts for querying and updating lights by **scene-space geometry**. All region checks are performed against **derived** coordinates (**`sx/sy/sz`**), never canonical model coordinates (**`x/y/z`**).
+
+**Canonical invariants reused from §3.12 / §3.13:**
+
+1. **Derived coordinate rule:** **`sx = x + offset_x`**, **`sy = y + offset_y`**, **`sz = z + offset_z`**.
+2. **No canonical rewrite:** Region reads and writes MUST NOT mutate stored canonical coordinates.
+3. **State semantics:** Bulk update fields follow **REQ-011** exactly (**`on`**, canonical **`#RRGGBB`** **`color`**, **`brightness_pct`** in **0..100**).
+
+**Geometry payload contracts (JSON):**
+
+- **Cuboid query/update body**
+  - **`position`**: `{ "x": number, "y": number, "z": number }` (minimum corner in scene space).
+  - **`dimensions`**: `{ "width": number, "height": number, "depth": number }` (all strictly `> 0`).
+- **Sphere query/update body**
+  - **`center`**: `{ "x": number, "y": number, "z": number }`.
+  - **`radius`**: number strictly `> 0`.
+- All numeric inputs MUST be finite (`NaN` / `Inf` rejected).
+- **Boundary policy resolution (REQ-020 open question):** inclusion is **inclusive**:
+  - Cuboid: `sx ∈ [x, x+width]`, `sy ∈ [y, y+height]`, `sz ∈ [z, z+depth]`.
+  - Sphere: Euclidean distance `dist((sx,sy,sz), center) <= radius`.
+
+**Dimensions endpoint (resolves REQ-020 dimensions shape):**
+
+- **`GET /api/v1/scenes/{id}/dimensions`** returns:
+  - `origin`: always `{ "x": 0, "y": 0, "z": 0 }` (scene non-negative octant anchor).
+  - `size`: `{ "width", "height", "depth" }` derived from §3.12 visual/query AABB (`max + 1m margin`).
+  - `max`: `{ "x", "y", "z" }` same upper corner as §3.12 (`Mmax + 1` per axis).
+  - `margin_m`: numeric margin value (`1` in current architecture baseline).
+- This shape keeps axis-aligned dimensions unambiguous while explicitly disclosing origin metadata.
+
+**Read endpoints (scene coordinates only):**
+
+- **`GET /api/v1/scenes/{id}/lights`** → flattened list:
+  - Each item includes at minimum `{ "scene_id", "model_id", "light_id", "x", "y", "z", "sx", "sy", "sz", "on", "color", "brightness_pct" }`.
+  - `x/y/z` are canonical for traceability; region matching and client spatial behavior MUST use `sx/sy/sz`.
+- **`POST /api/v1/scenes/{id}/lights/query/cuboid`** and **`.../query/sphere`**:
+  - Validate geometry payload then return only matching lights in the same flattened shape.
+
+**Bulk update endpoints (all-or-nothing):**
+
+- **`PATCH /api/v1/scenes/{id}/lights/state/cuboid`**
+- **`PATCH /api/v1/scenes/{id}/lights/state/sphere`**
+- Request body = geometry payload + at least one state field (`on`, `color`, `brightness_pct`).
+- Execution model:
+  1. Validate scene id exists and geometry/state payload is valid.
+  2. Resolve matching lights by derived coordinates (`sx/sy/sz`) from current scene composition.
+  3. In one DB transaction, apply validated state fields to all matched `(model_id, idx)` rows.
+  4. On any validation/store failure, rollback entire operation (no partial updates).
+- Recommended response shape:
+  - `{ "updated_count": <int>, "states": [ { "model_id", "id", "on", "color", "brightness_pct", "sx", "sy", "sz" }, ... ] }`
+  - `updated_count` MAY be `0` (valid no-op if region matches no lights).
+
+**Error model (REQ-020 rule 9):**
+
+- Geometry validation failure → **`400`** with `error.code = "validation_failed"` and actionable `details`.
+- Scene missing → **`404`**.
+- Any transactional failure after validation → **`500`** with generic message (no partial writes committed).
 
 ---
 
@@ -1045,6 +1112,47 @@ sequenceDiagram
   R-->>User: View returns to default framing; no HTTP request
 ```
 
+### 8.15 Scene region query and bulk update in scene coordinates (**REQ-020**)
+
+```mermaid
+sequenceDiagram
+  actor User as Integrator or UI user
+  participant B as Browser or API client
+  participant P as Reverse proxy (optional)
+  participant G as Go binary
+  participant S as SQLite store
+
+  User->>B: Query cuboid or sphere region in a scene
+  B->>P: POST /api/v1/scenes/{id}/lights/query/{shape}
+  P->>G: POST
+  G->>G: Validate geometry payload (finite numbers, positive dimensions/radius)
+  alt invalid geometry
+    G-->>P: 400 validation_failed
+    P-->>B: 400 JSON error with actionable details
+  else valid geometry
+    G->>S: Load scene placements + light rows
+    S-->>G: Rows
+    G->>G: Compute sx,sy,sz and filter inclusion (inclusive boundaries)
+    G-->>P: 200 matched lights in scene coordinates
+    P-->>B: 200 JSON
+  end
+
+  User->>B: Bulk update state for same region
+  B->>P: PATCH /api/v1/scenes/{id}/lights/state/{shape}
+  P->>G: PATCH
+  G->>G: Validate geometry + REQ-011 state fields
+  G->>S: BEGIN; resolve matches by sx/sy/sz; update lights; COMMIT
+  alt store or validation failure during transaction
+    G->>S: ROLLBACK
+    G-->>P: 4xx or 5xx JSON error
+    P-->>B: Error response; no partial writes
+  else success
+    S-->>G: OK
+    G-->>P: 200 updated_count + updated states
+    P-->>B: 200 JSON
+  end
+```
+
 ---
 
 ## 9. Security notes (baseline)
@@ -1081,7 +1189,8 @@ sequenceDiagram
 | REQ-017 | §1, §3.2, §3.14, §4.6, §4.10, §8.13, §9 |
 | REQ-018 | §1, §2, §4.5, §4.6, §4.7, §4.9, §4.10, §4.11, §8.1 (inline theme + hydration), §10 |
 | REQ-019 | §1, §4.7, §4.9, §4.11 (contrast note), §8.5, §8.11, §10 |
+| REQ-020 | §1, §3.2, §3.12, §3.13, §3.15, §8.15 |
 
 ---
 
-**Next step:** Invoke **`@implementor`** **to** **align** **code** **with** **§4.11** **(REQ-018**:** **`prefers-color-scheme`** **default**, **`localStorage`** **`dlm-theme`** **override**)** **and** **§4.7**/**§4.9** **(REQ-019**:** **`VIZ_VIEWPORT_BG`** **/** **equivalent** **on** **`ModelLightsCanvas`** **and** **`SceneLightsCanvas`**)**, **plus** **any** **remaining** **`AppShell`**, **Font Awesome**, **nav**, **`POST /api/v1/system/factory-reset`** **(**§3.14**)**, **`/options`** **(**§4.10**)**, **and** **“Reset camera”** **(**§4.7**, **§4.9**)** **gaps**. **Then** invoke **`@verifier`** **to** **audit**, **run** **tests**, **and** **update** **`docs/traceability_matrix.md`**.
+**Next step:** Invoke **`@implementor`** to implement the architecture updates, including the **REQ-020** scene spatial API in **§3.15** (dimensions, cuboid/sphere query, cuboid/sphere bulk update in scene coordinates), plus any remaining **REQ-018/REQ-019** shell and viewport items. After implementation, invoke **`@verifier`** to audit, run tests, and update **`docs/traceability_matrix.md`**.
