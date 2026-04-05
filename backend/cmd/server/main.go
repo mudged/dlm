@@ -67,7 +67,13 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+
+	schedCtx, schedCancel := context.WithCancel(context.Background())
+	defer schedCancel()
+	go httpapi.StartRoutineScheduler(schedCtx, log, st)
+
 	<-ctx.Done()
+	schedCancel()
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

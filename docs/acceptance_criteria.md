@@ -549,15 +549,16 @@ Feature: Options factory reset with confirmation (REQ-017)
     Given docs/requirements.md defines REQ-017
     When the REQ-017 business rules about confirmation are read
     Then factory reset must show a blocking prompt before irreversible effects begin
-    And the prompt must warn that all models scenes and related data will be permanently removed
+    And the prompt must warn that all models scenes routines and related data will be permanently removed
     And only default sample models will remain after completion
     And cancel or dismiss must leave data unchanged
 
   Scenario: REQ-017 requires post-reset state to match fresh samples
     Parent requirement: REQ-017
-    Given docs/requirements.md defines REQ-009 REQ-011 REQ-014 and REQ-017
+    Given docs/requirements.md defines REQ-009 REQ-011 REQ-014 REQ-017 and REQ-021
     When the REQ-017 business rules about outcomes are read
     Then after confirmed factory reset no user-created models or scenes may remain in listings
+    And no routine definitions or persisted routine run state from REQ-021 may remain
     And the model list must satisfy REQ-009 expectations for a fresh seed with three identifiable samples
     And per-light defaults for present models must align with REQ-014 and REQ-011
 
@@ -672,6 +673,68 @@ Feature: Scene spatial API dimensions filters and bulk updates (REQ-020)
     When region input contains non-finite values or non-positive dimensions or radius
     Then the API request must be rejected with a clear actionable error
     And no partial updates may be persisted
+
+Feature: Scene routines definitions run stop and first random colour type (REQ-021)
+
+  Scenario: REQ-021 requires routine definitions with name description and type plus list and delete
+    Parent requirement: REQ-021
+    Given docs/requirements.md defines REQ-021
+    When the REQ-021 scope and business rules about definitions are read
+    Then the product must support creating a routine with name description and type
+    And the product must support listing all routine definitions
+    And the product must support deleting a routine definition
+    And name and type are required at create time
+
+  Scenario: REQ-021 requires starting and stopping a routine against a scene
+    Parent requirement: REQ-021
+    Given docs/requirements.md defines REQ-021
+    When the REQ-021 business rules about run lifecycle are read
+    Then the product must support starting a routine run scoped to exactly one existing scene
+    And the product must support stopping an active run
+    And start must fail with clear actionable errors when the scene does not exist or is not usable
+
+  Scenario: REQ-021 binds running automation to scene API for light state changes
+    Parent requirement: REQ-021
+    Given docs/requirements.md defines REQ-011 REQ-020 and REQ-021
+    When the REQ-021 business rule about scene API usage during an active run is read
+    Then automated changes to on off hex colour or brightness for lights in that scene must use the scene API surface from REQ-020
+    And canonical stored model coordinates must not be rewritten by routine automation
+
+  Scenario: REQ-021 allows volumetric targeting in scene space for types that need it
+    Parent requirement: REQ-021
+    Given docs/requirements.md defines REQ-020 and REQ-021
+    When the REQ-021 business rules about volumetric targeting are read
+    Then routine types that limit effects must evaluate inclusion using scene-space positions
+    And they must use cuboid and or sphere geometry consistent with REQ-020
+    And invalid region geometry must be rejected per REQ-020 expectations
+
+  Scenario: REQ-021 first routine type turns on all scene lights and randomizes colours about every second
+    Parent requirement: REQ-021
+    Given docs/requirements.md defines REQ-011 REQ-015 REQ-020 and REQ-021
+    When the REQ-021 business rules for the first routine type are read
+    Then starting that type on a scene must set every light in the scene on with brightness 100 percent and valid hex colour per REQ-011
+    And while the run remains active at most once per elapsed SI second each light must receive a new independently uniformly random REQ-011-valid hex colour
+    And the approximate one-second cadence must be documented in docs/architecture.md
+
+  Scenario: REQ-021 stopping the first type ends automation without implicit reset to defaults
+    Parent requirement: REQ-021
+    Given docs/requirements.md defines REQ-011 REQ-014 and REQ-021
+    When the REQ-021 business rules about stopping the first type are read
+    Then stopping must cease further automated updates promptly
+    And lights retain the last successfully persisted state per REQ-011
+    And stopping must not by itself reset lights to REQ-014 defaults
+
+  Scenario: REQ-021 ties routine UI to responsive non-hover-only use when exposed
+    Parent requirement: REQ-021
+    Given docs/requirements.md defines REQ-002 and REQ-021
+    When the REQ-021 responsive UX notes are read
+    Then any UI for list create delete start and stop must be usable on mobile tablet and desktop without hover-only essential steps
+
+  Scenario: REQ-017 factory reset removes routine data per REQ-021 scope
+    Parent requirement: REQ-017
+    Given docs/requirements.md defines REQ-017 and REQ-021
+    When the REQ-017 scope about factory reset data removal is read
+    Then factory reset must remove persisted scene routine definitions and any persisted routine run state together with models scenes and related data
 ```
 
 ---

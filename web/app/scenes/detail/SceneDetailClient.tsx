@@ -3,6 +3,8 @@
 import {
   faArrowsRotate,
   faCheck,
+  faCirclePlay,
+  faCircleStop,
   faPlus,
   faRightFromBracket,
   faRotate,
@@ -22,6 +24,14 @@ import {
   removeSceneModel,
   type SceneDetail,
 } from "@/lib/scenes";
+import {
+  fetchRoutines,
+  fetchSceneRoutineRuns,
+  startSceneRoutine,
+  stopSceneRoutineRun,
+  type RoutineDefinition,
+  type RoutineRun,
+} from "@/lib/routines";
 
 const SceneLightsCanvas = dynamic(
   () => import("@/components/SceneLightsCanvas"),
@@ -38,6 +48,9 @@ export function SceneDetailClient() {
   const [busy, setBusy] = useState(false);
   const [addModelId, setAddModelId] = useState("");
   const [cameraResetVersion, setCameraResetVersion] = useState(0);
+  const [routines, setRoutines] = useState<RoutineDefinition[] | null>(null);
+  const [routineRuns, setRoutineRuns] = useState<RoutineRun[]>([]);
+  const [selectedRoutineId, setSelectedRoutineId] = useState("");
 
   const load = useCallback(async () => {
     if (!id) {
@@ -45,16 +58,20 @@ export function SceneDetailClient() {
     }
     setError(null);
     try {
-      const [s, mRes] = await Promise.all([
+      const [s, mRes, rList, runs] = await Promise.all([
         fetchScene(id),
         fetch("/api/v1/models", { cache: "no-store" }),
+        fetchRoutines().catch(() => [] as RoutineDefinition[]),
+        fetchSceneRoutineRuns(id).catch(() => [] as RoutineRun[]),
       ]);
       setScene(s);
+      setRoutineRuns(runs);
       if (mRes.ok) {
         setModels((await mRes.json()) as ModelSummary[]);
       } else {
         setModels([]);
       }
+      setRoutines(rList);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load scene");
       setScene(null);
@@ -64,6 +81,25 @@ export function SceneDetailClient() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!id || routineRuns.length === 0) {
+      return;
+    }
+    const t = window.setInterval(() => {
+      void (async () => {
+        try {
+          const s = await fetchScene(id);
+          setScene(s);
+          const runs = await fetchSceneRoutineRuns(id);
+          setRoutineRuns(runs);
+        } catch {
+          /* ignore poll errors */
+        }
+      })();
+    }, 1500);
+    return () => window.clearInterval(t);
+  }, [id, routineRuns.length]);
 
   const inSceneIds = useMemo(() => {
     if (!scene) {
@@ -145,6 +181,39 @@ export function SceneDetailClient() {
     }
   }
 
+  async function onStartRoutine() {
+    if (!id || !selectedRoutineId) {
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await startSceneRoutine(id, selectedRoutineId);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Start routine failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onStopRoutine() {
+    if (!id || routineRuns.length === 0) {
+      return;
+    }
+    const run = routineRuns[0];
+    setBusy(true);
+    setError(null);
+    try {
+      await stopSceneRoutineRun(id, run.id);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Stop routine failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function onDeleteScene() {
     if (!id) {
       return;
@@ -204,6 +273,67 @@ export function SceneDetailClient() {
           {error}
         </p>
       ) : null}
+
+      <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900/40">
+        <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+          Routines
+        </h2>
+        <p className="text-xs text-slate-600 dark:text-slate-400">
+          Start a saved routine on this scene. Colours update about once per
+          second while running.
+        </p>
+        {routineRuns.length > 0 ? (
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-slate-800 dark:text-slate-200">
+              Running:{" "}
+              <span className="font-medium">{routineRuns[0].routine_name}</span>
+            </p>
+            <Button
+              type="button"
+              icon={faCircleStop}
+              className="min-h-11 w-full bg-amber-800 hover:bg-amber-700 sm:w-auto"
+              disabled={busy}
+              onClick={() => void onStopRoutine()}
+            >
+              Stop routine
+            </Button>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
+            <label className="flex min-w-[12rem] flex-col gap-1 text-xs">
+              <span className="text-slate-600 dark:text-slate-400">Routine</span>
+              <select
+                className="min-h-11 rounded border border-slate-300 bg-white px-2 py-2 text-sm dark:border-slate-600 dark:bg-slate-900"
+                value={selectedRoutineId}
+                onChange={(e) => setSelectedRoutineId(e.target.value)}
+                disabled={busy || !routines || routines.length === 0}
+              >
+                <option value="">
+                  {!routines
+                    ? "Loading…"
+                    : routines.length === 0
+                      ? "Create routines under Routines first"
+                      : "Select a routine…"}
+                </option>
+                {(routines ?? []).map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <Button
+              type="button"
+              icon={faCirclePlay}
+              className="min-h-11 w-full sm:w-auto"
+              disabled={busy || !selectedRoutineId}
+              onClick={() => void onStartRoutine()}
+            >
+              Start on this scene
+            </Button>
+          </div>
+        )}
+      </section>
 
       <section className="space-y-2" aria-labelledby="scene-3d-heading">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">

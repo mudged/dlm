@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
 	"time"
 
@@ -159,6 +160,13 @@ type ScenePatchedState struct {
 type SceneBulkPatchResult struct {
 	UpdatedCount int                 `json:"updated_count"`
 	States       []ScenePatchedState `json:"states"`
+}
+
+// SceneBatchLightUpdate is one per-light patch inside PATCH …/lights/state/batch (REQ-020 / REQ-021).
+type SceneBatchLightUpdate struct {
+	ModelID string
+	LightID int
+	Patch   LightStatePatch
 }
 
 func isFiniteFloat64(v float64) bool {
@@ -972,7 +980,20 @@ func (s *Store) patchSceneLightsByRegion(ctx context.Context, sceneID string, pa
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback() }()
+	out, err := s.patchSceneLightsByRegionTx(ctx, tx, sceneID, patch, include)
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
 
+func (s *Store) patchSceneLightsByRegionTx(ctx context.Context, tx *sql.Tx, sceneID string, patch LightStatePatch, include func(SceneLightFlat) bool) (*SceneBulkPatchResult, error) {
+	if err := validateScenePatch(patch); err != nil {
+		return nil, err
+	}
 	all, err := s.listSceneLightsTx(ctx, tx, sceneID)
 	if err != nil {
 		return nil, err
@@ -1029,9 +1050,6 @@ func (s *Store) patchSceneLightsByRegion(ctx context.Context, sceneID string, pa
 		})
 	}
 
-	if err := tx.Commit(); err != nil {
-		return nil, err
-	}
 	return &SceneBulkPatchResult{
 		UpdatedCount: len(updated),
 		States:       updated,
@@ -1056,4 +1074,125 @@ func (s *Store) PatchSceneLightsSphere(ctx context.Context, sceneID string, sph 
 	return s.patchSceneLightsByRegion(ctx, sceneID, patch, func(L SceneLightFlat) bool {
 		return sphereContains(sph, L)
 	})
+}
+
+// PatchSceneLightsScene applies the same state patch to every light in the scene (REQ-020 / architecture §3.15).
+func (s *Store) PatchSceneLightsScene(ctx context.Context, sceneID string, patch LightStatePatch) (*SceneBulkPatchResult, error) {
+	return s.patchSceneLightsByRegion(ctx, sceneID, patch, func(SceneLightFlat) bool { return true })
+}
+
+// ErrSceneLightNotInScene is returned when a batch update references a light not in the scene.
+var ErrSceneLightNotInScene = errors.New("light is not part of this scene")
+
+func validateSceneBatchUpdates(updates []SceneBatchLightUpdate) error {
+	if len(updates) == 0 {
+		return fmt.Errorf("updates must be non-empty")
+	}
+	seen := make(map[string]struct{}, len(updates))
+	for _, u := range updates {
+		if strings.TrimSpace(u.ModelID) == "" {
+			return fmt.Errorf("model_id is required for each update")
+		}
+		if u.Patch.On == nil && u.Patch.Color == nil && u.Patch.BrightnessPct == nil {
+			return fmt.Errorf("each update requires at least one of on, color, brightness_pct")
+		}
+		if err := validateScenePatch(u.Patch); err != nil {
+			return err
+		}
+		key := u.ModelID + "\x00" + strconv.Itoa(u.LightID)
+		if _, dup := seen[key]; dup {
+			return fmt.Errorf("duplicate model_id and light_id in updates")
+		}
+		seen[key] = struct{}{}
+	}
+	return nil
+}
+
+// PatchSceneLightsBatch applies per-light patches in one transaction (REQ-020 / architecture §3.15).
+func (s *Store) PatchSceneLightsBatch(ctx context.Context, sceneID string, updates []SceneBatchLightUpdate) (*SceneBulkPatchResult, error) {
+	if err := validateSceneBatchUpdates(updates); err != nil {
+		return nil, err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	out, err := s.patchSceneLightsBatchTx(ctx, tx, sceneID, updates)
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (s *Store) patchSceneLightsBatchTx(ctx context.Context, tx *sql.Tx, sceneID string, updates []SceneBatchLightUpdate) (*SceneBulkPatchResult, error) {
+	all, err := s.listSceneLightsTx(ctx, tx, sceneID)
+	if err != nil {
+		return nil, err
+	}
+	member := make(map[string]SceneLightFlat, len(all))
+	for _, L := range all {
+		k := L.ModelID + "\x00" + strconv.Itoa(L.LightID)
+		member[k] = L
+	}
+
+	updated := make([]ScenePatchedState, 0, len(updates))
+	for _, u := range updates {
+		k := u.ModelID + "\x00" + strconv.Itoa(u.LightID)
+		flat, ok := member[k]
+		if !ok {
+			return nil, ErrSceneLightNotInScene
+		}
+
+		row := tx.QueryRowContext(ctx, `
+			SELECT "on", color, brightness_pct FROM lights WHERE model_id = ? AND idx = ?
+		`, u.ModelID, u.LightID)
+		var onInt int
+		var color string
+		var brightness float64
+		if err := row.Scan(&onInt, &color, &brightness); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil, ErrSceneLightNotInScene
+			}
+			return nil, err
+		}
+		on := onInt != 0
+		if u.Patch.On != nil {
+			on = *u.Patch.On
+		}
+		if u.Patch.Color != nil {
+			c, err := ValidateColor(*u.Patch.Color)
+			if err != nil {
+				return nil, err
+			}
+			color = c
+		}
+		if u.Patch.BrightnessPct != nil {
+			if err := ValidateBrightnessPct(*u.Patch.BrightnessPct); err != nil {
+				return nil, err
+			}
+			brightness = *u.Patch.BrightnessPct
+		}
+
+		if _, err := tx.ExecContext(ctx, `
+			UPDATE lights SET "on" = ?, color = ?, brightness_pct = ? WHERE model_id = ? AND idx = ?
+		`, boolToInt(on), color, brightness, u.ModelID, u.LightID); err != nil {
+			return nil, err
+		}
+		updated = append(updated, ScenePatchedState{
+			ModelID:       u.ModelID,
+			ID:            u.LightID,
+			On:            on,
+			Color:         color,
+			BrightnessPct: brightness,
+			Sx:            flat.Sx,
+			Sy:            flat.Sy,
+			Sz:            flat.Sz,
+		})
+	}
+
+	return &SceneBulkPatchResult{UpdatedCount: len(updated), States: updated}, nil
 }

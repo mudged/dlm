@@ -707,15 +707,15 @@ As a user, I want an **Options** area that includes **factory reset**, so that I
 
 **Scope**
 
-- In scope: A **distinct** **Options** **section** (or **screen**/**panel** labeled **Options** or equivalent **clear** **navigation** **target**) in the **UI** that includes an action labeled **Factory reset** (or **equivalent** **unambiguous** **wording**). **Factory reset** MUST **remove** **all** **persisted** **user-relevant** **data** the product stores for **models**, **scenes** (**REQ-015**), **per-light** **state** (**REQ-011**), and **any** **other** **application** **content** **tied** to those **entities** (exact **store** **shape** per **architecture**), then **re-seed** the **system** so the **user** sees the **same** **default** **sample** **models** as on a **fresh** **install** per **REQ-009** (three **samples**; **no** **user-uploaded** **models** or **user-created** **scenes** **remain**). **Before** **any** **deletion** or **re-seed** **runs**, the user MUST be **prompted** with a **confirmation** **step** that **warns** of **data** **loss** and **irreversibility**; **Cancel** MUST **leave** **data** **unchanged**; **Confirm** MUST **complete** the **reset** and **surface** **success** **feedback** (exact **copy** deferred to **architecture**).
+- In scope: A **distinct** **Options** **section** (or **screen**/**panel** labeled **Options** or equivalent **clear** **navigation** **target**) in the **UI** that includes an action labeled **Factory reset** (or **equivalent** **unambiguous** **wording**). **Factory reset** MUST **remove** **all** **persisted** **user-relevant** **data** the product stores for **models**, **scenes** (**REQ-015**), **per-light** **state** (**REQ-011**), **scene routines** (**REQ-021** definitions and any **persisted** **run** **state**), and **any** **other** **application** **content** **tied** to those **entities** (exact **store** **shape** per **architecture**), then **re-seed** the **system** so the **user** sees the **same** **default** **sample** **models** as on a **fresh** **install** per **REQ-009** (three **samples**; **no** **user-uploaded** **models** or **user-created** **scenes** **remain**). **Before** **any** **deletion** or **re-seed** **runs**, the user MUST be **prompted** with a **confirmation** **step** that **warns** of **data** **loss** and **irreversibility**; **Cancel** MUST **leave** **data** **unchanged**; **Confirm** MUST **complete** the **reset** and **surface** **success** **feedback** (exact **copy** deferred to **architecture**).
 - Out of scope: **Partial** **wipe** (e.g. **only** **scenes**); **scheduled** **reset**; **remote** **admin** **API** **for** **factory** **reset** unless added later; **export** **before** **wipe** (user may **export** **elsewhere** if **features** **exist**—not **required** here).
 
 **Business rules**
 
 1. The **product** MUST expose an **Options** **section** (or **dedicated** **Options** **view**) **discoverable** from **primary** **navigation** or **settings** **pattern** **documented** in **architecture**; it MUST **list** **Factory reset** as **one** of its **actions**.
-2. **Factory reset** MUST **not** **run** on a **single** **mis-click**: the user MUST **first** **see** a **blocking** **prompt** or **dialog** **before** **irreversible** **effects** **begin**, **explaining** that **all** **models**, **scenes**, and **related** **data** will be **permanently** **removed** and **only** **default** **samples** will **remain** (wording **may** **name** **consequences** **explicitly** per **UX** **review**).
+2. **Factory reset** MUST **not** **run** on a **single** **mis-click**: the user MUST **first** **see** a **blocking** **prompt** or **dialog** **before** **irreversible** **effects** **begin**, **explaining** that **all** **models**, **scenes**, **routines** (**REQ-021**), and **related** **data** will be **permanently** **removed** and **only** **default** **samples** will **remain** (wording **may** **name** **consequences** **explicitly** per **UX** **review**).
 3. **Until** the user **explicitly** **confirms** (e.g. **Confirm** on the **dialog**), **no** **factory** **reset** **side** **effects** **may** **occur**; **dismissal** or **Cancel** MUST **preserve** **current** **data**.
-4. After **confirmed** **factory reset**, **no** **user-created** **models**, **no** **scenes**, and **no** **leftover** **state** **from** **prior** **entities** **may** **remain** **visible** in **listings**; the **model** **list** MUST **match** **REQ-009** **expectations** for a **fresh** **seed** (**exactly** **three** **sample** **models** **identifiable** as **sphere**, **cube**, **cone** per **REQ-009** **naming** **rules**).
+4. After **confirmed** **factory reset**, **no** **user-created** **models**, **no** **scenes**, **no** **routine** **definitions** (**REQ-021**), **no** **persisted** **routine** **run** **state**, and **no** **leftover** **state** **from** **prior** **entities** **may** **remain** **visible** in **listings** (or **equivalent** **discovery** **surfaces**); the **model** **list** MUST **match** **REQ-009** **expectations** for a **fresh** **seed** (**exactly** **three** **sample** **models** **identifiable** as **sphere**, **cube**, **cone** per **REQ-009** **naming** **rules**).
 5. **Per-light** **defaults** after **re-seed** MUST **align** with **REQ-014** / **REQ-011** for **newly** **present** **models**.
 6. The **entire** **flow** MUST **satisfy** **REQ-002**: **no** **hover-only** **requirement** for **opening** **Options**, **starting** **factory** **reset**, **or** **confirming** / **canceling**.
 
@@ -727,7 +727,7 @@ As a user, I want an **Options** area that includes **factory reset**, so that I
 
 **Dependencies**
 
-- REQ-002, REQ-006, REQ-009, REQ-011, REQ-014, REQ-015
+- REQ-002, REQ-006, REQ-009, REQ-011, REQ-014, REQ-015, REQ-021
 
 **Open questions**
 
@@ -866,5 +866,51 @@ As a user or integrator, I want a scene-level API that returns scene dimensions,
 
 - Inclusion boundary policy for region filters (inclusive vs exclusive for points exactly on cuboid faces or sphere surface).
 - Whether scene dimensions are axis-aligned extents only or include explicit origin metadata in API responses.
+
+---
+
+### REQ-021 — Scenes: routines (definitions, run/stop via scene API, volumetric rules, first random-colour cycle type)
+
+| Field | Value |
+|-------|-------|
+| **ID** | REQ-021 |
+| **Title** | Scenes: routines (definitions, run/stop via scene API, volumetric rules, first random-colour cycle type) |
+| **Priority** | Must |
+| **Actor(s)** | End user; integrator |
+
+**User story**
+
+As a user or integrator, I want **routines** I can **create**, **list**, and **delete**, and **run against a scene** so they **change light state** according to **type-specific rules** using the **scene API**, so that I can automate effects—often limited to lights inside a **volumetric region** at a **position in scene space**—without hand-editing each light.
+
+**Scope**
+
+- In scope: A **routine definition** persisted with **name**, **description**, and **type** (type identifies behavior; additional **parameters** for a type are deferred to architecture unless specified below). User or API flows to **create**, **list**, and **delete** definitions. **Start** a routine **against a chosen scene** and **stop** a running instance **without** deleting the definition. While **running**, the implementation MUST apply state changes **only** through **scene-level** operations consistent with **REQ-020** (and **REQ-011** field semantics), using **scene-space** geometry for any **region-scoped** updates; canonical stored model coordinates MUST NOT be rewritten (**REQ-015**). **Routine rules** in general MAY restrict which lights are affected using **cuboid** or **sphere** volumes in **scene space** (**REQ-020** shapes and composition rules). The **first** concrete routine type (**see business rules**) affects **all lights in the scene** and **does not** require a volumetric sub-region parameter. **Stopping** ends automation; **per-light state** remains whatever was last successfully written (**REQ-011**).
+- Out of scope: Editing routine definitions after create (unless implemented as delete-and-recreate); physical hardware protocols; new volumetric shapes beyond **REQ-020**; routines that **move** or **reorder** lights in **REQ-005** space; authentication policy.
+
+**Business rules**
+
+1. The product MUST support **creating** a routine definition with **name**, **description**, and **type**; **listing** all routine definitions; and **deleting** a definition. **Name** and **type** are **required** at create time; **description** MAY be empty if architecture allows, but the field MUST exist.
+2. The product MUST support **starting** a routine **run** **scoped to exactly one scene** that exists at start time, and **stopping** an active run for that routine–scene pair (or **run identifier**—exact API deferred to architecture). **Start** MUST fail with **clear, actionable** errors if the scene does not exist or is not usable.
+3. While a routine **run** is **active**, any change to **on/off**, **hex colour**, or **brightness** for lights in that scene MUST be performed **via the scene API surface** defined under **REQ-020** (for example bulk updates by region or whole-scene operations as architecture maps them), not by APIs that **only** target a model in isolation **when** the operation is **scene-contextual** automation. (Direct per-light model APIs **REQ-011** remain valid for **manual** user or integrator actions outside this requirement.)
+4. **Volumetric targeting (general):** For routine types that **limit** effects to a **subset** of lights, inclusion MUST be evaluated against **scene-space** positions (**REQ-015**/**REQ-020**), using **cuboid** and/or **sphere** parameters supplied when **starting** the run or fixed by the type per architecture. **Invalid** region geometry MUST be rejected per **REQ-020** error expectations.
+5. **First routine type** (type identifier **deferred to architecture**, but behavior is normative): **“Random colour cycle — all scene lights.”** When this type is **started** on a scene: (**a**) **every** light in that scene MUST be set **on** (`on` **true**), **brightness** **100%**, with **hex colour** valid per **REQ-011**; (**b**) thereafter, at **most once per elapsed SI second** while the run remains **active**, the system MUST assign **each** light in the scene a **new** **hex colour** chosen **independently** and **uniformly at random** from the set of **REQ-011**-valid colours (same canonical form and rejection rules as **REQ-011**). **Successive** seconds’ colours need not be distinct from prior values for a given light (true randomness allows repeats). The **approximate** **one-second** cadence MUST be **documented** in **docs/architecture.md** (server-driven timer vs client coordination, drift bounds).
+6. **Stopping** this first type MUST **cease** further automated updates **promptly**; lights **retain** the **last** successfully **persisted** state (**REQ-011**). **Stopping** MUST **not** by itself **reset** lights to **REQ-014** defaults unless the user explicitly invokes **reset** elsewhere.
+7. **Concurrency and deletion:** If **multiple** runs could conflict, architecture MUST define **allowed** concurrency (e.g. **one** active run per scene) and **deterministic** error or **queue** behavior (**open questions**). Deleting a routine definition **while** a run is active MUST either be **disallowed** with clear feedback or MUST **implicitly stop** the run first—architecture picks **one** policy and documents it.
+
+**Responsive / UX notes** *(when UI is involved)*
+
+- Mobile: If the UI exposes routines, **list**, **create**, **delete**, **start**, and **stop** MUST be usable without **hover-only** essential steps (**REQ-002**); labels identify **scene** and **routine** clearly.
+- Tablet: Same as mobile; orientation changes do not hide primary actions.
+- Desktop: Efficient access to routine list and run controls alongside scene workflows.
+
+**Dependencies**
+
+- REQ-002 (when UI surfaces routines), REQ-011, REQ-015, REQ-020
+
+**Open questions**
+
+- Stable **machine-readable** **type** string for the first routine vs display name.
+- Whether **more than one** routine run may be **active** on the **same** scene **simultaneously**.
+- Whether **deleting** a definition **while running** **cancels** the run or is **blocked**.
 
 ---
