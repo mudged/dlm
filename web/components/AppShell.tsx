@@ -10,6 +10,7 @@ import {
   faLayerGroup,
   faMoon,
   faSun,
+  faWandMagicSparkles,
 } from "@fortawesome/free-solid-svg-icons";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -31,6 +32,7 @@ const NAV: NavItem[] = [
   { href: "/", label: "Home", icon: faHouse },
   { href: "/models", label: "Models", icon: faCubes },
   { href: "/scenes", label: "Scenes", icon: faLayerGroup },
+  { href: "/routines", label: "Routines", icon: faWandMagicSparkles },
   { href: "/options", label: "Options", icon: faGear },
 ];
 
