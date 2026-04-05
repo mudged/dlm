@@ -620,6 +620,58 @@ Feature: Three.js fixed dark-grey viewport (REQ-019)
     Given docs/requirements.md defines REQ-002 and REQ-019
     When the REQ-019 business rule 3 and responsive notes are read
     Then the 3D viewport and its controls must remain usable on mobile tablet and desktop without hover-only essential steps
+
+Feature: Scene spatial API dimensions filters and bulk updates (REQ-020)
+
+  Scenario: REQ-020 exposes scene dimensions
+    Parent requirement: REQ-020
+    Given docs/requirements.md defines REQ-020
+    When the REQ-020 business rules are read
+    Then the scene API must include a read operation that returns scene dimensions
+    And dimension values must be unambiguous in numeric meaning and units policy
+
+  Scenario: REQ-020 returns all scene lights in scene coordinates
+    Parent requirement: REQ-020
+    Given docs/requirements.md defines REQ-005 REQ-015 and REQ-020
+    When the REQ-020 business rules for all-lights retrieval are read
+    Then the scene API must include a read operation returning all lights in a scene
+    And each returned coordinate must be in scene space derived from model coordinates plus scene placement
+    And original canonical model coordinates must not be rewritten by this operation
+
+  Scenario: REQ-020 supports cuboid-based light retrieval in scene space
+    Parent requirement: REQ-020
+    Given docs/requirements.md defines REQ-020
+    When the REQ-020 business rules for cuboid retrieval are read
+    Then the scene API must include a read operation that accepts a cuboid position and dimensions in scene space
+    And only lights within that cuboid are returned
+
+  Scenario: REQ-020 supports sphere-based light retrieval in scene space
+    Parent requirement: REQ-020
+    Given docs/requirements.md defines REQ-020
+    When the REQ-020 business rules for sphere retrieval are read
+    Then the scene API must include a read operation that accepts a sphere in scene space
+    And only lights within that sphere are returned
+
+  Scenario: REQ-020 supports cuboid-based bulk light updates in scene space
+    Parent requirement: REQ-020
+    Given docs/requirements.md defines REQ-011 and REQ-020
+    When the REQ-020 business rules for cuboid bulk update are read
+    Then the scene API must include a bulk update operation for all lights within a cuboid in scene space
+    And updated light-state fields must follow REQ-011 semantics and validation
+
+  Scenario: REQ-020 supports sphere-based bulk light updates in scene space
+    Parent requirement: REQ-020
+    Given docs/requirements.md defines REQ-011 and REQ-020
+    When the REQ-020 business rules for sphere bulk update are read
+    Then the scene API must include a bulk update operation for all lights within a sphere in scene space
+    And updated light-state fields must follow REQ-011 semantics and validation
+
+  Scenario: REQ-020 rejects invalid region geometry without partial update
+    Parent requirement: REQ-020
+    Given docs/requirements.md defines REQ-020
+    When region input contains non-finite values or non-positive dimensions or radius
+    Then the API request must be rejected with a clear actionable error
+    And no partial updates may be persisted
 ```
 
 ---

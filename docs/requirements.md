@@ -821,3 +821,50 @@ As a user **viewing** a **model** or a **scene** in **three.js**, I want the **3
 - **Whether** **the** **fixed** **three.js** **grey** **should** **match** **a** **single** **token** **shared** **with** **REQ-018** **dark** **shell** **or** **a** **dedicated** **“viz** **grey”** **token**.
 
 ---
+
+### REQ-020 — Scene spatial API for dimensions, filtered retrieval, and bulk updates
+
+| Field | Value |
+|-------|-------|
+| **ID** | REQ-020 |
+| **Title** | Scene spatial API for dimensions, filtered retrieval, and bulk updates |
+| **Priority** | Must |
+| **Actor(s)** | End user; integrator |
+
+**User story**
+
+As a user or integrator, I want a scene-level API that returns scene dimensions, returns scene-composed light coordinates, filters lights by cuboid or sphere, and bulk-updates lights inside those regions, so that I can query and control lights in scene space without manually translating model coordinates.
+
+**Scope**
+
+- In scope: Scene API operations to retrieve a scene's dimensions, retrieve all lights currently in the scene, retrieve only lights inside a cuboid filter, retrieve only lights inside a sphere filter, bulk update lights inside a cuboid, and bulk update lights inside a sphere. For all scene-light retrieval and region filtering, coordinates are scene-composed positions (model coordinates plus scene placement), not original model coordinates.
+- Out of scope: Defining a non-REST transport; changing model canonical coordinates in storage; rotation/scale transforms beyond scene placement offsets; shape types beyond cuboid and sphere.
+
+**Business rules**
+
+1. The scene API MUST expose a read operation that returns the scene dimensions used for scene-space queries (exact resource path and units formatting deferred to architecture, but numeric meaning MUST be unambiguous).
+2. The scene API MUST expose a read operation that returns all lights in the scene with coordinates expressed in scene space, not in original model-local coordinates.
+3. The scene API MUST expose a read operation that returns only lights within a caller-provided cuboid defined by a position and dimensions in scene space.
+4. The scene API MUST expose a read operation that returns only lights within a caller-provided sphere defined in scene space.
+5. The scene API MUST expose a bulk update operation that applies a requested light-state update to all lights within a caller-provided cuboid in scene space.
+6. The scene API MUST expose a bulk update operation that applies a requested light-state update to all lights within a caller-provided sphere in scene space.
+7. Bulk update payload semantics for light state MUST be consistent with REQ-011 (on/off, canonical hex colour, brightness percentage, and validation behavior).
+8. Scene-region query and bulk-update operations MUST compute inclusion against scene-space coordinates derived from model coordinates plus scene placement (REQ-015), and MUST NOT rewrite canonical stored model coordinates (REQ-005).
+9. For region-based operations, invalid geometry input (for example non-finite numbers or non-positive dimensions/radius) MUST be rejected with clear, actionable errors and MUST NOT partially apply updates.
+
+**Responsive / UX notes** *(when UI is involved)*
+
+- Mobile: N/A for API-only requirement; any UI consuming these APIs MUST remain usable per REQ-002.
+- Tablet: N/A
+- Desktop: N/A
+
+**Dependencies**
+
+- REQ-005, REQ-011, REQ-015
+
+**Open questions**
+
+- Inclusion boundary policy for region filters (inclusive vs exclusive for points exactly on cuboid faces or sphere surface).
+- Whether scene dimensions are axis-aligned extents only or include explicit origin metadata in API responses.
+
+---
