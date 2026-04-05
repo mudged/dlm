@@ -12,8 +12,11 @@ import (
 	"github.com/google/uuid"
 )
 
-// Routine type identifiers (architecture §3.16).
-const RoutineTypeRandomColourCycleAll = "random_colour_cycle_all"
+// Routine type identifiers (architecture §3.16, §3.17).
+const (
+	RoutineTypeRandomColourCycleAll = "random_colour_cycle_all"
+	RoutineTypePythonSceneScript    = "python_scene_script"
+)
 
 // RoutineStatusRunning / RoutineStatusStopped are persisted in routine_runs.status.
 const (
@@ -30,6 +33,9 @@ var ErrRoutineRunActive = errors.New("routine has an active run")
 // ErrRoutineUnknownType is returned for unsupported routine type strings.
 var ErrRoutineUnknownType = errors.New("unknown routine type")
 
+// ErrRoutineNotEditable is returned when PATCH is used on a non-Python routine.
+var ErrRoutineNotEditable = errors.New("routine type does not support update")
+
 // ErrRoutineRunNotFound is returned when stop targets a missing or non-running run for the scene.
 var ErrRoutineRunNotFound = errors.New("routine run not found for this scene")
 
@@ -43,13 +49,14 @@ func (e *SceneRoutineConflictError) Error() string {
 	return "another routine is already running on this scene"
 }
 
-// RoutineDTO is a persisted routine definition (REQ-021).
+// RoutineDTO is a persisted routine definition (REQ-021, REQ-022).
 type RoutineDTO struct {
-	ID          string    `json:"id"`
-	Name        string    `json:"name"`
-	Description string    `json:"description"`
-	Type        string    `json:"type"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID             string    `json:"id"`
+	Name           string    `json:"name"`
+	Description    string    `json:"description"`
+	Type           string    `json:"type"`
+	PythonSource   string    `json:"python_source,omitempty"`
+	CreatedAt      time.Time `json:"created_at"`
 }
 
 // RoutineRunDTO is exposed for list-runs API.
@@ -57,6 +64,7 @@ type RoutineRunDTO struct {
 	ID          string `json:"id"`
 	RoutineID   string `json:"routine_id"`
 	RoutineName string `json:"routine_name"`
+	RoutineType string `json:"routine_type"`
 	Status      string `json:"status"`
 }
 
@@ -71,7 +79,7 @@ func randomHexColor() (string, error) {
 // ListRoutines returns all routine definitions, newest first.
 func (s *Store) ListRoutines(ctx context.Context) ([]RoutineDTO, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, name, description, type, created_at FROM routines ORDER BY created_at DESC
+		SELECT id, name, description, type, python_source, created_at FROM routines ORDER BY created_at DESC
 	`)
 	if err != nil {
 		return nil, err
@@ -81,7 +89,7 @@ func (s *Store) ListRoutines(ctx context.Context) ([]RoutineDTO, error) {
 	for rows.Next() {
 		var r RoutineDTO
 		var created string
-		if err := rows.Scan(&r.ID, &r.Name, &r.Description, &r.Type, &created); err != nil {
+		if err := rows.Scan(&r.ID, &r.Name, &r.Description, &r.Type, &r.PythonSource, &created); err != nil {
 			return nil, err
 		}
 		t, err := time.Parse(time.RFC3339Nano, created)
@@ -100,11 +108,11 @@ func (s *Store) ListRoutines(ctx context.Context) ([]RoutineDTO, error) {
 // GetRoutine loads one routine by id.
 func (s *Store) GetRoutine(ctx context.Context, id string) (*RoutineDTO, error) {
 	row := s.db.QueryRowContext(ctx, `
-		SELECT id, name, description, type, created_at FROM routines WHERE id = ?
+		SELECT id, name, description, type, python_source, created_at FROM routines WHERE id = ?
 	`, id)
 	var r RoutineDTO
 	var created string
-	if err := row.Scan(&r.ID, &r.Name, &r.Description, &r.Type, &created); err != nil {
+	if err := row.Scan(&r.ID, &r.Name, &r.Description, &r.Type, &r.PythonSource, &created); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrRoutineNotFound
 		}
@@ -122,7 +130,8 @@ func (s *Store) GetRoutine(ctx context.Context, id string) (*RoutineDTO, error) 
 }
 
 // CreateRoutine inserts a new definition (name and type required; description may be "").
-func (s *Store) CreateRoutine(ctx context.Context, name, description, typ string) (*RoutineDTO, error) {
+// pythonSource is stored only for RoutineTypePythonSceneScript (ignored for other types).
+func (s *Store) CreateRoutine(ctx context.Context, name, description, typ, pythonSource string) (*RoutineDTO, error) {
 	name = strings.TrimSpace(name)
 	typ = strings.TrimSpace(typ)
 	if name == "" {
@@ -131,21 +140,76 @@ func (s *Store) CreateRoutine(ctx context.Context, name, description, typ string
 	if typ == "" {
 		return nil, fmt.Errorf("type is required")
 	}
-	if typ != RoutineTypeRandomColourCycleAll {
+	var src string
+	switch typ {
+	case RoutineTypeRandomColourCycleAll:
+		src = ""
+	case RoutineTypePythonSceneScript:
+		src = pythonSource
+	default:
 		return nil, fmt.Errorf("%w: %q", ErrRoutineUnknownType, typ)
 	}
 
 	id := uuid.NewString()
 	created := time.Now().UTC().Format(time.RFC3339Nano)
 	if _, err := s.db.ExecContext(ctx, `
-		INSERT INTO routines (id, name, description, type, created_at) VALUES (?, ?, ?, ?, ?)
-	`, id, name, description, typ, created); err != nil {
+		INSERT INTO routines (id, name, description, type, python_source, created_at) VALUES (?, ?, ?, ?, ?, ?)
+	`, id, name, description, typ, src, created); err != nil {
 		return nil, err
 	}
 	t, _ := time.Parse(time.RFC3339Nano, created)
-	return &RoutineDTO{
+	dto := &RoutineDTO{
 		ID: id, Name: name, Description: description, Type: typ, CreatedAt: t.UTC(),
-	}, nil
+	}
+	if typ == RoutineTypePythonSceneScript {
+		dto.PythonSource = src
+	}
+	return dto, nil
+}
+
+// PatchRoutine updates a python_scene_script definition (at least one of name, description, python_source must be in the request).
+func (s *Store) PatchRoutine(ctx context.Context, id string, name, description, pythonSource *string) (*RoutineDTO, error) {
+	if name == nil && description == nil && pythonSource == nil {
+		return nil, fmt.Errorf("at least one field is required")
+	}
+	r, err := s.GetRoutine(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if r.Type != RoutineTypePythonSceneScript {
+		return nil, ErrRoutineNotEditable
+	}
+	var n int
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM routine_runs WHERE routine_id = ? AND status = ?
+	`, id, RoutineStatusRunning).Scan(&n); err != nil {
+		return nil, err
+	}
+	if n > 0 {
+		return nil, ErrRoutineRunActive
+	}
+	newName := r.Name
+	newDesc := r.Description
+	newSrc := r.PythonSource
+	if name != nil {
+		t := strings.TrimSpace(*name)
+		if t == "" {
+			return nil, fmt.Errorf("name is required")
+		}
+		newName = t
+	}
+	if description != nil {
+		newDesc = *description
+	}
+	if pythonSource != nil {
+		newSrc = *pythonSource
+	}
+	if _, err := s.db.ExecContext(ctx, `
+		UPDATE routines SET name = ?, description = ?, python_source = ? WHERE id = ?
+	`, newName, newDesc, newSrc, id); err != nil {
+		return nil, err
+	}
+	return s.GetRoutine(ctx, id)
 }
 
 // DeleteRoutine removes a definition if no run is active for it.
@@ -350,7 +414,7 @@ func (s *Store) ListRunningRoutineRunsForScene(ctx context.Context, sceneID stri
 		return nil, ErrSceneNotFound
 	}
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT rr.id, rr.routine_id, r.name, rr.status
+		SELECT rr.id, rr.routine_id, r.name, r.type, rr.status
 		FROM routine_runs rr
 		INNER JOIN routines r ON r.id = rr.routine_id
 		WHERE rr.scene_id = ? AND rr.status = ?
@@ -362,7 +426,7 @@ func (s *Store) ListRunningRoutineRunsForScene(ctx context.Context, sceneID stri
 	var out []RoutineRunDTO
 	for rows.Next() {
 		var dto RoutineRunDTO
-		if err := rows.Scan(&dto.ID, &dto.RoutineID, &dto.RoutineName, &dto.Status); err != nil {
+		if err := rows.Scan(&dto.ID, &dto.RoutineID, &dto.RoutineName, &dto.RoutineType, &dto.Status); err != nil {
 			return nil, err
 		}
 		out = append(out, dto)
@@ -398,6 +462,9 @@ func (s *Store) TickRoutineRuns(ctx context.Context) error {
 	}
 	for _, p := range runs {
 		switch p.typ {
+		case RoutineTypePythonSceneScript:
+			// Client-executed (REQ-022 / architecture §3.17); server scheduler skips.
+			continue
 		case RoutineTypeRandomColourCycleAll:
 			if err := s.applyRandomColourCycleAllTick(ctx, p.sceneID); err != nil {
 				return err

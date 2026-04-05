@@ -14,9 +14,16 @@ import (
 const maxRoutineJSONBytes = 1 << 18 // 256 KiB
 
 type createRoutineBody struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Type        string `json:"type"`
+	Name          string  `json:"name"`
+	Description   string  `json:"description"`
+	Type          string  `json:"type"`
+	PythonSource  *string `json:"python_source"`
+}
+
+type patchRoutineBody struct {
+	Name         *string `json:"name"`
+	Description  *string `json:"description"`
+	PythonSource *string `json:"python_source"`
 }
 
 type routineRunsResponse struct {
@@ -73,7 +80,11 @@ func (a *apiDeps) createRoutine(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusBadRequest, "bad_request", "invalid JSON")
 		return
 	}
-	out, err := a.store.CreateRoutine(r.Context(), body.Name, body.Description, body.Type)
+	py := ""
+	if body.PythonSource != nil {
+		py = *body.PythonSource
+	}
+	out, err := a.store.CreateRoutine(r.Context(), body.Name, body.Description, body.Type, py)
 	if errors.Is(err, store.ErrRoutineUnknownType) {
 		writeAPIError(w, http.StatusBadRequest, "validation_failed", err.Error())
 		return
@@ -114,6 +125,80 @@ func (a *apiDeps) deleteRoutine(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (a *apiDeps) getRoutine(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	id := r.PathValue("id")
+	if id == "" {
+		writeAPIError(w, http.StatusBadRequest, "bad_request", "missing routine id")
+		return
+	}
+	out, err := a.store.GetRoutine(r.Context(), id)
+	if errors.Is(err, store.ErrRoutineNotFound) {
+		writeAPIError(w, http.StatusNotFound, "not_found", "routine not found")
+		return
+	}
+	if err != nil {
+		writeAPIError(w, http.StatusInternalServerError, "internal_error", "could not load routine")
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (a *apiDeps) patchRoutine(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPatch {
+		writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	id := r.PathValue("id")
+	if id == "" {
+		writeAPIError(w, http.StatusBadRequest, "bad_request", "missing routine id")
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxRoutineJSONBytes)
+	raw, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeAPIError(w, http.StatusBadRequest, "bad_request", "could not read body")
+		return
+	}
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.DisallowUnknownFields()
+	var body patchRoutineBody
+	if err := dec.Decode(&body); err != nil {
+		writeAPIError(w, http.StatusBadRequest, "bad_request", "invalid JSON")
+		return
+	}
+	if dec.More() {
+		writeAPIError(w, http.StatusBadRequest, "bad_request", "invalid JSON")
+		return
+	}
+	out, err := a.store.PatchRoutine(r.Context(), id, body.Name, body.Description, body.PythonSource)
+	if errors.Is(err, store.ErrRoutineNotFound) {
+		writeAPIError(w, http.StatusNotFound, "not_found", "routine not found")
+		return
+	}
+	if errors.Is(err, store.ErrRoutineNotEditable) {
+		writeAPIError(w, http.StatusConflict, "routine_not_editable", "only Python scene routines can be updated")
+		return
+	}
+	if errors.Is(err, store.ErrRoutineRunActive) {
+		writeAPIError(w, http.StatusConflict, "routine_run_active", "stop the running instance before editing this routine")
+		return
+	}
+	if err != nil {
+		msg := err.Error()
+		if strings.Contains(msg, "at least one field") || strings.Contains(msg, "name is required") {
+			writeAPIError(w, http.StatusBadRequest, "validation_failed", msg)
+			return
+		}
+		writeAPIError(w, http.StatusInternalServerError, "internal_error", "could not update routine")
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (a *apiDeps) listSceneRoutineRuns(w http.ResponseWriter, r *http.Request) {

@@ -85,7 +85,7 @@ func TestRoutinesCreateStartStopDelete(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r, err := s.CreateRoutine(ctx, "fx", "d", RoutineTypeRandomColourCycleAll)
+	r, err := s.CreateRoutine(ctx, "fx", "d", RoutineTypeRandomColourCycleAll, "")
 	if err != nil {
 		t.Fatal(err)
 	}

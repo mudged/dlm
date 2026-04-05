@@ -549,16 +549,16 @@ Feature: Options factory reset with confirmation (REQ-017)
     Given docs/requirements.md defines REQ-017
     When the REQ-017 business rules about confirmation are read
     Then factory reset must show a blocking prompt before irreversible effects begin
-    And the prompt must warn that all models scenes routines and related data will be permanently removed
+    And the prompt must warn that all models scenes routines including Python routines and related data will be permanently removed
     And only default sample models will remain after completion
     And cancel or dismiss must leave data unchanged
 
   Scenario: REQ-017 requires post-reset state to match fresh samples
     Parent requirement: REQ-017
-    Given docs/requirements.md defines REQ-009 REQ-011 REQ-014 REQ-017 and REQ-021
+    Given docs/requirements.md defines REQ-009 REQ-011 REQ-014 REQ-017 REQ-021 and REQ-022
     When the REQ-017 business rules about outcomes are read
     Then after confirmed factory reset no user-created models or scenes may remain in listings
-    And no routine definitions or persisted routine run state from REQ-021 may remain
+    And no routine definitions or persisted routine run state from REQ-021 or REQ-022 may remain
     And the model list must satisfy REQ-009 expectations for a fresh seed with three identifiable samples
     And per-light defaults for present models must align with REQ-014 and REQ-011
 
@@ -730,11 +730,73 @@ Feature: Scene routines definitions run stop and first random colour type (REQ-0
     When the REQ-021 responsive UX notes are read
     Then any UI for list create delete start and stop must be usable on mobile tablet and desktop without hover-only essential steps
 
-  Scenario: REQ-017 factory reset removes routine data per REQ-021 scope
+  Scenario: REQ-017 factory reset removes routine data per REQ-021 and REQ-022 scope
     Parent requirement: REQ-017
-    Given docs/requirements.md defines REQ-017 and REQ-021
+    Given docs/requirements.md defines REQ-017 REQ-021 and REQ-022
     When the REQ-017 scope about factory reset data removal is read
-    Then factory reset must remove persisted scene routine definitions and any persisted routine run state together with models scenes and related data
+    Then factory reset must remove persisted scene routine definitions for REQ-021 and REQ-022 and any persisted routine run state together with models scenes and related data
+
+Feature: Python scene routines editor API docs and execution (REQ-022)
+
+  Scenario: REQ-022 requires in-browser Python editor with highlighting checking completion and formatting
+    Parent requirement: REQ-022
+    Given docs/requirements.md defines REQ-022
+    When the REQ-022 scope and business rules about the editor are read
+    Then the product must provide an in-browser Python code editor with full syntax highlighting
+    And the editor must surface syntax or static issues to the user without requiring a separate desktop tool
+    And code completion appropriate for Python and the scene API must be enabled by default where technically feasible
+    And automatic code formatting must be available and enabled by default where the product supports it
+
+  Scenario: REQ-022 requires save load duplicate and delete for Python routine definitions
+    Parent requirement: REQ-022
+    Given docs/requirements.md defines REQ-022
+    When the REQ-022 business rules about persistence are read
+    Then the application must provide save load duplicate and delete for Python routine definitions
+
+  Scenario: REQ-022 requires documented Python scene library on the same page as the editor
+    Parent requirement: REQ-022
+    Given docs/requirements.md defines REQ-022 REQ-020 and REQ-011
+    When the REQ-022 business rules about documentation are read
+    Then reference documentation for the Python scene library must appear on the same page as the editor
+    And the documentation must target novices with plain language parameter descriptions and at least one short example per major operation
+    And the Python API must map to scene capabilities consistent with REQ-020 and REQ-011 light-state semantics
+
+  Scenario: REQ-022 requires illustrative scene API names documented in architecture and on-page reference
+    Parent requirement: REQ-022
+    Given docs/requirements.md defines REQ-022
+    When the REQ-022 scope about the Python library is read
+    Then illustrative examples include a documented attribute or method for scene vertical extent akin to scene height
+    And illustrative examples include a documented method for sphere-filtered light retrieval in scene space akin to scene getLightsWithinSphere
+    And docs architecture.md and the on-page reference must list canonical names if they differ from those examples
+
+  Scenario: REQ-022 requires continuous loop execution while run is active
+    Parent requirement: REQ-022
+    Given docs/requirements.md defines REQ-022
+    When the REQ-022 business rules about starting a Python routine against a scene are read
+    Then while the run remains active the implementation must repeatedly execute the user script in a loop
+    And docs architecture.md must document iteration timing and fairness with other runs
+
+  Scenario: REQ-022 requires cooperative stop plus forcible termination
+    Parent requirement: REQ-022
+    Given docs/requirements.md defines REQ-022
+    When the REQ-022 business rules about stopping a Python routine run are read
+    Then stopping must cease further loop iterations promptly under normal conditions
+    And the implementation must support forcible termination when the routine does not respond to cooperative stop within architecture-defined bounds
+    And docs architecture.md must document those bounds and the termination mechanism
+
+  Scenario: REQ-022 forbids rewriting canonical model coordinates from Python automation
+    Parent requirement: REQ-022
+    Given docs/requirements.md defines REQ-005 REQ-015 and REQ-022
+    When the REQ-022 business rule about automation and the scene API is read
+    Then Python routine automation must affect lights only through the documented scene API surface
+    And it must not rewrite canonical stored model coordinates
+
+  Scenario: REQ-022 ties editor docs and run controls to responsive non-hover-only use
+    Parent requirement: REQ-022
+    Given docs/requirements.md defines REQ-002 and REQ-022
+    When the REQ-022 business rule 10 and responsive UX notes are read
+    Then the editor documentation and run and stop controls must remain usable on mobile tablet and desktop
+    And essential steps must not rely on hover-only affordances
 ```
 
 ---

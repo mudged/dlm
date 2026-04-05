@@ -190,6 +190,20 @@ func (s *Store) ensureRoutineTables(ctx context.Context) error {
 			return fmt.Errorf("migrate routines: %w", err)
 		}
 	}
+	return s.ensurePythonSourceColumn(ctx)
+}
+
+func (s *Store) ensurePythonSourceColumn(ctx context.Context) error {
+	cols, err := s.tableColumns(ctx, "routines")
+	if err != nil {
+		return err
+	}
+	if cols["python_source"] {
+		return nil
+	}
+	if _, err := s.db.ExecContext(ctx, `ALTER TABLE routines ADD COLUMN python_source TEXT NOT NULL DEFAULT ''`); err != nil {
+		return fmt.Errorf("migrate routines.python_source: %w", err)
+	}
 	return nil
 }
 

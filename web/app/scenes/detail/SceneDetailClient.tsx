@@ -5,6 +5,7 @@ import {
   faCheck,
   faCirclePlay,
   faCircleStop,
+  faPenToSquare,
   faPlus,
   faRightFromBracket,
   faRotate,
@@ -24,7 +25,10 @@ import {
   removeSceneModel,
   type SceneDetail,
 } from "@/lib/scenes";
+import { PythonRoutineHost } from "@/components/PythonRoutineHost";
 import {
+  ROUTINE_TYPE_PYTHON_SCENE_SCRIPT,
+  fetchRoutine,
   fetchRoutines,
   fetchSceneRoutineRuns,
   startSceneRoutine,
@@ -51,6 +55,8 @@ export function SceneDetailClient() {
   const [routines, setRoutines] = useState<RoutineDefinition[] | null>(null);
   const [routineRuns, setRoutineRuns] = useState<RoutineRun[]>([]);
   const [selectedRoutineId, setSelectedRoutineId] = useState("");
+  const [pythonSource, setPythonSource] = useState<string | null>(null);
+  const [pythonRunnerErr, setPythonRunnerErr] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!id) {
@@ -100,6 +106,38 @@ export function SceneDetailClient() {
     }, 1500);
     return () => window.clearInterval(t);
   }, [id, routineRuns.length]);
+
+  const firstRun = routineRuns[0];
+  const isPythonRun =
+    firstRun?.routine_type === ROUTINE_TYPE_PYTHON_SCENE_SCRIPT;
+  const pythonRoutineId = firstRun?.routine_id;
+
+  useEffect(() => {
+    if (!pythonRoutineId || !isPythonRun) {
+      setPythonSource(null);
+      setPythonRunnerErr(null);
+      return;
+    }
+    let cancelled = false;
+    setPythonRunnerErr(null);
+    void fetchRoutine(pythonRoutineId)
+      .then((r) => {
+        if (!cancelled) {
+          setPythonSource(r.python_source ?? "");
+        }
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setPythonSource("");
+          setPythonRunnerErr(
+            e instanceof Error ? e.message : "Could not load Python routine",
+          );
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pythonRoutineId, isPythonRun]);
 
   const inSceneIds = useMemo(() => {
     if (!scene) {
@@ -279,24 +317,69 @@ export function SceneDetailClient() {
           Routines
         </h2>
         <p className="text-xs text-slate-600 dark:text-slate-400">
-          Start a saved routine on this scene. Colours update about once per
-          second while running.
+          Start a saved routine on this scene. The built-in colour cycle updates
+          about once per second. Python routines loop in your browser (Pyodide)
+          and call the scene API.
         </p>
         {routineRuns.length > 0 ? (
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm text-slate-800 dark:text-slate-200">
-              Running:{" "}
-              <span className="font-medium">{routineRuns[0].routine_name}</span>
-            </p>
-            <Button
-              type="button"
-              icon={faCircleStop}
-              className="min-h-11 w-full bg-amber-800 hover:bg-amber-700 sm:w-auto"
-              disabled={busy}
-              onClick={() => void onStopRoutine()}
-            >
-              Stop routine
-            </Button>
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-slate-800 dark:text-slate-200">
+                Running:{" "}
+                <span className="font-medium">
+                  {routineRuns[0].routine_name}
+                </span>
+                {isPythonRun ? (
+                  <span className="ml-2 text-xs text-slate-500">(Python)</span>
+                ) : null}
+              </p>
+              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                {isPythonRun ? (
+                  <Button
+                    type="button"
+                    icon={faPenToSquare}
+                    className="min-h-11 w-full sm:w-auto"
+                    disabled={busy}
+                    onClick={() =>
+                      router.push(
+                        `/routines/python?id=${encodeURIComponent(routineRuns[0].routine_id)}`,
+                      )
+                    }
+                  >
+                    Edit Python
+                  </Button>
+                ) : null}
+                <Button
+                  type="button"
+                  icon={faCircleStop}
+                  className="min-h-11 w-full bg-amber-800 hover:bg-amber-700 sm:w-auto"
+                  disabled={busy}
+                  onClick={() => void onStopRoutine()}
+                >
+                  Stop routine
+                </Button>
+              </div>
+            </div>
+            {isPythonRun && firstRun && id ? (
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-600 dark:bg-slate-950/50">
+                {pythonRunnerErr ? (
+                  <p className="mb-2 text-xs text-red-600 dark:text-red-400">
+                    {pythonRunnerErr}
+                  </p>
+                ) : null}
+                {pythonSource === null ? (
+                  <p className="text-xs text-slate-600 dark:text-slate-400">
+                    Loading Python script…
+                  </p>
+                ) : (
+                  <PythonRoutineHost
+                    sceneId={id}
+                    source={pythonSource}
+                    onWorkerMessage={(m) => setPythonRunnerErr(m)}
+                  />
+                )}
+              </div>
+            ) : null}
           </div>
         ) : (
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
@@ -318,6 +401,9 @@ export function SceneDetailClient() {
                 {(routines ?? []).map((r) => (
                   <option key={r.id} value={r.id}>
                     {r.name}
+                    {r.type === ROUTINE_TYPE_PYTHON_SCENE_SCRIPT
+                      ? " (Python)"
+                      : ""}
                   </option>
                 ))}
               </select>

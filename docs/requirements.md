@@ -707,15 +707,15 @@ As a user, I want an **Options** area that includes **factory reset**, so that I
 
 **Scope**
 
-- In scope: A **distinct** **Options** **section** (or **screen**/**panel** labeled **Options** or equivalent **clear** **navigation** **target**) in the **UI** that includes an action labeled **Factory reset** (or **equivalent** **unambiguous** **wording**). **Factory reset** MUST **remove** **all** **persisted** **user-relevant** **data** the product stores for **models**, **scenes** (**REQ-015**), **per-light** **state** (**REQ-011**), **scene routines** (**REQ-021** definitions and any **persisted** **run** **state**), and **any** **other** **application** **content** **tied** to those **entities** (exact **store** **shape** per **architecture**), then **re-seed** the **system** so the **user** sees the **same** **default** **sample** **models** as on a **fresh** **install** per **REQ-009** (three **samples**; **no** **user-uploaded** **models** or **user-created** **scenes** **remain**). **Before** **any** **deletion** or **re-seed** **runs**, the user MUST be **prompted** with a **confirmation** **step** that **warns** of **data** **loss** and **irreversibility**; **Cancel** MUST **leave** **data** **unchanged**; **Confirm** MUST **complete** the **reset** and **surface** **success** **feedback** (exact **copy** deferred to **architecture**).
+- In scope: A **distinct** **Options** **section** (or **screen**/**panel** labeled **Options** or equivalent **clear** **navigation** **target**) in the **UI** that includes an action labeled **Factory reset** (or **equivalent** **unambiguous** **wording**). **Factory reset** MUST **remove** **all** **persisted** **user-relevant** **data** the product stores for **models**, **scenes** (**REQ-015**), **per-light** **state** (**REQ-011**), **scene routines** (**REQ-021** and **REQ-022** definitions and any **persisted** **run** **state**), and **any** **other** **application** **content** **tied** to those **entities** (exact **store** **shape** per **architecture**), then **re-seed** the **system** so the **user** sees the **same** **default** **sample** **models** as on a **fresh** **install** per **REQ-009** (three **samples**; **no** **user-uploaded** **models** or **user-created** **scenes** **remain**). **Before** **any** **deletion** or **re-seed** **runs**, the user MUST be **prompted** with a **confirmation** **step** that **warns** of **data** **loss** and **irreversibility**; **Cancel** MUST **leave** **data** **unchanged**; **Confirm** MUST **complete** the **reset** and **surface** **success** **feedback** (exact **copy** deferred to **architecture**).
 - Out of scope: **Partial** **wipe** (e.g. **only** **scenes**); **scheduled** **reset**; **remote** **admin** **API** **for** **factory** **reset** unless added later; **export** **before** **wipe** (user may **export** **elsewhere** if **features** **exist**—not **required** here).
 
 **Business rules**
 
 1. The **product** MUST expose an **Options** **section** (or **dedicated** **Options** **view**) **discoverable** from **primary** **navigation** or **settings** **pattern** **documented** in **architecture**; it MUST **list** **Factory reset** as **one** of its **actions**.
-2. **Factory reset** MUST **not** **run** on a **single** **mis-click**: the user MUST **first** **see** a **blocking** **prompt** or **dialog** **before** **irreversible** **effects** **begin**, **explaining** that **all** **models**, **scenes**, **routines** (**REQ-021**), and **related** **data** will be **permanently** **removed** and **only** **default** **samples** will **remain** (wording **may** **name** **consequences** **explicitly** per **UX** **review**).
+2. **Factory reset** MUST **not** **run** on a **single** **mis-click**: the user MUST **first** **see** a **blocking** **prompt** or **dialog** **before** **irreversible** **effects** **begin**, **explaining** that **all** **models**, **scenes**, **routines** (**REQ-021**, **REQ-022**), and **related** **data** will be **permanently** **removed** and **only** **default** **samples** will **remain** (wording **may** **name** **consequences** **explicitly** per **UX** **review**).
 3. **Until** the user **explicitly** **confirms** (e.g. **Confirm** on the **dialog**), **no** **factory** **reset** **side** **effects** **may** **occur**; **dismissal** or **Cancel** MUST **preserve** **current** **data**.
-4. After **confirmed** **factory reset**, **no** **user-created** **models**, **no** **scenes**, **no** **routine** **definitions** (**REQ-021**), **no** **persisted** **routine** **run** **state**, and **no** **leftover** **state** **from** **prior** **entities** **may** **remain** **visible** in **listings** (or **equivalent** **discovery** **surfaces**); the **model** **list** MUST **match** **REQ-009** **expectations** for a **fresh** **seed** (**exactly** **three** **sample** **models** **identifiable** as **sphere**, **cube**, **cone** per **REQ-009** **naming** **rules**).
+4. After **confirmed** **factory reset**, **no** **user-created** **models**, **no** **scenes**, **no** **routine** **definitions** (**REQ-021**, **REQ-022**), **no** **persisted** **routine** **run** **state**, and **no** **leftover** **state** **from** **prior** **entities** **may** **remain** **visible** in **listings** (or **equivalent** **discovery** **surfaces**); the **model** **list** MUST **match** **REQ-009** **expectations** for a **fresh** **seed** (**exactly** **three** **sample** **models** **identifiable** as **sphere**, **cube**, **cone** per **REQ-009** **naming** **rules**).
 5. **Per-light** **defaults** after **re-seed** MUST **align** with **REQ-014** / **REQ-011** for **newly** **present** **models**.
 6. The **entire** **flow** MUST **satisfy** **REQ-002**: **no** **hover-only** **requirement** for **opening** **Options**, **starting** **factory** **reset**, **or** **confirming** / **canceling**.
 
@@ -727,7 +727,7 @@ As a user, I want an **Options** area that includes **factory reset**, so that I
 
 **Dependencies**
 
-- REQ-002, REQ-006, REQ-009, REQ-011, REQ-014, REQ-015, REQ-021
+- REQ-002, REQ-006, REQ-009, REQ-011, REQ-014, REQ-015, REQ-021, REQ-022
 
 **Open questions**
 
@@ -912,5 +912,54 @@ As a user or integrator, I want **routines** I can **create**, **list**, and **d
 - Stable **machine-readable** **type** string for the first routine vs display name.
 - Whether **more than one** routine run may be **active** on the **same** scene **simultaneously**.
 - Whether **deleting** a definition **while running** **cancels** the run or is **blocked**.
+
+---
+
+### REQ-022 — Python scene routines: in-browser editor, scene library, documentation, and run loop with forced stop
+
+| Field | Value |
+|-------|-------|
+| **ID** | REQ-022 |
+| **Title** | Python scene routines: in-browser editor, scene library, documentation, and run loop with forced stop |
+| **Priority** | Must |
+| **Actor(s)** | End user |
+
+**User story**
+
+As a user who is **new to Python**, I want to **author**, **save**, **load**, **duplicate**, and **delete** **Python routines** for a **scene** using an **in-browser** editor with **syntax highlighting**, **checking**, **completion**, and **formatting**, with a **documented** **easy** **scene** **API** on the **same** **page**, so that I can **automate** **lights** in **scene** **space** **without** **mastering** **raw** **HTTP**; when I **run** a routine **against** a **scene**, it should **loop** **continuously** **until** I **stop** it, and **stopping** MUST be able to **forcibly** **terminate** the routine if **needed**.
+
+**Scope**
+
+- In scope: A **user-facing** experience (same **page** or **clear** **single** **workflow**) that includes: (**1**) an **in-browser** **Python** **code** **editor** with **full** **syntax** **highlighting**; (**2**) **syntax** **and** **static** **checking** that surfaces **issues** in the **editor** (e.g. **diagnostics** **before** or **during** **edit**, **exact** **mechanism** per **architecture**); (**3**) **code** **completion** (**autocomplete** **appropriate** **for** **Python** **and** **the** **provided** **scene** **API**); (**4**) **automatic** **code** **formatting** **on** **user** **request** or **on** **save** (**exact** **trigger** per **architecture**, but **formatting** MUST **be** **available** **and** **enabled** **by** **default** **where** **the** **product** **supports** **it**); (**5**) **persistence** and **management** of **Python** **routine** **definitions**: **save**, **load** **(open** **existing)**, **duplicate**, and **delete**; (**6**) a **Python** **library** **or** **module** **surface** **supplied** **by** **the** **application** that **wraps** **scene-oriented** **capabilities** (**REQ-020** **semantics**, **REQ-015** **scene** **composition**) **with** **simple** **methods** **and** **attributes**—**illustrative** **examples** **include** **`scene.height`** (or **equivalent** **documented** **name** **for** **scene** **vertical** **extent**) **and** **`scene.getLightsWithinSphere`** (**or** **equivalent** **documented** **name** **for** **sphere** **filtered** **retrieval** **in** **scene** **space**); (**7**) **on** **the** **same** **page** **as** **the** **editor**, **reference** **documentation** **for** **that** **library** (**signatures**, **parameters**, **return** **shapes** **at** **a** **novice-friendly** **level**, **short** **examples**, **and** **plain-language** **explanations**) **because** **the** **primary** **audience** **is** **Python** **novices**; (**8**) **running** a **saved** **Python** **routine** **against** a **chosen** **scene** **such** **that** **while** **the** **run** **is** **active**, **the** **implementation** **repeatedly** **executes** **the** **user’s** **script** **in** **a** **loop** (**repeated** **execution** **of** **the** **routine** **body** **or** **documented** **equivalent** **loop** **semantics** **in** **`docs/architecture.md`**); (**9**) **stopping** an **active** **Python** **routine** **run** **MUST** **end** **the** **loop** **promptly** **in** **the** **common** **case** **and** **MUST** **support** **forcible** **termination** (**e.g.** **timeout**, **interrupt**, **sandbox** **kill**, **or** **worker** **cancellation**—**exact** **means** **per** **architecture**) **when** **the** **routine** **does** **not** **yield** **to** **a** **cooperative** **stop** (**infinite** **loop**, **hang**, **or** **overlong** **iteration**).
+- Out of scope: **Replacing** **REQ-021** **built-in** **non-Python** **routine** **types** (**coexistence** **is** **in** **scope**); **arbitrary** **pip** **packages** **unless** **explicitly** **added** **later**; **editing** **model** **CSV** **or** **scene** **geometry** **from** **Python**; **authentication** **policy**; **remote** **IDE** **integration**.
+
+**Business rules**
+
+1. The **application** MUST provide **save**, **load** **(select** **and** **open** **an** **existing** **definition)**, **duplicate**, and **delete** **for** **Python** **routine** **definitions** **with** **clear** **labels** **or** **icons** **per** **REQ-018** **where** **they** **are** **buttons**.
+2. The **in-browser** **editor** MUST provide **Python** **syntax** **highlighting** **across** **the** **editable** **buffer**.
+3. The **editor** MUST provide **checking** that **surfaces** **syntax** **or** **static** **issues** **to** **the** **user** **(e.g.** **underline** **or** **problem** **panel)** **without** **requiring** **a** **separate** **desktop** **tool**.
+4. **Code** **completion** **and** **auto-formatting** (**format** **document** **or** **format** **on** **save**) MUST **be** **enabled** **for** **the** **Python** **editor** **(user** **MAY** **disable** **per** **architecture** **if** **a** **setting** **exists**, **but** **defaults** **MUST** **favor** **novices**: **completion** **and** **formatting** **on** **by** **default** **where** **technically** **feasible**).
+5. The **product** MUST **expose** **a** **documented** **Python** **API** **object** **(e.g.** **`scene`**) **bound** **to** **the** **currently** **selected** **scene** **during** **a** **run** **that** **maps** **to** **scene** **capabilities** **consistent** **with** **REQ-020** **(dimensions,** **queries,** **bulk** **updates** **in** **scene** **space)** **and** **REQ-011** **field** **semantics** **for** **light** **state**; **exact** **method** **names** **MAY** **differ** **from** **the** **examples** **in** **the** **user** **story** **if** **`docs/architecture.md`** **and** **the** **on-page** **reference** **list** **the** **canonical** **names**.
+6. **Reference** **documentation** **for** **the** **Python** **scene** **library** MUST **appear** **on** **the** **same** **page** **as** **the** **editor** **(e.g.** **collapsible** **panel,** **tabs,** **or** **split** **layout)** **and** MUST **target** **novices**: **plain** **language**, **parameter** **descriptions**, **at** **least** **one** **short** **example** **per** **major** **operation**, **and** **cross-links** **or** **anchors** **between** **editor** **and** **docs** **where** **helpful**.
+7. **Starting** a **Python** **routine** **against** a **scene** MUST **execute** **the** **script** **in** **a** **continuous** **loop** **while** **the** **run** **remains** **active** (**architecture** **documents** **iteration** **timing**, **whether** **sleeps** **are** **implicit**, **and** **fairness** **with** **other** **runs**).
+8. **Stopping** a **Python** **routine** **run** MUST **cease** **further** **loop** **iterations** **promptly** **under** **normal** **conditions**; **the** **implementation** MUST **also** **support** **forcible** **termination** **when** **the** **routine** **does** **not** **respond** **to** **cooperative** **stop** **within** **architecture-defined** **bounds** (**documented** **in** **`docs/architecture.md`**).
+9. **Python** **routine** **automation** **MUST** **affect** **lights** **only** **through** **the** **documented** **scene** **API** **surface** **(wrapping** **REQ-020**/**REQ-011** **semantics)**; **it** MUST **not** **rewrite** **canonical** **stored** **model** **coordinates** (**REQ-005**, **REQ-015**).
+10. **REQ-002** **applies**: **editor**, **documentation**, **and** **run**/**stop** **controls** MUST **remain** **usable** **on** **mobile**, **tablet**, **and** **desktop** **without** **hover-only** **essential** **steps** (**layout** **MAY** **stack** **editor** **and** **docs** **on** **narrow** **viewports**).
+
+**Responsive / UX notes** *(when UI is involved)*
+
+- Mobile: **Editor** **and** **documentation** **reachable** **without** **losing** **context** **(e.g.** **tabbed** **docs** **or** **expandable** **sections)**; **save**/**load**/**duplicate**/**delete**/**run**/**stop** **touch-friendly**; **diagnostics** **readable**.
+- Tablet: **Same** **as** **mobile**; **optional** **side-by-side** **editor** **and** **docs** **when** **width** **allows**.
+- Desktop: **Split** **or** **multi-pane** **layout** **encouraged** **so** **reference** **docs** **stay** **visible** **alongside** **code**; **keyboard** **shortcuts** **for** **format**/**save** **where** **architecture** **provides** **them**.
+
+**Dependencies**
+
+- REQ-002, REQ-011, REQ-015, REQ-020, REQ-021 (coexistence with other routine mechanisms), REQ-018 (buttons/icons where applicable)
+
+**Open questions**
+
+- Whether **Python** **routines** **are** **stored** **as** **a** **new** **REQ-021** **routine** **type** **or** **a** **parallel** **entity** **with** **its** **own** **run** **lifecycle** **(architecture** **must** **choose** **one** **and** **document** **API** **URLs** **or** **UI** **entry** **points**).
+- **Execution** **placement** (**in-browser** **e.g.** **WebAssembly** **vs** **server-side** **sandbox**) **and** **resource** **limits** (**CPU**, **memory**, **wall-clock** **per** **iteration**).
+- **Interaction** **with** **concurrent** **REQ-021** **runs** **on** **the** **same** **scene** **(allowed**, **serialized**, **or** **rejected** **with** **clear** **errors**).
 
 ---

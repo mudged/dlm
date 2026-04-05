@@ -2,9 +2,12 @@
 
 import { faPlus, faTrash } from "@fortawesome/free-solid-svg-icons";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
+import { faPenToSquare } from "@fortawesome/free-solid-svg-icons";
 import {
+  ROUTINE_TYPE_PYTHON_SCENE_SCRIPT,
   ROUTINE_TYPE_RANDOM_COLOUR_ALL,
   createRoutine,
   deleteRoutine,
@@ -13,6 +16,7 @@ import {
 } from "@/lib/routines";
 
 export default function RoutinesPage() {
+  const router = useRouter();
   const [list, setList] = useState<RoutineDefinition[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -78,7 +82,18 @@ export default function RoutinesPage() {
           <Link href="/scenes" className="text-sky-700 underline dark:text-sky-300">
             scene
           </Link>{" "}
-          detail page.
+          detail page. Python routines use the in-browser editor and Pyodide
+          runner (see help text on the editor page).
+        </p>
+        <p className="mt-2">
+          <Button
+            type="button"
+            icon={faPlus}
+            className="min-h-11"
+            onClick={() => router.push("/routines/python")}
+          >
+            New Python routine
+          </Button>
         </p>
       </header>
 
@@ -158,15 +173,32 @@ export default function RoutinesPage() {
                   ) : null}
                   <p className="text-xs text-slate-500">{r.type}</p>
                 </div>
-                <Button
-                  type="button"
-                  icon={faTrash}
-                  className="min-h-11 bg-red-900 hover:bg-red-800 dark:bg-red-950"
-                  disabled={busy}
-                  onClick={() => void onDelete(r.id)}
-                >
-                  Delete
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  {r.type === ROUTINE_TYPE_PYTHON_SCENE_SCRIPT ? (
+                    <Button
+                      type="button"
+                      icon={faPenToSquare}
+                      className="min-h-11"
+                      disabled={busy}
+                      onClick={() =>
+                        router.push(
+                          `/routines/python?id=${encodeURIComponent(r.id)}`,
+                        )
+                      }
+                    >
+                      Edit Python
+                    </Button>
+                  ) : null}
+                  <Button
+                    type="button"
+                    icon={faTrash}
+                    className="min-h-11 bg-red-900 hover:bg-red-800 dark:bg-red-950"
+                    disabled={busy}
+                    onClick={() => void onDelete(r.id)}
+                  >
+                    Delete
+                  </Button>
+                </div>
               </li>
             ))}
           </ul>

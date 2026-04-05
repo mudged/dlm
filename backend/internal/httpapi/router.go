@@ -35,6 +35,8 @@ func NewSiteHandler(cfg *config.Config, content fs.FS, st *store.Store) http.Han
 	api.HandleFunc("GET /status", statusHandler)
 	api.HandleFunc("GET /routines", deps.listRoutines)
 	api.HandleFunc("POST /routines", deps.createRoutine)
+	api.HandleFunc("GET /routines/{id}", deps.getRoutine)
+	api.HandleFunc("PATCH /routines/{id}", deps.patchRoutine)
 	api.HandleFunc("DELETE /routines/{id}", deps.deleteRoutine)
 	api.HandleFunc("GET /models", deps.listModels)
 	api.HandleFunc("POST /models", deps.createModel)
