@@ -804,6 +804,34 @@ Feature: Python scene routines editor API docs and execution (REQ-022)
     When the REQ-022 business rule 10 and responsive UX notes are read
     Then the editor documentation and run and stop controls must remain usable on mobile tablet and desktop
     And essential steps must not rely on hover-only affordances
+
+Feature: Create routine type selection dropdown (REQ-023)
+
+  Scenario: REQ-023 requires a dropdown for routine type when creating a new routine
+    Parent requirement: REQ-023
+    Given docs/requirements.md defines REQ-023
+    When the REQ-023 scope and business rules about new routine creation are read
+    Then the user-facing flow to create a new routine definition must include a labeled routine type selector implemented as a dropdown or semantically equivalent single-choice control
+    And the user must be able to choose the type before completing creation per architecture placement in the form or wizard
+
+  Scenario: REQ-023 dropdown includes built-in REQ-021 types and Python from REQ-022
+    Parent requirement: REQ-023
+    Given docs/requirements.md defines REQ-021 REQ-022 and REQ-023
+    When the REQ-023 business rule about dropdown options is read
+    Then every creatable routine kind must appear as an option including each built-in type under REQ-021 and the Python routine kind under REQ-022
+    And no creatable kind may be omitted from the list
+
+  Scenario: REQ-023 forbids a standalone primary Python-only create button when Python is in the dropdown
+    Parent requirement: REQ-023
+    Given docs/requirements.md defines REQ-023
+    When the REQ-023 business rule 3 is read
+    Then the UI must not require a separate primary action whose sole purpose is to start creating only a Python routine when Python is already selectable in the type dropdown
+
+  Scenario: REQ-023 ties type selection to responsive non-hover-only use
+    Parent requirement: REQ-023
+    Given docs/requirements.md defines REQ-002 and REQ-023
+    When the REQ-023 business rule 4 and responsive UX notes are read
+    Then the type control must be operable on mobile tablet and desktop without hover-only essential steps
 ```
 
 ---

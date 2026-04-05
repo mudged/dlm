@@ -26,6 +26,25 @@ export type StartRoutineResponse = {
 export const ROUTINE_TYPE_RANDOM_COLOUR_ALL = "random_colour_cycle_all";
 export const ROUTINE_TYPE_PYTHON_SCENE_SCRIPT = "python_scene_script";
 
+/** Every type the UI may offer when creating a new routine (REQ-023). */
+export const ROUTINE_TYPE_CREATE_OPTIONS: readonly {
+  value: string;
+  label: string;
+}[] = [
+  {
+    value: ROUTINE_TYPE_RANDOM_COLOUR_ALL,
+    label: "Random colour cycle (all lights)",
+  },
+  {
+    value: ROUTINE_TYPE_PYTHON_SCENE_SCRIPT,
+    label: "Python (scene API)",
+  },
+];
+
+export function isCreatableRoutineType(type: string): boolean {
+  return ROUTINE_TYPE_CREATE_OPTIONS.some((o) => o.value === type);
+}
+
 export async function fetchRoutines(): Promise<RoutineDefinition[]> {
   const res = await fetch("/api/v1/routines", { cache: "no-store" });
   if (!res.ok) {

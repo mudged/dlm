@@ -963,3 +963,45 @@ As a user who is **new to Python**, I want to **author**, **save**, **load**, **
 - **Interaction** **with** **concurrent** **REQ-021** **runs** **on** **the** **same** **scene** **(allowed**, **serialized**, **or** **rejected** **with** **clear** **errors**).
 
 ---
+
+### REQ-023 — Create routine: single type dropdown (includes Python)
+
+| Field | Value |
+|-------|-------|
+| **ID** | REQ-023 |
+| **Title** | Create routine: single type dropdown (includes Python) |
+| **Priority** | Must |
+| **Actor(s)** | End user |
+
+**User story**
+
+As a user **creating** a **new** **routine**, I want to **choose** the **kind** of **routine** (**built-in** **type** **or** **Python**) **from** **one** **dropdown**, so that **there** **is** **a** **single**, **predictable** **create** **path** **and** **I** **do** **not** **rely** **on** **a** **separate** **button** **only** **for** **Python**.
+
+**Scope**
+
+- In scope: The **user-facing** **flow** **to** **start** **creating** **a** **new** **routine** **definition** (**REQ-021**, **REQ-022**) **MUST** **include** **a** **labeled** **routine** **type** **selector** **implemented** **as** **a** **dropdown** (**native** **`<select>`** **or** **an** **accessible** **custom** **control** **with** **the** **same** **semantics** **per** **architecture**). **Every** **routine** **category** **the** **user** **may** **newly** **create** **MUST** **appear** **as** **an** **option** **in** **that** **dropdown**, **including** **each** **built-in** **routine** **type** **from** **REQ-021** **and** **the** **Python** **routine** **path** **from** **REQ-022** (**one** **option** **per** **distinct** **create** **kind**, **with** **clear** **human-readable** **labels**). **Choosing** **Python** **MUST** **continue** **into** **the** **Python** **authoring** **experience** **(**REQ-022**)**; **choosing** **a** **built-in** **type** **MUST** **follow** **REQ-021** **create** **semantics** **for** **that** **type**. The **product** **MUST** **not** **require** **a** **separate** **primary** **“create** **Python** **routine”** **(or** **equivalent)** **button** **or** **entry** **that** **is** **the** **only** **way** **to** **start** **a** **new** **Python** **routine**—**Python** **must** **be** **reachable** **via** **the** **same** **type** **dropdown** **as** **other** **kinds**.
+- Out of scope: **Changing** **REQ-021**/**022** **persistence** **or** **API** **contracts** **except** **where** **the** **UI** **must** **bind** **to** **them**; **editing** **existing** **definitions**; **ordering** **or** **grouping** **of** **options** **beyond** **clarity** **(**architecture** **may** **use** **optgroups** **or** **separators**)**.
+
+**Business rules**
+
+1. **New** **routine** **creation** **UI** **MUST** **expose** **a** **dropdown** **(or** **semantically** **equivalent** **single-choice** **list)** **for** **routine** **type** **before** **the** **user** **can** **complete** **creation** **(**exact** **placement** **in** **the** **wizard**/**form** **per** **architecture**)**.
+2. **The** **dropdown** **options** **MUST** **collectively** **cover** **all** **creatable** **routine** **kinds**: **built-in** **types** **defined** **under** **REQ-021** **and** **the** **Python** **routine** **kind** **under** **REQ-022** **(**no** **creatable** **kind** **omitted** **from** **the** **list**)**.
+3. **The** **UI** **MUST** **not** **present** **a** **standalone** **primary** **action** **whose** **sole** **purpose** **is** **to** **start** **creating** **only** **a** **Python** **routine** **(**e.g.** **a** **second** **“Python”** **button** **next** **to** **“New** **routine”**)** **when** **Python** **is** **already** **selectable** **in** **the** **type** **dropdown** **(**secondary** **shortcuts** **or** **deep** **links** **are** **out** **of** **scope** **unless** **they** **do** **not** **replace** **the** **dropdown** **path**)**.
+4. **REQ-002** **applies**: **the** **type** **control** **MUST** **be** **operable** **on** **mobile**, **tablet**, **and** **desktop** **without** **hover-only** **essential** **steps** **(**native** **select** **typically** **satisfies** **touch** **and** **keyboard** **when** **labeled** **and** **focusable**)**.
+
+**Responsive / UX notes** *(when UI is involved)*
+
+- Mobile: **Type** **dropdown** **full** **width** **or** **touch-friendly** **hit** **target**; **label** **visible** **(**e.g.** **“Routine** **type”** **or** **equivalent**)**.
+- Tablet: **Same** **as** **mobile**; **orientation** **changes** **do** **not** **hide** **the** **control**.
+- Desktop: **Dropdown** **integrated** **with** **other** **create** **fields**; **keyboard** **navigation** **to** **open** **and** **change** **selection** **where** **the** **platform** **allows**.
+
+**Dependencies**
+
+- REQ-002, REQ-021, REQ-022
+
+**Open questions**
+
+- **Exact** **display** **labels** **and** **optional** **grouping** **(**optgroups**)** **for** **options**.
+- **Whether** **a** **non-primary** **shortcut** **(**e.g.** **nav** **link** **to** **Python** **editor**)** **remains** **for** **discoverability** **without** **violating** **rule** **3**.
+
+---

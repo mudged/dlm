@@ -44,7 +44,7 @@ export default function PythonRoutineEditorClient() {
   const [description, setDescription] = useState("");
   const [code, setCode] = useState(DEFAULT_SOURCE);
   const [routineId, setRoutineId] = useState<string | null>(idParam);
-  const [loaded, setLoaded] = useState(!idParam);
+  const [loaded, setLoaded] = useState(() => Boolean(idParam));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [tab, setTab] = useState<"code" | "help">("code");
@@ -79,16 +79,12 @@ export default function PythonRoutineEditorClient() {
   }, []);
 
   useEffect(() => {
-    if (idParam) {
-      void load(idParam);
-    } else {
-      setRoutineId(null);
-      setName("");
-      setDescription("");
-      setCode(DEFAULT_SOURCE);
-      setLoaded(true);
+    if (!idParam) {
+      router.replace("/routines/new?type=python_scene_script");
+      return;
     }
-  }, [idParam, load]);
+    void load(idParam);
+  }, [idParam, load, router]);
 
   async function onSave() {
     setBusy(true);
@@ -104,22 +100,14 @@ export default function PythonRoutineEditorClient() {
         sourceToSave = formatted.text;
         setCode(formatted.text);
       }
-      if (routineId) {
-        await patchRoutine(routineId, {
-          name: n,
-          description,
-          python_source: sourceToSave,
-        });
-      } else {
-        const created = await createRoutine({
-          name: n,
-          description,
-          type: ROUTINE_TYPE_PYTHON_SCENE_SCRIPT,
-          python_source: sourceToSave,
-        });
-        setRoutineId(created.id);
-        router.replace(`/routines/python?id=${encodeURIComponent(created.id)}`);
+      if (!routineId) {
+        throw new Error("Routine id missing; create routines from Routines → New routine.");
       }
+      await patchRoutine(routineId, {
+        name: n,
+        description,
+        python_source: sourceToSave,
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Save failed");
     } finally {
