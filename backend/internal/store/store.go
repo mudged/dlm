@@ -162,6 +162,34 @@ func (s *Store) ensureSceneTables(ctx context.Context) error {
 	if err := s.ensureSceneModelOrdinal(ctx); err != nil {
 		return err
 	}
+	return s.ensureRoutineTables(ctx)
+}
+
+func (s *Store) ensureRoutineTables(ctx context.Context) error {
+	stmts := []string{
+		`CREATE TABLE IF NOT EXISTS routines (
+			id TEXT PRIMARY KEY,
+			name TEXT NOT NULL,
+			description TEXT NOT NULL,
+			type TEXT NOT NULL,
+			created_at TEXT NOT NULL
+		)`,
+		`CREATE TABLE IF NOT EXISTS routine_runs (
+			id TEXT PRIMARY KEY,
+			routine_id TEXT NOT NULL,
+			scene_id TEXT NOT NULL,
+			status TEXT NOT NULL,
+			started_at TEXT NOT NULL,
+			stopped_at TEXT,
+			FOREIGN KEY (routine_id) REFERENCES routines(id) ON DELETE RESTRICT,
+			FOREIGN KEY (scene_id) REFERENCES scenes(id) ON DELETE CASCADE
+		)`,
+	}
+	for _, q := range stmts {
+		if _, err := s.db.ExecContext(ctx, q); err != nil {
+			return fmt.Errorf("migrate routines: %w", err)
+		}
+	}
 	return nil
 }
 
@@ -326,7 +354,7 @@ func (s *Store) SeedDefaultSamples(ctx context.Context) error {
 	return tx.Commit()
 }
 
-// FactoryReset deletes all scenes, models, and lights, then re-seeds the three default samples (REQ-017 / architecture §3.14).
+// FactoryReset deletes all application data including routines, then re-seeds the three default samples (REQ-017 / architecture §3.14).
 func (s *Store) FactoryReset(ctx context.Context) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -334,6 +362,12 @@ func (s *Store) FactoryReset(ctx context.Context) error {
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	if _, err := tx.ExecContext(ctx, `DELETE FROM routine_runs`); err != nil {
+		return fmt.Errorf("factory reset delete routine_runs: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM routines`); err != nil {
+		return fmt.Errorf("factory reset delete routines: %w", err)
+	}
 	// scene_models rows CASCADE when scenes are removed (FK on scene_id).
 	if _, err := tx.ExecContext(ctx, `DELETE FROM scenes`); err != nil {
 		return fmt.Errorf("factory reset delete scenes: %w", err)

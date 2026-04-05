@@ -8,6 +8,103 @@ import (
 	"example.com/dlm/backend/internal/wiremodel"
 )
 
+func TestPatchSceneLightsSceneAndBatch(t *testing.T) {
+	ctx := context.Background()
+	s := testDB(t)
+	sum, err := s.Create(ctx, "m1", []wiremodel.Light{
+		{ID: 0, X: 0, Y: 0, Z: 0},
+		{ID: 1, X: 1, Y: 0, Z: 0},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sc, err := s.CreateScene(ctx, "s1", []string{sum.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := s.PatchSceneLightsScene(ctx, sc.ID, LightStatePatch{
+		On: ptrBool(true),
+	})
+	if err != nil || res.UpdatedCount != 2 {
+		t.Fatalf("scene patch %+v err %v", res, err)
+	}
+	c0 := "#aabbcc"
+	c1 := "#112233"
+	br := 100.0
+	on := true
+	batch, err := s.PatchSceneLightsBatch(ctx, sc.ID, []SceneBatchLightUpdate{
+		{ModelID: sum.ID, LightID: 0, Patch: LightStatePatch{Color: &c0, On: &on, BrightnessPct: &br}},
+		{ModelID: sum.ID, LightID: 1, Patch: LightStatePatch{Color: &c1, On: &on, BrightnessPct: &br}},
+	})
+	if err != nil || batch.UpdatedCount != 2 {
+		t.Fatalf("batch %+v err %v", batch, err)
+	}
+	d, err := s.Get(ctx, sum.ID)
+	if err != nil || !d.Lights[0].On || d.Lights[0].Color != "#aabbcc" {
+		t.Fatalf("light0 %+v err %v", d.Lights[0], err)
+	}
+	if d.Lights[1].Color != "#112233" {
+		t.Fatalf("light1 color %q", d.Lights[1].Color)
+	}
+}
+
+func TestPatchSceneLightsBatchRejectsForeignLight(t *testing.T) {
+	ctx := context.Background()
+	s := testDB(t)
+	a, err := s.Create(ctx, "a", []wiremodel.Light{{ID: 0, X: 0, Y: 0, Z: 0}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := s.Create(ctx, "b", []wiremodel.Light{{ID: 0, X: 0, Y: 0, Z: 0}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sc, err := s.CreateScene(ctx, "s1", []string{a.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	on := true
+	br := 100.0
+	col := "#ff0000"
+	_, err = s.PatchSceneLightsBatch(ctx, sc.ID, []SceneBatchLightUpdate{
+		{ModelID: b.ID, LightID: 0, Patch: LightStatePatch{On: &on, Color: &col, BrightnessPct: &br}},
+	})
+	if !errors.Is(err, ErrSceneLightNotInScene) {
+		t.Fatalf("want ErrSceneLightNotInScene got %v", err)
+	}
+}
+
+func TestRoutinesCreateStartStopDelete(t *testing.T) {
+	ctx := context.Background()
+	s := testDB(t)
+	sum, err := s.Create(ctx, "m1", []wiremodel.Light{{ID: 0, X: 0, Y: 0, Z: 0}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sc, err := s.CreateScene(ctx, "s1", []string{sum.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := s.CreateRoutine(ctx, "fx", "d", RoutineTypeRandomColourCycleAll)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runID, already, err := s.StartRoutineRun(ctx, sc.ID, r.ID)
+	if err != nil || already || runID == "" {
+		t.Fatalf("start %+v %v %v", runID, already, err)
+	}
+	d, err := s.Get(ctx, sum.ID)
+	if err != nil || !d.Lights[0].On {
+		t.Fatalf("after start want on, got %+v err %v", d.Lights[0], err)
+	}
+	if err := s.StopRoutineRun(ctx, sc.ID, runID); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeleteRoutine(ctx, r.ID); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestScenes_CreateGetDelete(t *testing.T) {
 	ctx := context.Background()
 	s := testDB(t)
