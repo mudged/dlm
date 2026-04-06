@@ -45,6 +45,7 @@ func (a *apiDeps) postResetLightStates(w http.ResponseWriter, r *http.Request) {
 	if states == nil {
 		states = []store.LightStateDTO{}
 	}
+	a.rev.NotifyModelLightsChanged(r.Context(), a.store, modelID)
 	writeJSON(w, http.StatusOK, map[string]any{"states": states})
 }
 
@@ -146,6 +147,7 @@ func (a *apiDeps) patchLightState(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusInternalServerError, "internal_error", "could not update light state")
 		return
 	}
+	a.rev.NotifyModelLightsChanged(r.Context(), a.store, modelID)
 	writeJSON(w, http.StatusOK, st)
 }
 
@@ -228,5 +230,6 @@ func (a *apiDeps) patchLightStatesBatch(w http.ResponseWriter, r *http.Request) 
 	if states == nil {
 		states = []store.LightStateDTO{}
 	}
+	a.rev.NotifyModelLightsChanged(r.Context(), a.store, modelID)
 	writeJSON(w, http.StatusOK, map[string]any{"states": states})
 }

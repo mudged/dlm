@@ -39,7 +39,7 @@ func newTestHandler(t *testing.T, cfg *config.Config) http.Handler {
 			DBPath:             filepath.Join(t.TempDir(), "unused.db"),
 		}
 	}
-	return NewSiteHandler(cfg, nil, testStore(t))
+	return NewSiteHandler(cfg, nil, testStore(t), nil)
 }
 
 func TestHealth_returnsOKJSON(t *testing.T) {
@@ -145,7 +145,7 @@ func TestCORSPreflight_allowsConfiguredOrigin(t *testing.T) {
 		CORSAllowedOrigins: []string{"http://localhost:3000"},
 		DBPath:             filepath.Join(t.TempDir(), "unused.db"),
 	}
-	srv := httptest.NewServer(NewSiteHandler(cfg, nil, testStore(t)))
+	srv := httptest.NewServer(NewSiteHandler(cfg, nil, testStore(t), nil))
 	t.Cleanup(srv.Close)
 
 	req, err := http.NewRequest(http.MethodOptions, srv.URL+"/api/v1/status", nil)
@@ -182,7 +182,7 @@ func TestStatic_servesEmbeddableExport(t *testing.T) {
 		CORSAllowedOrigins: nil,
 		DBPath:             filepath.Join(t.TempDir(), "unused.db"),
 	}
-	srv := httptest.NewServer(NewSiteHandler(cfg, fsys, testStore(t)))
+	srv := httptest.NewServer(NewSiteHandler(cfg, fsys, testStore(t), nil))
 	t.Cleanup(srv.Close)
 
 	res, err := http.Get(srv.URL + "/")
@@ -219,7 +219,7 @@ func TestAPI_precedenceOverStaticPrefix(t *testing.T) {
 		CORSAllowedOrigins: nil,
 		DBPath:             filepath.Join(t.TempDir(), "unused.db"),
 	}
-	srv := httptest.NewServer(NewSiteHandler(cfg, fsys, testStore(t)))
+	srv := httptest.NewServer(NewSiteHandler(cfg, fsys, testStore(t), nil))
 	t.Cleanup(srv.Close)
 
 	res, err := http.Get(srv.URL + "/health")
@@ -245,7 +245,7 @@ func TestStatic_unknownClientRoute_fallsBackToIndexHTML(t *testing.T) {
 		CORSAllowedOrigins: nil,
 		DBPath:             filepath.Join(t.TempDir(), "unused.db"),
 	}
-	srv := httptest.NewServer(NewSiteHandler(cfg, fsys, testStore(t)))
+	srv := httptest.NewServer(NewSiteHandler(cfg, fsys, testStore(t), nil))
 	t.Cleanup(srv.Close)
 
 	res, err := http.Get(srv.URL + "/settings/profile")
@@ -273,7 +273,7 @@ func TestStatic_missingNextAsset_returnsNotFound(t *testing.T) {
 		CORSAllowedOrigins: nil,
 		DBPath:             filepath.Join(t.TempDir(), "unused.db"),
 	}
-	srv := httptest.NewServer(NewSiteHandler(cfg, fsys, testStore(t)))
+	srv := httptest.NewServer(NewSiteHandler(cfg, fsys, testStore(t), nil))
 	t.Cleanup(srv.Close)
 
 	res, err := http.Get(srv.URL + "/_next/static/missing.js")
@@ -308,7 +308,7 @@ func TestAPIv1FactoryReset_resetsToThreeSamples(t *testing.T) {
 		CORSAllowedOrigins: nil,
 		DBPath:             path,
 	}
-	h := NewSiteHandler(cfg, nil, st)
+	h := NewSiteHandler(cfg, nil, st, nil)
 	srv := httptest.NewServer(h)
 	t.Cleanup(srv.Close)
 

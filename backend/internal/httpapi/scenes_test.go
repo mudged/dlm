@@ -22,7 +22,7 @@ func TestScenes_createAndGet(t *testing.T) {
 		WriteTimeout: 15 * time.Second,
 		DBPath:       filepath.Join(t.TempDir(), "unused.db"),
 	}
-	srv := httptest.NewServer(NewSiteHandler(cfg, nil, st))
+	srv := httptest.NewServer(NewSiteHandler(cfg, nil, st, nil))
 	t.Cleanup(srv.Close)
 
 	res := postModel(t, srv, "m1", "id,x,y,z\n0,0,0,0\n")
@@ -72,7 +72,7 @@ func TestModels_delete409WhenInScene(t *testing.T) {
 		WriteTimeout: 15 * time.Second,
 		DBPath:       filepath.Join(t.TempDir(), "unused.db"),
 	}
-	srv := httptest.NewServer(NewSiteHandler(cfg, nil, st))
+	srv := httptest.NewServer(NewSiteHandler(cfg, nil, st, nil))
 	t.Cleanup(srv.Close)
 
 	res := postModel(t, srv, "m1", "id,x,y,z\n0,0,0,0\n")
@@ -131,7 +131,7 @@ func TestScenes_createRejectsClientOffsets(t *testing.T) {
 		WriteTimeout: 15 * time.Second,
 		DBPath:       filepath.Join(t.TempDir(), "unused.db"),
 	}
-	srv := httptest.NewServer(NewSiteHandler(cfg, nil, st))
+	srv := httptest.NewServer(NewSiteHandler(cfg, nil, st, nil))
 	t.Cleanup(srv.Close)
 
 	res := postModel(t, srv, "m1", "id,x,y,z\n0,0,0,0\n")
@@ -163,7 +163,7 @@ func TestScenes_spatialEndpointsDimensionsAndQueries(t *testing.T) {
 		WriteTimeout: 15 * time.Second,
 		DBPath:       filepath.Join(t.TempDir(), "unused.db"),
 	}
-	srv := httptest.NewServer(NewSiteHandler(cfg, nil, st))
+	srv := httptest.NewServer(NewSiteHandler(cfg, nil, st, nil))
 	t.Cleanup(srv.Close)
 
 	res := postModel(t, srv, "m-spatial", "id,x,y,z\n0,0,0,0\n1,1,1,1\n2,2,2,2\n")
@@ -329,7 +329,7 @@ func TestScenes_spatialBulkUpdateAndInvalidGeometry(t *testing.T) {
 		WriteTimeout: 15 * time.Second,
 		DBPath:       filepath.Join(t.TempDir(), "unused.db"),
 	}
-	srv := httptest.NewServer(NewSiteHandler(cfg, nil, st))
+	srv := httptest.NewServer(NewSiteHandler(cfg, nil, st, nil))
 	t.Cleanup(srv.Close)
 
 	res := postModel(t, srv, "m-spatial-update", "id,x,y,z\n0,0,0,0\n1,1,1,1\n2,2,2,2\n")

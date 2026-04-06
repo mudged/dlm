@@ -484,6 +484,19 @@ func (s *Store) Get(ctx context.Context, id string) (*Detail, error) {
 	return &d, nil
 }
 
+// ModelExists reports whether a model id exists (lightweight lookup for SSE and similar).
+func (s *Store) ModelExists(ctx context.Context, id string) (bool, error) {
+	var one int
+	err := s.db.QueryRowContext(ctx, `SELECT 1 FROM models WHERE id = ? LIMIT 1`, id).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 // Create inserts a model and its lights in one transaction.
 func (s *Store) Create(ctx context.Context, name string, lights []wiremodel.Light) (*Summary, error) {
 	name = strings.TrimSpace(name)

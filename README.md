@@ -80,6 +80,15 @@ GOOS=linux GOARCH=arm64 go build -o bin/dlm-arm64 ./cmd/server
 | Web lint | `cd web && npm run lint` |
 | Web export only | `cd web && npm run build` (output in `web/out/`) |
 
+## High-throughput light updates (REQ-029)
+
+- **Batch writes:** Prefer `PATCH /api/v1/models/{id}/lights/state/batch` and scene bulk routes (`PATCH /api/v1/scenes/{id}/lights/state/...` per `docs/architecture.md` §3.15) instead of one HTTP request per light when updating hundreds of lights frequently.
+- **Connections:** Reuse HTTP keep-alive (default for Go’s server and typical browser `fetch` pools). For many parallel requests from a rich client, terminating **TLS + HTTP/2** in a reverse proxy while proxying HTTP/1.1 to the Go process is recommended in §3.18.
+- **Push notifications:** After light state commits, the server emits **Server-Sent Events** on:
+  - `GET /api/v1/models/{id}/lights/events` — `text/event-stream`, JSON lines `{"seq":<uint64>}`; subscribers typically `GET` the model or `GET …/lights/state` again to load authoritative state.
+  - `GET /api/v1/scenes/{id}/lights/events` — same shape for scene-composed views.
+- **Long-lived SSE:** If connections drop behind a proxy, set a generous **`HTTP_WRITE_TIMEOUT_SEC`** (or `0` for no write deadline in Go) when debugging; the handler extends write deadlines periodically.
+
 ## License
 
 See [LICENSE](LICENSE).

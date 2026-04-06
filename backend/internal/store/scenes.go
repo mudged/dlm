@@ -656,6 +656,55 @@ func (s *Store) CreateScene(ctx context.Context, name string, modelIDs []string)
 	}, nil
 }
 
+// SceneExists reports whether a scene id exists (lightweight lookup for SSE and similar).
+func (s *Store) SceneExists(ctx context.Context, id string) (bool, error) {
+	var one int
+	err := s.db.QueryRowContext(ctx, `SELECT 1 FROM scenes WHERE id = ? LIMIT 1`, id).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// ListSceneIDsForModel returns every scene that references the model (REQ-029 revision fan-out).
+func (s *Store) ListSceneIDsForModel(ctx context.Context, modelID string) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT DISTINCT scene_id FROM scene_models WHERE model_id = ? ORDER BY scene_id`, modelID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var sid string
+		if err := rows.Scan(&sid); err != nil {
+			return nil, err
+		}
+		out = append(out, sid)
+	}
+	return out, rows.Err()
+}
+
+// ListModelIDsInScene returns model ids assigned to the scene in placement order.
+func (s *Store) ListModelIDsInScene(ctx context.Context, sceneID string) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT model_id FROM scene_models WHERE scene_id = ? ORDER BY ordinal ASC, model_id ASC`, sceneID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var mid string
+		if err := rows.Scan(&mid); err != nil {
+			return nil, err
+		}
+		out = append(out, mid)
+	}
+	return out, rows.Err()
+}
+
 // GetScene returns scene metadata and all models with scene-space lights.
 func (s *Store) GetScene(ctx context.Context, sceneID string) (*SceneDetail, error) {
 	row := s.db.QueryRowContext(ctx, `SELECT id, name, created_at FROM scenes WHERE id = ?`, sceneID)

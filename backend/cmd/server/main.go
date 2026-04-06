@@ -48,7 +48,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	handler := httpapi.NewSiteHandler(cfg, ui, st)
+	revHub := httpapi.NewRevisionHub()
+	handler := httpapi.NewSiteHandler(cfg, ui, st, revHub)
 	srv := &http.Server{
 		Addr:              cfg.HTTPListen,
 		Handler:           handler,
@@ -70,7 +71,7 @@ func main() {
 
 	schedCtx, schedCancel := context.WithCancel(context.Background())
 	defer schedCancel()
-	go httpapi.StartRoutineScheduler(schedCtx, log, st)
+	go httpapi.StartRoutineScheduler(schedCtx, log, st, revHub)
 
 	<-ctx.Done()
 	schedCancel()

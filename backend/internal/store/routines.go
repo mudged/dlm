@@ -435,14 +435,16 @@ func (s *Store) ListRunningRoutineRunsForScene(ctx context.Context, sceneID stri
 }
 
 // TickRoutineRuns advances every running routine by type (called from scheduler).
-func (s *Store) TickRoutineRuns(ctx context.Context) error {
+// It returns the list of scene IDs whose server-side routine applied a light-state update
+// this tick (for REQ-029 SSE / revision fan-out).
+func (s *Store) TickRoutineRuns(ctx context.Context) ([]string, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT rr.scene_id, r.type FROM routine_runs rr
 		INNER JOIN routines r ON r.id = rr.routine_id
 		WHERE rr.status = ?
 	`, RoutineStatusRunning)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer rows.Close()
 	type pair struct {
@@ -453,13 +455,14 @@ func (s *Store) TickRoutineRuns(ctx context.Context) error {
 	for rows.Next() {
 		var p pair
 		if err := rows.Scan(&p.sceneID, &p.typ); err != nil {
-			return err
+			return nil, err
 		}
 		runs = append(runs, p)
 	}
 	if err := rows.Err(); err != nil {
-		return err
+		return nil, err
 	}
+	var touched []string
 	for _, p := range runs {
 		switch p.typ {
 		case RoutineTypePythonSceneScript:
@@ -467,11 +470,12 @@ func (s *Store) TickRoutineRuns(ctx context.Context) error {
 			continue
 		case RoutineTypeRandomColourCycleAll:
 			if err := s.applyRandomColourCycleAllTick(ctx, p.sceneID); err != nil {
-				return err
+				return nil, err
 			}
+			touched = append(touched, p.sceneID)
 		default:
-			return fmt.Errorf("unsupported running routine type %q", p.typ)
+			return nil, fmt.Errorf("unsupported running routine type %q", p.typ)
 		}
 	}
-	return nil
+	return touched, nil
 }

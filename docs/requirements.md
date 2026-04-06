@@ -1214,3 +1214,46 @@ As a **user** **viewing** **a** **scene** **(**or** **a** **single** **model**)*
 - **Whether** **a** **single** **global** **cap** **on** **emissive** **intensity** **is** **needed** **when** **many** **100%** **lights** **fill** **the** **viewport** **(**architecture** **trade-off** **vs** **REQ-010** **“do** **not** **merge** **lights”**)**.
 
 ---
+
+### REQ-029 — High-throughput light state updates (batching, connections, push)
+
+| Field | Value |
+|-------|-------|
+| **ID** | REQ-029 |
+| **Title** | High-throughput light state updates (batching, connections, push) |
+| **Priority** | Must |
+| **Actor(s)** | Integrator; operator; end user (indirectly via UI) |
+
+**User story**
+
+As an integrator or operator driving dynamic lighting, I want the system to sustain frequent updates to many lights without being dominated by per-request overhead, so that scenes with hundreds of lights can change multiple times per second while viewers stay sufficiently up to date.
+
+**Scope**
+
+- In scope: Non-functional expectations for **persisted** per-light state (same fields and validation semantics as **REQ-011**) when **updating large sets** in **model** and **scene** contexts (**REQ-015**, **REQ-020**), and for **viewers** to remain sufficiently fresh relative to **REQ-012** when change rates are high. **Scale assumption** (design target): on the order of **hundreds** of lights (consistent with **REQ-005**’s upper bound) with **multiple** aggregate **update cycles per second** across writes and/or viewer refresh. **Illustrative** mechanisms the architecture **must consider and document** (not all mandatory in isolation): **HTTP/2** or other **connection reuse**, **client connection pooling** / keep-alive, **batch or bulk write** APIs (including **REQ-020** where scene-scoped), **Server-Sent Events**, **WebSocket**, or **similar server-push** for distributing state changes to connected clients. Solutions **must remain plausible** on **Raspberry Pi 4** constraints (**REQ-003**).
+- Out of scope: Hard numeric SLOs unless raised in **open questions**; mandating one specific protocol when another meets the same goals; physical lighting protocols (e.g. DMX).
+
+**Business rules**
+
+1. **`docs/architecture.md` MUST** describe how the product meets high-throughput light updates at the stated scale: the **write path** (batching, use of **REQ-020** where applicable, persistence and transaction boundaries as relevant) and the **observer path** (how UIs and integrators obtain timely state—**server-push vs polling** with rationale).
+2. Integrators **MUST NOT** be limited to **one HTTP request per light** as the **only** supported path for high-frequency multi-light changes: the product **MUST** expose **documented** **aggregate** update paths (for example **REQ-020** region bulk updates, and/or **model-scoped** batch operations if architecture defines them). **REQ-011** per-light read and write operations **remain** required for granular control.
+3. **Connection reuse:** **`docs/architecture.md` SHOULD** document which **HTTP** features are enabled or assumed (for example **HTTP/2**, **HTTP/1.1 keep-alive**) and **client pooling** or equivalent guidance for integrators and for the shipped web UI.
+4. For **low-latency** refresh or **many concurrent viewers**, **`docs/architecture.md` SHOULD** specify **server-push** (**SSE**, **WebSocket**, or **equivalent**) **or** justify **bounded polling** that still satisfies **REQ-012**-class timeliness under the stated load.
+
+**Responsive / UX notes** *(when UI is involved)*
+
+- Mobile: N/A at API level; any UI that displays live light state **MUST** remain usable per **REQ-002** at high update rates where the product targets them.
+- Tablet: N/A; same as mobile where applicable.
+- Desktop: N/A; same as mobile where applicable.
+
+**Dependencies**
+
+- REQ-003, REQ-011, REQ-012, REQ-015, REQ-020
+
+**Open questions**
+
+- Target **p99** latency or **updates per second** caps (if any) for the Pi deployment.
+- Whether **model-scoped** batch writes are **required** in addition to **REQ-020** scene bulk for integrator workflows.
+- How **multi-tab** or **multi-client** viewers stay consistent when push channels are used.
+
+---

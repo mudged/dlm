@@ -15,14 +15,20 @@ import (
 // apiDeps holds API handlers' shared dependencies.
 type apiDeps struct {
 	store *store.Store
+	rev   *RevisionHub
 }
 
 // NewSiteHandler wires /health, /api/v1/, and optional static UI from content (Next export).
 // API routes are registered before the static file server. If content is nil, only API routes exist.
 // st must be non-nil (models API requires persistence).
-func NewSiteHandler(cfg *config.Config, content fs.FS, st *store.Store) http.Handler {
+// rev may be nil; a private RevisionHub is used so in-process notifications still work. Pass a shared
+// *RevisionHub from main when the routine scheduler must bump subscribers (REQ-029).
+func NewSiteHandler(cfg *config.Config, content fs.FS, st *store.Store, rev *RevisionHub) http.Handler {
 	if st == nil {
 		panic("httpapi.NewSiteHandler: store is nil")
+	}
+	if rev == nil {
+		rev = NewRevisionHub()
 	}
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{}))
 
@@ -30,7 +36,7 @@ func NewSiteHandler(cfg *config.Config, content fs.FS, st *store.Store) http.Han
 	mux.HandleFunc("GET /health", healthHandler)
 
 	api := http.NewServeMux()
-	deps := &apiDeps{store: st}
+	deps := &apiDeps{store: st, rev: rev}
 	api.HandleFunc("POST /system/factory-reset", deps.postFactoryReset)
 	api.HandleFunc("GET /status", statusHandler)
 	api.HandleFunc("GET /routines", deps.listRoutines)
@@ -44,6 +50,7 @@ func NewSiteHandler(cfg *config.Config, content fs.FS, st *store.Store) http.Han
 	api.HandleFunc("PATCH /scenes/{id}/models/{modelId}", deps.patchSceneModel)
 	api.HandleFunc("POST /scenes/{id}/models", deps.postSceneModel)
 	api.HandleFunc("GET /scenes/{id}/dimensions", deps.getSceneDimensions)
+	api.HandleFunc("GET /scenes/{id}/lights/events", deps.getSceneLightsEvents)
 	api.HandleFunc("GET /scenes/{id}/lights", deps.listSceneLights)
 	api.HandleFunc("POST /scenes/{id}/lights/query/cuboid", deps.postSceneLightsQueryCuboid)
 	api.HandleFunc("POST /scenes/{id}/lights/query/sphere", deps.postSceneLightsQuerySphere)
@@ -59,6 +66,7 @@ func NewSiteHandler(cfg *config.Config, content fs.FS, st *store.Store) http.Han
 	api.HandleFunc("GET /scenes", deps.listScenes)
 	api.HandleFunc("POST /scenes", deps.createScene)
 	api.HandleFunc("GET /models/{id}/lights/state", deps.listLightStates)
+	api.HandleFunc("GET /models/{id}/lights/events", deps.getModelLightsEvents)
 	api.HandleFunc("POST /models/{id}/lights/state/reset", deps.postResetLightStates)
 	api.HandleFunc("PATCH /models/{id}/lights/state/batch", deps.patchLightStatesBatch)
 	api.HandleFunc("GET /models/{id}/lights/{lightId}/state", deps.getLightState)

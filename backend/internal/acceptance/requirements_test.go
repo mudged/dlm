@@ -984,3 +984,160 @@ func TestAcceptance_REQ022_pythonSceneRoutinesAndCodeMirror6(t *testing.T) {
 		t.Fatal("PythonCodeMirrorEditor must import from the codemirror package (e.g. basicSetup)")
 	}
 }
+
+func TestAcceptance_REQ029_highThroughputLightUpdates(t *testing.T) {
+	doc := readRequirements(t)
+	block := requirementBlock(doc, "REQ-029")
+	if block == "" {
+		t.Fatal("requirements must contain ### REQ-029 section")
+	}
+	lower := strings.ToLower(block)
+	if !strings.Contains(lower, "integrator") {
+		t.Fatal("REQ-029 must name integrators as actors")
+	}
+	if !strings.Contains(lower, "hundreds") {
+		t.Fatal("REQ-029 must state a hundreds-of-lights scale assumption")
+	}
+	if !strings.Contains(lower, "req-011") {
+		t.Fatal("REQ-029 must reference REQ-011 for persisted per-light state semantics")
+	}
+	if !strings.Contains(lower, "req-012") {
+		t.Fatal("REQ-029 must reference REQ-012 for viewer freshness")
+	}
+	if !strings.Contains(lower, "req-015") || !strings.Contains(lower, "req-020") {
+		t.Fatal("REQ-029 scope must reference REQ-015 and REQ-020 for model/scene contexts")
+	}
+	if !strings.Contains(lower, "raspberry pi") || !strings.Contains(lower, "req-003") {
+		t.Fatal("REQ-029 must tie plausible solutions to Pi / REQ-003 constraints")
+	}
+	if !strings.Contains(lower, "server-sent events") && !strings.Contains(lower, "websocket") {
+		t.Fatal("REQ-029 scope must mention Server-Sent Events and/or WebSocket as illustrative mechanisms")
+	}
+	if !strings.Contains(lower, "batch") || !strings.Contains(lower, "bulk") {
+		t.Fatal("REQ-029 must mention batch or bulk write APIs")
+	}
+	if !strings.Contains(lower, "docs/architecture.md") {
+		t.Fatal("REQ-029 business rule 1 must require docs/architecture.md")
+	}
+	if !strings.Contains(lower, "write path") {
+		t.Fatal("REQ-029 must require the architecture to describe the write path")
+	}
+	if !strings.Contains(lower, "observer path") {
+		t.Fatal("REQ-029 must require the architecture to describe the observer path")
+	}
+	if !strings.Contains(lower, "server-push") || !strings.Contains(lower, "polling") {
+		t.Fatal("REQ-029 must address server-push vs polling in the observer path")
+	}
+	if !strings.Contains(lower, "aggregate") {
+		t.Fatal("REQ-029 business rule 2 must require documented aggregate update paths")
+	}
+	if !strings.Contains(lower, "one http request per light") {
+		t.Fatal("REQ-029 must forbid one-request-per-light as the only high-frequency path")
+	}
+	if !strings.Contains(lower, "http/2") && !strings.Contains(lower, "keep-alive") {
+		t.Fatal("REQ-029 connection reuse rule should mention HTTP/2 or keep-alive")
+	}
+	if !strings.Contains(lower, "pool") {
+		t.Fatal("REQ-029 should mention client pooling or equivalent connection reuse guidance")
+	}
+	if !strings.Contains(block, "| **Priority** | Must |") {
+		t.Fatal("REQ-029 metadata must state priority Must")
+	}
+	for _, dep := range []string{"req-003", "req-011", "req-012", "req-015", "req-020"} {
+		if !strings.Contains(lower, dep) {
+			t.Fatalf("REQ-029 dependencies must include %s", strings.ToUpper(dep))
+		}
+	}
+	if !strings.Contains(lower, "req-002") {
+		t.Fatal("REQ-029 responsive notes must reference REQ-002")
+	}
+	for _, kw := range []string{"mobile", "tablet", "desktop"} {
+		if !strings.Contains(lower, kw) {
+			t.Fatalf("REQ-029 responsive notes must mention %q", kw)
+		}
+	}
+}
+
+func TestAcceptance_REQ029_architectureDocumentsThroughputAndSSE(t *testing.T) {
+	root := repoRoot(t)
+	archPath := filepath.Join(root, "docs", "architecture.md")
+	archBytes, err := os.ReadFile(archPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", archPath, err)
+	}
+	arch := string(archBytes)
+	archLower := strings.ToLower(arch)
+	if !strings.Contains(arch, "### 3.18 High-throughput light state updates") {
+		t.Fatal("architecture must contain §3.18 High-throughput light state updates (REQ-029)")
+	}
+	for _, fragment := range []string{
+		"**Write path",
+		"**Observer path",
+		"PATCH /api/v1/models/{id}/lights/state/batch",
+		"GET /api/v1/models/{id}/lights/events",
+		"GET /api/v1/scenes/{id}/lights/events",
+		"text/event-stream",
+		"EventSource",
+	} {
+		if !strings.Contains(arch, fragment) {
+			t.Fatalf("architecture §3.18 / API tables must mention %q", fragment)
+		}
+	}
+	if !strings.Contains(archLower, "server-sent") || !strings.Contains(archLower, "sse") {
+		t.Fatal("architecture must document Server-Sent Events (SSE) for high-throughput observers")
+	}
+	if !strings.Contains(archLower, "keep-alive") {
+		t.Fatal("architecture §3.18 must document HTTP keep-alive / connection reuse")
+	}
+	if !strings.Contains(archLower, "http/2") {
+		t.Fatal("architecture §3.18 must mention HTTP/2 for reverse-proxy multiplexing")
+	}
+
+	readmePath := filepath.Join(root, "README.md")
+	readmeBytes, err := os.ReadFile(readmePath)
+	if err != nil {
+		t.Fatalf("read %s: %v", readmePath, err)
+	}
+	readme := strings.ToLower(string(readmeBytes))
+	if !strings.Contains(readme, "req-029") {
+		t.Fatal("README must document REQ-029 (high-throughput light updates)")
+	}
+	if !strings.Contains(readme, "/lights/events") {
+		t.Fatal("README must mention the /lights/events SSE URLs for integrators")
+	}
+
+	for _, rel := range []string{
+		"web/app/models/detail/ModelDetailClient.tsx",
+		"web/app/scenes/detail/SceneDetailClient.tsx",
+	} {
+		p := filepath.Join(root, rel)
+		b, err := os.ReadFile(p)
+		if err != nil {
+			t.Fatalf("read %s: %v", p, err)
+		}
+		s := string(b)
+		if !strings.Contains(s, "EventSource") {
+			t.Fatalf("%s must use EventSource for REQ-029 observer path", rel)
+		}
+		if !strings.Contains(s, "/lights/events") {
+			t.Fatalf("%s must subscribe to /lights/events", rel)
+		}
+	}
+
+	routerPath := filepath.Join(root, "backend", "internal", "httpapi", "router.go")
+	routerBytes, err := os.ReadFile(routerPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", routerPath, err)
+	}
+	routerSrc := string(routerBytes)
+	if !strings.Contains(routerSrc, `GET /models/{id}/lights/events`) {
+		t.Fatal("router must register GET /models/{id}/lights/events for SSE (REQ-029)")
+	}
+	if !strings.Contains(routerSrc, `GET /scenes/{id}/lights/events`) {
+		t.Fatal("router must register GET /scenes/{id}/lights/events for SSE (REQ-029)")
+	}
+	// Route order: literal "events" before patterns that treat a segment as light id.
+	if strings.Index(routerSrc, `GET /models/{id}/lights/events`) >= strings.Index(routerSrc, `GET /models/{id}/lights/{lightId}/state`) {
+		t.Fatal("router must register GET .../lights/events before GET .../lights/{lightId}/state")
+	}
+}

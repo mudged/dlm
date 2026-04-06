@@ -275,6 +275,16 @@ func (a *apiDeps) postSceneRoutineStart(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	if !already {
+		if rt, err2 := a.store.GetRoutine(r.Context(), routineID); err2 == nil && rt.Type == store.RoutineTypeRandomColourCycleAll {
+			ctx := r.Context()
+			mids, _ := a.store.ListModelIDsInScene(ctx, sceneID)
+			for _, mid := range mids {
+				a.rev.NotifyModelLightsChanged(ctx, a.store, mid)
+			}
+		}
+	}
+
 	resp := startRoutineResponse{
 		RunID: runID, SceneID: sceneID, RoutineID: routineID, Status: store.RoutineStatusRunning,
 	}

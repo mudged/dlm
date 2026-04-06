@@ -100,7 +100,7 @@ func TestRoutines_TickSkipsPython(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.TickRoutineRuns(ctx); err != nil {
+	if _, err := s.TickRoutineRuns(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.StopRoutineRun(ctx, sc.ID, runID); err != nil {

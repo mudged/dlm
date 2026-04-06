@@ -396,6 +396,30 @@ export function ModelDetailClient() {
     void load();
   }, [load]);
 
+  // REQ-029: Server-Sent Events — refetch model when light state changes from another client or integrator.
+  const sseSkipFirst = useRef(true);
+  useEffect(() => {
+    sseSkipFirst.current = true;
+  }, [id]);
+  useEffect(() => {
+    if (!id || typeof window === "undefined") {
+      return;
+    }
+    const url = `/api/v1/models/${encodeURIComponent(id)}/lights/events`;
+    const es = new EventSource(url);
+    es.onmessage = () => {
+      if (sseSkipFirst.current) {
+        sseSkipFirst.current = false;
+        return;
+      }
+      void load();
+    };
+    es.onerror = () => {
+      es.close();
+    };
+    return () => es.close();
+  }, [id, load]);
+
   // Reset list UI only when navigating to a different model, not on every model object refresh (e.g. PATCH).
   useEffect(() => {
     if (!model) {

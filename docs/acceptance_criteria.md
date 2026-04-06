@@ -928,6 +928,35 @@ Feature: Three.js emissive glow scaled by brightness (REQ-028)
     When the REQ-028 business rules about updates and architecture are read
     Then glow must follow persisted state without indefinite staleness after successful writes consistent with REQ-012
     And docs architecture.md must describe the three.js material approach and brightness mapping including Pi WebGL notes where relevant
+
+Feature: High-throughput light updates (REQ-029)
+
+  Scenario: REQ-029 states scale assumptions for many lights and frequent updates
+    Parent requirement: REQ-029
+    Given docs/requirements.md defines REQ-005 REQ-011 and REQ-029
+    When the REQ-029 scope is read
+    Then the design target includes on the order of hundreds of lights consistent with REQ-005 scale
+    And multiple aggregate update cycles per second across writes and or viewer refresh are expected
+
+  Scenario: REQ-029 requires architecture to document write path observer path and transport considerations
+    Parent requirement: REQ-029
+    Given docs/requirements.md defines REQ-003 REQ-011 REQ-012 REQ-020 and REQ-029
+    When the REQ-029 business rules are read
+    Then docs architecture.md must describe how high-throughput light updates are met including write path and observer path
+    And connection reuse or HTTP features and batch bulk or push versus polling rationale must be addressed per REQ-029 rules
+
+  Scenario: REQ-029 requires aggregate update paths while preserving REQ-011 per-light operations
+    Parent requirement: REQ-029
+    Given docs/requirements.md defines REQ-011 REQ-020 and REQ-029
+    When the REQ-029 business rule about integrator update paths is read
+    Then documented aggregate update paths must exist so integrators are not limited to one HTTP request per light as the only option for high-frequency multi-light changes
+    And REQ-011 per-light read and write operations remain required for granular control
+
+  Scenario: REQ-029 ties high-throughput expectations to Pi deployment constraints
+    Parent requirement: REQ-029
+    Given docs/requirements.md defines REQ-003 and REQ-029
+    When the REQ-029 scope is read
+    Then solutions for high-throughput light updates must remain plausible on Raspberry Pi 4 constraints from REQ-003
 ```
 
 ---

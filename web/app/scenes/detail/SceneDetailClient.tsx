@@ -14,7 +14,7 @@ import {
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import type { ModelSummary } from "@/lib/models";
 import {
@@ -87,6 +87,31 @@ export function SceneDetailClient() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // REQ-029: push-style refresh when scene light state changes externally (complements polling while routines run).
+  const sceneSSESkipFirst = useRef(true);
+  useEffect(() => {
+    sceneSSESkipFirst.current = true;
+  }, [id]);
+  useEffect(() => {
+    if (!id || typeof window === "undefined") {
+      return;
+    }
+    const es = new EventSource(
+      `/api/v1/scenes/${encodeURIComponent(id)}/lights/events`,
+    );
+    es.onmessage = () => {
+      if (sceneSSESkipFirst.current) {
+        sceneSSESkipFirst.current = false;
+        return;
+      }
+      void load();
+    };
+    es.onerror = () => {
+      es.close();
+    };
+    return () => es.close();
+  }, [id, load]);
 
   useEffect(() => {
     if (!id || routineRuns.length === 0) {
