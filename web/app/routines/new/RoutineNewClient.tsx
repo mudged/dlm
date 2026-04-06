@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
+import { PYTHON_ROUTINE_DEFAULT_SOURCE } from "@/lib/pythonSceneApiCatalog";
 import {
   ROUTINE_TYPE_CREATE_OPTIONS,
   ROUTINE_TYPE_PYTHON_SCENE_SCRIPT,
@@ -56,7 +57,7 @@ export default function RoutineNewClient() {
               name: n,
               description,
               type: routineType,
-              python_source: "",
+              python_source: PYTHON_ROUTINE_DEFAULT_SOURCE,
             }
           : { name: n, description, type: routineType };
       const created = await createRoutine(body);

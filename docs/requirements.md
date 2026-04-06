@@ -1005,3 +1005,169 @@ As a user **creating** a **new** **routine**, I want to **choose** the **kind** 
 - **Whether** **a** **non-primary** **shortcut** **(**e.g.** **nav** **link** **to** **Python** **editor**)** **remains** **for** **discoverability** **without** **violating** **rule** **3**.
 
 ---
+
+### REQ-024 — Python routine view: bottom API reference with descriptions and snippets
+
+| Field | Value |
+|-------|-------|
+| **ID** | REQ-024 |
+| **Title** | Python routine view: bottom API reference with descriptions and snippets |
+| **Priority** | Must |
+| **Actor(s)** | End user |
+
+**User story**
+
+As a user authoring **Python** **routines**, I want a **single reference list** of **every** **callable** **operation** on the **documented** **Python** **scene** **API**, each with a **short** **description** and a **sample** **code** **snippet**, placed **at** **the** **bottom** **of** **the** **Python** **routine** **page**, so that I can **look** **up** **usage** **without** **leaving** **the** **authoring** **context**.
+
+**Scope**
+
+- In scope: On the **Python** **routine** **authoring** **surface** (**REQ-022**), a **dedicated** **reference** **section** **ordered** **after** **primary** **content** **above** **the** **fold** **in** **document** **flow**—i.e. **at** **the** **bottom** **of** **the** **page** **(after** **the** **editor**, **run**/**stop**, **scene** **selection** **for** **runs**, **and** **other** **primary** **controls** **as** **architecture** **lays** **them** **out**)**—that **lists** **all** **public** **methods**, **functions**, **and** **documented** **attributes** **exposed** **on** **the** **Python** **scene** **binding** **(the** **`scene`** **object** **or** **equivalent)**. **Each** **entry** **MUST** **include** **a** **novice-friendly** **description** **and** **at** **least** **one** **copy-paste-friendly** **sample** **code** **snippet** **showing** **typical** **use** **(may** **assume** **`scene`** **is** **already** **bound** **during** **a** **run** **unless** **architecture** **documents** **otherwise)**.
+- Out of scope: **Replacing** **REQ-022**’s **requirement** **for** **on-page** **reference** **elsewhere** **on** **the** **page** **(this** **REQ** **adds** **placement** **and** **completeness** **rules** **for** **the** **bottom** **section)**; **full** **OpenAPI** **HTTP** **catalog** **as** **the** **only** **form** **of** **docs** **unless** **architecture** **collapses** **Python** **to** **thin** **HTTP** **wrappers** **only**.
+
+**Business rules**
+
+1. The **Python** **routine** **view** **MUST** **include** **a** **reference** **section** **at** **the** **bottom** **of** **the** **page** **in** **vertical** **reading** **order** **(after** **primary** **authoring** **and** **run** **workflow** **regions)**.
+2. The **list** **MUST** **enumerate** **every** **Python**-**exposed** **scene** **API** **surface** **element** **that** **the** **product** **supports** **for** **routines** **(no** **deliberate** **omission** **of** **a** **public** **operation** **from** **this** **catalog)**.
+3. **Each** **catalog** **item** **MUST** **include** **a** **plain-language** **description** **and** **at** **least** **one** **sample** **code** **snippet** **illustrating** **its** **use**.
+4. **REQ-002** **applies**: **the** **bottom** **section** **MUST** **remain** **readable** **and** **scrollable** **on** **mobile**, **tablet**, **and** **desktop** **without** **horizontal** **scrolling** **for** **primary** **snippet** **content** **where** **avoidable**.
+
+**Responsive / UX notes** *(when UI is involved)*
+
+- Mobile: **Snippets** **use** **horizontal** **scroll** **only** **if** **necessary**; **touch** **targets** **for** **any** **expand/collapse** **per** **entry** **meet** **REQ-002**.
+- Tablet: **Same** **as** **mobile**; **bottom** **section** **remains** **discoverable** **after** **editor** **(e.g.** **heading** **or** **anchor)**.
+- Desktop: **Snippets** **may** **use** **syntax** **styling** **consistent** **with** **the** **editor** **where** **feasible**; **anchor** **links** **from** **editor** **to** **API** **entries** **are** **optional** **but** **encouraged** **where** **helpful**.
+
+**Dependencies**
+
+- REQ-002, REQ-022
+
+**Open questions**
+
+- **Whether** **long** **snippets** **are** **collapsed** **by** **default** **on** **small** **viewports**.
+
+---
+
+### REQ-025 — Python routine default code: sphere interior colour changes
+
+| Field | Value |
+|-------|-------|
+| **ID** | REQ-025 |
+| **Title** | Python routine default code: sphere interior colour changes |
+| **Priority** | Must |
+| **Actor(s)** | End user |
+
+**User story**
+
+As a **novice** **author**, I want the **default** **or** **starter** **code** **shown** **when** **I** **begin** **a** **new** **Python** **routine** **to** **demonstrate** **changing** **the** **colours** **of** **lights** **that** **lie** **inside** **a** **sphere** **in** **scene** **space**, so that **I** **immediately** **see** **a** **realistic** **pattern** **for** **region-scoped** **updates**.
+
+**Scope**
+
+- In scope: **Initial** **editor** **buffer** **content** **for** **a** **newly** **created** **Python** **routine** **definition** **(and** **any** **product-provided** **“reset** **to** **default** **template”** **action** **if** **present)** **MUST** **be** **working** **example** **code** **that** **updates** **light** **state** **(**on**/**off**, **canonical** **hex** **colour**, **brightness** **per** **REQ-011**)** **for** **lights** **whose** **positions** **fall** **inside** **a** **caller-defined** **or** **documented** **sphere** **in** **scene** **space**, **using** **only** **the** **documented** **Python** **scene** **API** **(**REQ-022**, **REQ-020** **semantics**)**.
+- Out of scope: **Overwriting** **user** **code** **on** **every** **load** **of** **saved** **definitions**; **mandating** **a** **specific** **sphere** **center**/**radius** **beyond** **“valid** **per** **REQ-020**”**.
+
+**Business rules**
+
+1. **New** **Python** **routine** **definitions** **MUST** **open** **with** **default** **template** **code** **whose** **primary** **illustrated** **behavior** **is** **changing** **colours** **(**and** **other** **REQ-011** **fields** **as** **needed** **for** **a** **coherent** **demo**)** **for** **lights** **inside** **a** **sphere** **region** **in** **scene** **space**.
+2. The **template** **MUST** **use** **sphere** **filtering**/**targeting** **consistent** **with** **REQ-020** **(scene-space** **geometry**, **no** **canonical** **model** **coordinate** **rewrites**)**.
+3. **REQ-022** **defaults** **for** **editor** **features** **(completion,** **formatting**)** **remain** **in** **force**.
+
+**Responsive / UX notes** *(when UI is involved)*
+
+- Mobile: **Default** **template** **is** **plain** **text** **in** **the** **editor**; **no** **extra** **UX** **beyond** **REQ-022**.
+- Tablet: **Same** **as** **mobile**.
+- Desktop: **Same** **as** **mobile**.
+
+**Dependencies**
+
+- REQ-011, REQ-020, REQ-022
+
+**Open questions**
+
+- **Whether** **the** **template** **should** **include** **explicit** **`sleep`**/**delay** **calls** **or** **rely** **on** **the** **runtime** **loop** **(**REQ-022**)** **only**.
+
+---
+
+### REQ-026 — Python scene binding: width, depth, and height
+
+| Field | Value |
+|-------|-------|
+| **ID** | REQ-026 |
+| **Title** | Python scene binding: width, depth, and height |
+| **Priority** | Must |
+| **Actor(s)** | End user; integrator |
+
+**User story**
+
+As an **author** **of** **Python** **routines**, I want the **`scene`** **object** **to** **expose** **width**, **depth**, **and** **height** **(or** **documented** **equivalents** **for** **all** **three** **axis-aligned** **extents**)**, so that **I** **can** **position** **effects** **and** **regions** **relative** **to** **the** **scene’s** **size**.
+
+**Scope**
+
+- In scope: The **Python** **binding** **for** **the** **active** **scene** **during** **a** **routine** **(**REQ-022**)** **MUST** **expose** **three** **numeric** **attributes** **corresponding** **to** **the** **scene’s** **axis-aligned** **spatial** **extents**: **vertical** **extent** **(**already** **illustrated** **as** **height** **in** **REQ-022**)** **and** **the** **two** **remaining** **orthogonal** **horizontal** **extents** **as** **`width`** **and** **`depth`** **(or** **architecture-chosen** **names** **documented** **as** **the** **canonical** **mapping** **to** **those** **extents**)**. **Values** **MUST** **align** **with** **REQ-020** **dimension** **semantics** **(SI** **meters** **unless** **architecture** **documents** **a** **single** **consistent** **unit** **for** **scene** **APIs**)**.
+- Out of scope: **Adding** **new** **HTTP** **fields** **beyond** **what** **REQ-020** **already** **requires** **if** **the** **backend** **already** **carries** **sufficient** **data** **to** **derive** **all** **three** **extents**; **rotation** **or** **non-axis-aligned** **bounding** **primitives**.
+
+**Business rules**
+
+1. The **Python** **`scene`** **object** **MUST** **expose** **`height`** **and** **MUST** **also** **expose** **`width`** **and** **`depth`** **(or** **equivalent** **documented** **names** **for** **all** **three** **extents**)**.
+2. **Reading** **these** **attributes** **MUST** **reflect** **the** **same** **numeric** **meaning** **as** **the** **scene** **dimension** **data** **defined** **under** **REQ-020** **(no** **contradictory** **values** **between** **REST** **and** **Python** **for** **the** **same** **scene** **snapshot**)**.
+3. **`docs/architecture.md`**, **the** **REQ-022** **on-page** **reference**, **and** **the** **REQ-024** **bottom** **catalog** **MUST** **list** **all** **three** **attributes** **with** **definitions** **of** **which** **world** **axis** **each** **maps** **to**.
+
+**Responsive / UX notes** *(when UI is involved)*
+
+- Mobile: **N/A** **for** **attribute** **surface** **alone**; **docs** **showing** **them** **follow** **REQ-002**/**REQ-024**.
+- Tablet: **N/A**
+- Desktop: **N/A**
+
+**Dependencies**
+
+- REQ-020, REQ-022, REQ-024
+
+**Open questions**
+
+- **Whether** **dimensions** **are** **evaluated** **from** **dynamic** **light** **bounds** **or** **fixed** **scene** **volume** **metadata** **(**REQ-015**/** **REQ-020**)**.
+
+---
+
+### REQ-027 — Python routine visual debug: selected scene, reset lights, reset camera
+
+| Field | Value |
+|-------|-------|
+| **ID** | REQ-027 |
+| **Title** | Python routine visual debug: selected scene, reset lights, reset camera |
+| **Priority** | Must |
+| **Actor(s)** | End user |
+
+**User story**
+
+As a **user** **debugging** **a** **Python** **routine**, I want **to** **demonstrate** **the** **routine** **against** **a** **scene** **I** **select** **with** **a** **live** **three.js** **visualization** **(visual** **debug**)**, **and** **I** **want** **buttons** **to** **reset** **the** **scene’s** **lights** **to** **a** **clean** **baseline** **and** **to** **reset** **the** **camera**, **so** **that** **I** **can** **iterate** **without** **manual** **cleanup** **or** **losing** **my** **bearing** **in** **3D**.
+
+**Scope**
+
+- In scope: On the **Python** **routine** **authoring** **experience** (**REQ-022**), **visual** **debug** **capabilities** **that** **let** **the** **user** **pick** **which** **persisted** **scene** (**REQ-015**)** **drives** **a** **dedicated** **or** **shared** **three.js** **viewport** **showing** **that** **scene** **while** **the** **routine** **runs** **or** **when** **previewing** **(**exact** **coupling** **to** **run** **lifecycle** **per** **architecture**)**. **The** **viewport** **MUST** **follow** **REQ-010**/**REQ-012**/**REQ-015**/**REQ-019** **visual** **rules** **for** **spheres**, **segments**, **and** **dark-grey** **background** **as** **applicable** **to** **scene** **composite** **views**. **Two** **controls** **(each** **a** **button** **or** **equivalent** **accessible** **action** **with** **REQ-018** **icon** **rules** **where** **they** **are** **buttons**)**:
+  - **Reset** **scene** **lights**: **sets** **every** **light** **in** **the** **selected** **debug** **scene** **to** **the** **default** **per-light** **state** **in** **REQ-014** **(**off**, **100%** **brightness**, **`#FFFFFF`** **hex**)** **and** **persists** **per** **REQ-011**; **does** **not** **change** **scene** **membership**, **placements**, **or** **canonical** **model** **coordinates** (**REQ-005**, **REQ-015**)**.
+  - **Reset** **camera**: **restores** **the** **default** **camera** **and** **control** **baseline** **for** **that** **viewport** **only**, **per** **REQ-016** **semantics** **(client-side** **navigation** **only**)**.
+- Out of scope: **Persisting** **camera** **pose** **across** **sessions**; **factory** **reset** **(**REQ-017**)**; **deleting** **or** **creating** **scenes** **from** **this** **panel**.
+
+**Business rules**
+
+1. The **user** **MUST** **be** **able** **to** **select** **a** **scene** **(from** **existing** **scenes**)** **as** **the** **target** **for** **visual** **debug** **of** **the** **Python** **routine**.
+2. While **visual** **debug** **is** **active** **with** **a** **chosen** **scene**, **light** **state** **changes** **from** **the** **routine** **MUST** **become** **visible** **in** **the** **viewport** **within** **the** **same** **class** **of** **timeliness** **as** **REQ-012** **(no** **indefinite** **staleness** **after** **successful** **writes**)**.
+3. **Reset** **scene** **lights** **MUST** **apply** **REQ-014** **defaults** **to** **all** **lights** **in** **the** **selected** **scene** **and** **MUST** **persist** **them** **so** **other** **clients** **and** **reloads** **see** **the** **same** **result**.
+4. **Reset** **camera** **MUST** **not** **alter** **persisted** **models**, **scenes**, **placements**, **or** **per-light** **state**; **it** **MUST** **only** **reset** **client** **navigation** **state** **for** **the** **debug** **viewport**.
+5. **REQ-002** **and** **REQ-018** **apply** **to** **scene** **selection**, **debug** **viewport** **interactions**, **and** **the** **two** **reset** **actions**.
+
+**Responsive / UX notes** *(when UI is involved)*
+
+- Mobile: **Scene** **selector**, **debug** **viewport**, **and** **reset** **buttons** **remain** **reachable** **without** **hover-only** **steps**; **viewport** **supports** **touch** **navigation** **consistent** **with** **REQ-010**/**REQ-015**.
+- Tablet: **Same** **as** **mobile**; **orientation** **changes** **keep** **reset** **actions** **visible** **in** **the** **primary** **debug** **region** **or** **overflow** **menu** **only** **if** **equally** **discoverable**.
+- Desktop: **Reset** **controls** **sit** **adjacent** **to** **or** **within** **the** **debug** **viewport** **chrome** **per** **architecture**.
+
+**Dependencies**
+
+- REQ-002, REQ-010, REQ-011, REQ-012, REQ-014, REQ-015, REQ-016, REQ-018, REQ-019, REQ-022
+
+**Open questions**
+
+- **Whether** **visual** **debug** **requires** **an** **active** **run** **or** **may** **show** **a** **static** **post-run** **state**.
+- **Whether** **reset** **scene** **lights** **also** **stops** **an** **active** **run** **or** **leaves** **run** **state** **unchanged** **(**architecture** **must** **define** **to** **avoid** **surprise** **re-application** **of** **routine** **effects**)**.
+
+---

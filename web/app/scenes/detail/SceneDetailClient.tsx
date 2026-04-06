@@ -342,7 +342,7 @@ export function SceneDetailClient() {
                     disabled={busy}
                     onClick={() =>
                       router.push(
-                        `/routines/python?id=${encodeURIComponent(routineRuns[0].routine_id)}`,
+                        `/routines/python?id=${encodeURIComponent(routineRuns[0].routine_id)}&scene=${encodeURIComponent(id)}`,
                       )
                     }
                   >

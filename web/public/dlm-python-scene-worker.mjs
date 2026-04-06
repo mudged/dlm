@@ -37,8 +37,14 @@ async function refreshDims() {
 function buildScene() {
   const base = () => `/api/v1/scenes/${sceneId}`;
   return {
+    get width() {
+      return dimsCache?.size?.width ?? 0;
+    },
     get height() {
       return dimsCache?.size?.height ?? 0;
+    },
+    get depth() {
+      return dimsCache?.size?.depth ?? 0;
     },
     get_all_lights: () => apiJson("GET", `${base()}/lights`),
     get_lights_within_sphere: (c, radius) =>
@@ -82,6 +88,7 @@ async function runUserLoop(source) {
     try {
       await refreshDims();
       await pyodide.runPythonAsync(source);
+      self.postMessage({ type: "iterationComplete", sceneId });
     } catch (e) {
       self.postMessage({ type: "error", message: String(e) });
     }

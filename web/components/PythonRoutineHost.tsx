@@ -5,7 +5,8 @@ import { useEffect, useRef, useState } from "react";
 type WorkerOut =
   | { type: "ready" }
   | { type: "done" }
-  | { type: "error"; message: string };
+  | { type: "error"; message: string }
+  | { type: "iterationComplete"; sceneId: string };
 
 /** Architecture §3.17 — default `T_force` after cooperative stop. */
 const T_FORCE_MS = 5000;
@@ -18,14 +19,18 @@ export function PythonRoutineHost(props: {
   sceneId: string;
   source: string;
   onWorkerMessage?: (msg: string) => void;
+  /** Fired after each successful script iteration (worker refreshed dims + ran user code). */
+  onIterationComplete?: (sceneId: string) => void;
 }) {
-  const { sceneId, source, onWorkerMessage } = props;
+  const { sceneId, source, onWorkerMessage, onIterationComplete } = props;
   const [phase, setPhase] = useState<
     "loading" | "running" | "finished" | "error"
   >("loading");
   const workerRef = useRef<Worker | null>(null);
   const onMsgRef = useRef(onWorkerMessage);
   onMsgRef.current = onWorkerMessage;
+  const onIterRef = useRef(onIterationComplete);
+  onIterRef.current = onIterationComplete;
 
   useEffect(() => {
     setPhase("loading");
@@ -80,6 +85,10 @@ export function PythonRoutineHost(props: {
         if (!unmounted) {
           setPhase("running");
         }
+        return;
+      }
+      if (m.type === "iterationComplete") {
+        onIterRef.current?.(m.sceneId);
         return;
       }
       if (m.type === "error") {
