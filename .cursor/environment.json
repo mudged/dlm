@@ -1,0 +1,24 @@
+{
+  "name": "Domestic Light & Magic",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "."
+  },
+  "install": "bash -c 'set -e; cd web && npm ci; cd ../backend && go mod download'",
+  "ports": [
+    { "name": "Next.js dev", "port": 3000 },
+    { "name": "Go server", "port": 8080 }
+  ],
+  "terminals": [
+    {
+      "name": "Go server",
+      "command": "cd backend && go run ./cmd/server",
+      "description": "Serves the app on port 8080 after a static export is synced into the embed tree (e.g. web npm run release:sync)."
+    },
+    {
+      "name": "Next.js dev",
+      "command": "cd web && npm run dev",
+      "description": "Next.js dev server on port 3000 with hot reload; proxies API requests to the Go server on 8080."
+    }
+  ]
+}
