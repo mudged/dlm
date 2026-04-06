@@ -1156,8 +1156,8 @@ func TestAcceptance_REQ027_pythonRoutineVisualDebug(t *testing.T) {
 	if !strings.Contains(edStr, "SceneLightsCanvas") {
 		t.Fatal("PythonRoutineEditorClient must mount SceneLightsCanvas for visual debug (REQ-027)")
 	}
-	if !strings.Contains(edStr, "Visual debug") {
-		t.Fatal("PythonRoutineEditorClient must label the visual debug region (REQ-027)")
+	if !strings.Contains(edStr, "Try it on a room") {
+		t.Fatal("PythonRoutineEditorClient must label the combined run and visual debug region (REQ-027)")
 	}
 	if !strings.Contains(edStr, "Reset scene lights") {
 		t.Fatal("PythonRoutineEditorClient must expose Reset scene lights (REQ-027)")

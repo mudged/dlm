@@ -13,13 +13,15 @@ export function PythonSceneApiCatalogSection() {
         id="python-scene-api-catalog-heading"
         className="text-lg font-semibold text-slate-900 dark:text-slate-100"
       >
-        Scene API reference (complete)
+        All scene commands (with copy-paste examples)
       </h2>
       <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
-        Every <code className="rounded bg-slate-100 px-1 dark:bg-slate-800">scene</code> member
-        available in the Pyodide worker. Width, height, and depth match{" "}
-        <code className="rounded bg-slate-100 px-1 dark:bg-slate-800">GET …/dimensions</code> →{" "}
-        <code className="rounded bg-slate-100 px-1 dark:bg-slate-800">size</code> (+X / +Y / +Z).
+        Here is everything you can read or do with{" "}
+        <code className="rounded bg-slate-100 px-1 dark:bg-slate-800">scene</code> in your
+        Python. A <strong className="font-medium">property</strong> is a value you read. A{" "}
+        <strong className="font-medium">method</strong> is something you call with{" "}
+        <code className="rounded bg-slate-100 px-1 dark:bg-slate-800">await</code>. Width,
+        height, and depth are the room size in metres.
       </p>
       <ul className="mt-4 space-y-6">
         {SCENE_API_CATALOG.map((e) => (

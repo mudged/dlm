@@ -67,9 +67,9 @@ export default function PythonRoutineEditorClient() {
   const [busy, setBusy] = useState(false);
 
   const [scenesList, setScenesList] = useState<SceneSummary[] | null>(null);
-  const [runSceneId, setRunSceneId] = useState("");
-  const [debugSceneId, setDebugSceneId] = useState("");
-  const [debugScene, setDebugScene] = useState<SceneDetail | null>(null);
+  /** Single scene for both Pyodide run target and 3D visual debug (combined section). */
+  const [selectedSceneId, setSelectedSceneId] = useState("");
+  const [selectedScene, setSelectedScene] = useState<SceneDetail | null>(null);
   const [activeRun, setActiveRun] = useState<{
     run_id: string;
     scene_id: string;
@@ -120,16 +120,7 @@ export default function PythonRoutineEditorClient() {
       try {
         const list = await fetchScenes();
         setScenesList(list);
-        setDebugSceneId((prev) => {
-          if (sceneFromQuery && list.some((s) => s.id === sceneFromQuery)) {
-            return sceneFromQuery;
-          }
-          if (prev) {
-            return prev;
-          }
-          return list.length > 0 ? list[0]!.id : "";
-        });
-        setRunSceneId((prev) => {
+        setSelectedSceneId((prev) => {
           if (sceneFromQuery && list.some((s) => s.id === sceneFromQuery)) {
             return sceneFromQuery;
           }
@@ -145,39 +136,39 @@ export default function PythonRoutineEditorClient() {
   }, [sceneFromQuery]);
 
   useEffect(() => {
-    if (!debugSceneId) {
-      setDebugScene(null);
+    if (!selectedSceneId) {
+      setSelectedScene(null);
       return;
     }
     let cancelled = false;
     void (async () => {
       try {
-        const s = await fetchScene(debugSceneId);
+        const s = await fetchScene(selectedSceneId);
         if (!cancelled) {
-          setDebugScene(s);
+          setSelectedScene(s);
         }
       } catch {
         if (!cancelled) {
-          setDebugScene(null);
+          setSelectedScene(null);
         }
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [debugSceneId]);
+  }, [selectedSceneId]);
 
-  const refreshDebugScene = useCallback(async () => {
-    if (!debugSceneId) {
+  const refreshSelectedScene = useCallback(async () => {
+    if (!selectedSceneId) {
       return;
     }
     try {
-      const s = await fetchScene(debugSceneId);
-      setDebugScene(s);
+      const s = await fetchScene(selectedSceneId);
+      setSelectedScene(s);
     } catch {
       /* ignore */
     }
-  }, [debugSceneId]);
+  }, [selectedSceneId]);
 
   async function onSave() {
     setBusy(true);
@@ -251,7 +242,7 @@ export default function PythonRoutineEditorClient() {
   function onResetTemplate() {
     if (
       !window.confirm(
-        "Replace the editor contents with the default sphere colour demo template?",
+        "Replace your code with the starter demo (coloured lights in a ball)?",
       )
     ) {
       return;
@@ -260,18 +251,16 @@ export default function PythonRoutineEditorClient() {
   }
 
   async function onStartRun() {
-    if (!routineId || !runSceneId) {
+    if (!routineId || !selectedSceneId) {
       setError("Choose a scene to run against.");
       return;
     }
     setBusy(true);
     setError(null);
     try {
-      const res = await startSceneRoutine(runSceneId, routineId);
+      // Start/stop only toggles routine run state — never resets light state (REQ-014 reset is explicit button only).
+      const res = await startSceneRoutine(selectedSceneId, routineId);
       setActiveRun({ run_id: res.run_id, scene_id: res.scene_id });
-      if (!debugSceneId) {
-        setDebugSceneId(runSceneId);
-      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Start failed");
     } finally {
@@ -288,7 +277,8 @@ export default function PythonRoutineEditorClient() {
     try {
       await stopSceneRoutineRun(activeRun.scene_id, activeRun.run_id);
       setActiveRun(null);
-      await refreshDebugScene();
+      // Refetch scene to reflect final script state — does not PATCH lights (no implicit reset).
+      await refreshSelectedScene();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Stop failed");
     } finally {
@@ -297,18 +287,18 @@ export default function PythonRoutineEditorClient() {
   }
 
   async function onResetSceneLights() {
-    if (!debugSceneId) {
+    if (!selectedSceneId) {
       return;
     }
     setBusy(true);
     setError(null);
     try {
-      await patchSceneLightsStateScene(debugSceneId, {
+      await patchSceneLightsStateScene(selectedSceneId, {
         on: false,
         color: "#ffffff",
         brightness_pct: 100,
       });
-      await refreshDebugScene();
+      await refreshSelectedScene();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Reset scene lights failed");
     } finally {
@@ -319,16 +309,16 @@ export default function PythonRoutineEditorClient() {
   const workerSource = activeRun ? code : "";
   const showWorker =
     activeRun &&
-    activeRun.scene_id === runSceneId &&
+    activeRun.scene_id === selectedSceneId &&
     Boolean(workerSource.trim());
 
   const onWorkerIteration = useCallback(
     (sid: string) => {
-      if (sid === debugSceneId) {
-        void refreshDebugScene();
+      if (sid === selectedSceneId) {
+        void refreshSelectedScene();
       }
     },
-    [debugSceneId, refreshDebugScene],
+    [selectedSceneId, refreshSelectedScene],
   );
 
   if (!loaded) {
@@ -344,12 +334,14 @@ export default function PythonRoutineEditorClient() {
       <header className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
-            Python scene routine
+            Python lights routine
           </h1>
           <p className="mt-1 max-w-2xl text-sm text-slate-600 dark:text-slate-400">
-            Edit and save Python that runs in your browser (Pyodide) against a scene. Use
-            visual debug below to preview a scene; start a run to drive lights from your
-            script. Full API reference is at the bottom of this page.
+            Type your Python code up here. Pick a room (scene) lower down, press Start, and
+            watch the lights change in the picture. Start and Stop do not turn lights back to
+            normal — use Reset scene lights for that. Scroll to the bottom for examples of
+            every <code className="rounded bg-slate-100 px-1 dark:bg-slate-800">scene</code>{" "}
+            command.
           </p>
         </div>
         <Link
@@ -417,142 +409,10 @@ export default function PythonRoutineEditorClient() {
             disabled={busy}
             onClick={onResetTemplate}
           >
-            Reset to template
+            Start over with demo code
           </Button>
         </div>
       </div>
-
-      <section
-        className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900/40"
-        aria-labelledby="run-routine-heading"
-      >
-        <h2
-          id="run-routine-heading"
-          className="text-sm font-semibold text-slate-800 dark:text-slate-200"
-        >
-          Run on scene
-        </h2>
-        <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
-          Starts the saved routine on the server, then runs this page&apos;s copy of the
-          script in a Pyodide worker. Stop ends the run (API first, then cooperative worker
-          shutdown).
-        </p>
-        <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
-          <label className="flex min-w-[200px] flex-1 flex-col gap-1 text-xs">
-            <span className="text-slate-600 dark:text-slate-400">Scene for run</span>
-            <select
-              value={runSceneId}
-              onChange={(e) => {
-                const v = e.target.value;
-                setRunSceneId(v);
-              }}
-              className="min-h-11 rounded border border-slate-300 bg-white px-2 py-2 text-sm dark:border-slate-600 dark:bg-slate-900"
-            >
-              <option value="">Select scene…</option>
-              {(scenesList ?? []).map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          {!activeRun ? (
-            <Button
-              type="button"
-              icon={faCirclePlay}
-              disabled={busy || !routineId || !runSceneId}
-              onClick={() => void onStartRun()}
-            >
-              Start
-            </Button>
-          ) : (
-            <Button
-              type="button"
-              icon={faCircleStop}
-              className="bg-amber-800 hover:bg-amber-700 dark:bg-amber-900"
-              disabled={busy}
-              onClick={() => void onStopRun()}
-            >
-              Stop
-            </Button>
-          )}
-        </div>
-        {showWorker ? (
-          <div className="mt-3">
-            <PythonRoutineHost
-              sceneId={activeRun.scene_id}
-              source={workerSource}
-              onWorkerMessage={(msg) => setError(msg)}
-              onIterationComplete={onWorkerIteration}
-            />
-          </div>
-        ) : null}
-      </section>
-
-      <section
-        className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900/40"
-        aria-labelledby="visual-debug-heading"
-      >
-        <h2
-          id="visual-debug-heading"
-          className="text-sm font-semibold text-slate-800 dark:text-slate-200"
-        >
-          Visual debug
-        </h2>
-        <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
-          Inspect scene state in 3D. When your run targets the same scene as the selection
-          below, the view refreshes after each script iteration. Reset scene lights applies
-          REQ-014 defaults to every light in the selected scene (does not stop an active
-          run).
-        </p>
-        <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
-          <label className="flex min-w-[200px] flex-1 flex-col gap-1 text-xs">
-            <span className="text-slate-600 dark:text-slate-400">Debug scene</span>
-            <select
-              value={debugSceneId}
-              onChange={(e) => setDebugSceneId(e.target.value)}
-              className="min-h-11 rounded border border-slate-300 bg-white px-2 py-2 text-sm dark:border-slate-600 dark:bg-slate-900"
-            >
-              <option value="">Select scene…</option>
-              {(scenesList ?? []).map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <Button
-            type="button"
-            icon={faLightbulb}
-            disabled={busy || !debugSceneId}
-            onClick={() => void onResetSceneLights()}
-          >
-            Reset scene lights
-          </Button>
-          <Button
-            type="button"
-            icon={faArrowsRotate}
-            className="bg-slate-600 hover:bg-slate-500 dark:bg-slate-700 dark:hover:bg-slate-600"
-            disabled={!debugScene || debugScene.items.length === 0}
-            onClick={() => setCameraResetVersion((v) => v + 1)}
-          >
-            Reset camera
-          </Button>
-        </div>
-        {debugScene && debugScene.items.length > 0 ? (
-          <div className="mt-4 min-h-[280px] w-full sm:min-h-[320px]">
-            <SceneLightsCanvas
-              items={debugScene.items}
-              cameraPersistenceKey={`python-debug-${debugScene.id}`}
-              cameraResetVersion={cameraResetVersion}
-            />
-          </div>
-        ) : debugSceneId ? (
-          <p className="mt-3 text-xs text-slate-500">Could not load scene or scene is empty.</p>
-        ) : (
-          <p className="mt-3 text-xs text-slate-500">Select a scene to show the 3D view.</p>
-        )}
-      </section>
 
       <div className="lg:grid lg:grid-cols-2 lg:gap-4">
         <div className="flex flex-col gap-2">
@@ -577,26 +437,16 @@ export default function PythonRoutineEditorClient() {
               }`}
               onClick={() => setTab("help")}
             >
-              Scene API help
+              Tips
             </button>
             <a
               href="#python-scene-api-catalog"
               className="px-3 py-2 text-sm font-medium text-slate-600 dark:text-slate-400"
             >
-              Full API ↓
+              All examples ↓
             </a>
           </div>
           <div className={tab === "help" ? "hidden lg:block" : "block"}>
-            <p className="mb-2 hidden text-xs text-slate-500 lg:block">
-              Python editor: syntax highlighting, debounced syntax check (Pyodide{" "}
-              <code className="rounded bg-slate-100 px-1 dark:bg-slate-800">ast.parse</code>
-              ), <code className="rounded bg-slate-100 px-1 dark:bg-slate-800">scene.</code>{" "}
-              completions, and format on save (
-              <code className="rounded bg-slate-100 px-1 dark:bg-slate-800">black</code> when
-              available). Use top-level{" "}
-              <code className="rounded bg-slate-100 px-1 dark:bg-slate-800">await</code> for
-              async methods.
-            </p>
             <PythonCodeMirrorEditor
               value={code}
               onChange={setCode}
@@ -612,57 +462,154 @@ export default function PythonRoutineEditorClient() {
         >
           <h2 className="flex items-center gap-2 font-semibold text-slate-900 dark:text-slate-100">
             <FontAwesomeIcon icon={faBook} className="h-4 w-4 text-sky-600" />
-            Scene API (Python) — short guide
+            Quick tips for your code
           </h2>
           <p className="text-xs text-slate-600 dark:text-slate-400">
-            The object{" "}
-            <code className="text-sky-700 dark:text-sky-300">scene</code> is bound to the
-            scene you started the run on. It uses the scene REST API only (not model URLs).
+            In Python, <code className="text-sky-700 dark:text-sky-300">scene</code> is the
+            room you picked when you press Start. You ask it for lights, change colours, and
+            so on.
           </p>
           <ul className="list-inside list-disc space-y-2 text-xs">
             <li>
               <code>scene.width</code>, <code>scene.height</code>, <code>scene.depth</code> —
-              meters along +X, +Y, +Z from <code>GET …/dimensions</code> → <code>size</code>.
+              how big the room is in metres (length, height, depth).
             </li>
             <li>
-              <code>await scene.get_all_lights()</code> — list with <code>sx</code>,{" "}
-              <code>sy</code>, <code>sz</code> and state.
+              <code>await scene.get_all_lights()</code> — get every light and where it sits.
             </li>
             <li>
-              <code>await scene.get_lights_within_sphere(center, radius)</code> —{" "}
-              <code>center</code> is <code>{"{x,y,z}"}</code>.
+              <code>await scene.get_lights_within_sphere(…)</code> — lights inside a ball
+              shape; the middle point looks like <code>{"{x, y, z}"}</code>.
             </li>
             <li>
-              <code>await scene.get_lights_within_cuboid(position, dimensions)</code> —{" "}
-              <code>dimensions</code>: width, height, depth.
+              <code>await scene.get_lights_within_cuboid(…)</code> — lights inside a box.
             </li>
             <li>
-              <code>await scene.set_all_lights(...)</code> — fields <code>on</code>,{" "}
-              <code>color</code> (<code>#RRGGBB</code>), <code>brightness_pct</code>.
+              <code>await scene.set_all_lights(…)</code> — set every light the same way: on or
+              off, colour like <code>#ff6600</code>, and how bright (0–100).
             </li>
             <li>
-              <code>await scene.set_lights_in_sphere(center, radius, patch)</code> and cuboid
-              variant.
+              <code>await scene.set_lights_in_sphere(…)</code> or{" "}
+              <code>set_lights_in_cuboid(…)</code> — change only the lights in that shape.
             </li>
             <li>
-              <code>await scene.update_lights_batch(updates)</code> — matches{" "}
-              <code>PATCH …/state/batch</code>.
+              <code>await scene.update_lights_batch(…)</code> — change several specific lights
+              in one go.
             </li>
           </ul>
           <p className="text-xs text-slate-600 dark:text-slate-400">
-            The script runs about every 50 ms between iterations (plus network). See the
-            complete list with snippets at the bottom of this page (
+            Your code runs again and again in a short loop while the routine is on. Copy-paste
+            examples for each command are at the bottom (
             <a
               href="#python-scene-api-catalog"
               className="text-sky-700 underline dark:text-sky-300"
             >
-              Scene API reference
+              All scene commands
             </a>
             ).
           </p>
         </aside>
 
       </div>
+
+      <section
+        className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900/40"
+        aria-labelledby="run-and-debug-heading"
+      >
+        <h2
+          id="run-and-debug-heading"
+          className="text-sm font-semibold text-slate-800 dark:text-slate-200"
+        >
+          Try it on a room
+        </h2>
+        <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
+          Choose the same room for running your code and for the 3D picture. Start runs your
+          code; Stop stops it. Neither button clears your light colours — tap Reset scene
+          lights if you want everything back to the usual defaults (the routine can keep
+          running).
+        </p>
+        <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+          <label className="flex min-w-[200px] flex-1 flex-col gap-1 text-xs">
+            <span className="text-slate-600 dark:text-slate-400">Scene</span>
+            <select
+              value={selectedSceneId}
+              onChange={(e) => setSelectedSceneId(e.target.value)}
+              className="min-h-11 rounded border border-slate-300 bg-white px-2 py-2 text-sm dark:border-slate-600 dark:bg-slate-900"
+            >
+              <option value="">Select scene…</option>
+              {(scenesList ?? []).map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          {!activeRun ? (
+            <Button
+              type="button"
+              icon={faCirclePlay}
+              disabled={busy || !routineId || !selectedSceneId}
+              onClick={() => void onStartRun()}
+            >
+              Start
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              icon={faCircleStop}
+              className="bg-amber-800 hover:bg-amber-700 dark:bg-amber-900"
+              disabled={busy}
+              onClick={() => void onStopRun()}
+            >
+              Stop
+            </Button>
+          )}
+          <Button
+            type="button"
+            icon={faLightbulb}
+            disabled={busy || !selectedSceneId}
+            onClick={() => void onResetSceneLights()}
+          >
+            Reset scene lights
+          </Button>
+          <Button
+            type="button"
+            icon={faArrowsRotate}
+            className="bg-slate-600 hover:bg-slate-500 dark:bg-slate-700 dark:hover:bg-slate-600"
+            disabled={!selectedScene || selectedScene.items.length === 0}
+            onClick={() => setCameraResetVersion((v) => v + 1)}
+          >
+            Reset camera
+          </Button>
+        </div>
+        {showWorker ? (
+          <div className="mt-3">
+            <PythonRoutineHost
+              sceneId={activeRun.scene_id}
+              source={workerSource}
+              onWorkerMessage={(msg) => setError(msg)}
+              onIterationComplete={onWorkerIteration}
+            />
+          </div>
+        ) : null}
+        {selectedScene && selectedScene.items.length > 0 ? (
+          <div className="mt-4 min-h-[280px] w-full sm:min-h-[320px]">
+            <SceneLightsCanvas
+              items={selectedScene.items}
+              cameraPersistenceKey={`python-debug-${selectedScene.id}`}
+              cameraResetVersion={cameraResetVersion}
+            />
+          </div>
+        ) : selectedSceneId ? (
+          <p className="mt-3 text-xs text-slate-500">
+            This room could not be loaded, or it has no lights to show.
+          </p>
+        ) : (
+          <p className="mt-3 text-xs text-slate-500">
+            Pick a room from the list to see it in 3D.
+          </p>
+        )}
+      </section>
 
       <PythonSceneApiCatalogSection />
     </div>
