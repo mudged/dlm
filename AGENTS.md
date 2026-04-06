@@ -83,5 +83,5 @@ Alternatively, `./scripts/run.sh` does both steps (plus `npm ci` if `node_module
 - **`go.mod` says `go 1.25.0`** — the default system Go (1.22) will refuse to build. The update script installs Go 1.25.x to `/usr/local/go`. Ensure `/usr/local/go/bin` is on `PATH`.
 - **No external services** — SQLite is embedded (pure Go, no CGO). Database file auto-creates at `data/dlm.db`. No Docker, Redis, or Postgres needed.
 - **Sample data** — on first start with an empty DB, 3 sample models (sphere, cube, cone) are auto-seeded. Deleting all models and restarting re-seeds them.
-- **CSV upload field name** — the `POST /api/v1/models` endpoint expects the CSV file under field name `file` (not `csv`), and the CSV header must be exactly `id,x,y,z`.
+- **CSV upload field name** — the `POST /api/v1/models` endpoint expects the CSV file under field name `file` (not `csv`), and the CSV header must be exactly `id,x,y,z`. Light IDs must be **0-based sequential** integers (0, 1, 2, …); 1-based IDs will fail validation.
 - **`next build`** is the slow step (~30–120 s). The `.next/` cache speeds up subsequent builds. Use `DLM_SKIP_NPM_CI=1 ./scripts/run.sh` to skip `npm ci` on repeat runs.
