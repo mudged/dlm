@@ -832,6 +832,65 @@ Feature: Create routine type selection dropdown (REQ-023)
     Given docs/requirements.md defines REQ-002 and REQ-023
     When the REQ-023 business rule 4 and responsive UX notes are read
     Then the type control must be operable on mobile tablet and desktop without hover-only essential steps
+
+Feature: Python routine bottom API catalog (REQ-024)
+
+  Scenario: REQ-024 requires a bottom-of-page API list with description and snippet per operation
+    Parent requirement: REQ-024
+    Given docs/requirements.md defines REQ-002 REQ-022 and REQ-024
+    When the REQ-024 scope and business rules are read
+    Then the Python routine view must include a reference section at the bottom of the page after primary authoring and run workflow regions in document flow order
+    And the list must enumerate every Python-exposed public scene API operation for routines with no deliberate omissions
+    And each item must include a plain-language description and at least one sample code snippet
+
+  Scenario: REQ-024 bottom catalog remains usable on all device classes
+    Parent requirement: REQ-024
+    Given docs/requirements.md defines REQ-002 and REQ-024
+    When the REQ-024 business rule 4 and responsive UX notes are read
+    Then the bottom section must remain readable and scrollable on mobile tablet and desktop without horizontal scrolling for primary snippet content where avoidable
+
+Feature: Python routine default sphere colour template (REQ-025)
+
+  Scenario: REQ-025 requires new Python routines to open with sphere-region colour change template
+    Parent requirement: REQ-025
+    Given docs/requirements.md defines REQ-011 REQ-020 REQ-022 and REQ-025
+    When the REQ-025 scope and business rules are read
+    Then newly created Python routine definitions must open with default template code whose primary illustrated behavior is changing colours for lights inside a sphere region in scene space
+    And the template must use sphere targeting consistent with REQ-020 and must not rewrite canonical model coordinates
+
+Feature: Python scene binding width depth height (REQ-026)
+
+  Scenario: REQ-026 requires scene width depth and height on the Python binding
+    Parent requirement: REQ-026
+    Given docs/requirements.md defines REQ-020 REQ-022 REQ-024 and REQ-026
+    When the REQ-026 business rules are read
+    Then the Python scene object must expose height and must also expose width and depth or equivalent documented names for all three axis-aligned extents
+    And values must align with REQ-020 dimension semantics for the same scene snapshot
+    And docs architecture.md the REQ-022 on-page reference and the REQ-024 bottom catalog must document all three attributes including which world axis each maps to
+
+Feature: Python routine visual debug viewport and resets (REQ-027)
+
+  Scenario: REQ-027 requires selectable scene and live scene visualization for visual debug
+    Parent requirement: REQ-027
+    Given docs/requirements.md defines REQ-002 REQ-010 REQ-012 REQ-015 REQ-019 REQ-022 and REQ-027
+    When the REQ-027 scope and business rules are read
+    Then the user must be able to select an existing scene as the target for visual debug of the Python routine
+    And light state changes from the routine must become visible in the debug viewport within the same class of timeliness as REQ-012 after successful writes
+    And the viewport must follow REQ-010 REQ-012 REQ-015 and REQ-019 visual rules for scene composite views as applicable
+
+  Scenario: REQ-027 requires reset scene lights and reset camera controls
+    Parent requirement: REQ-027
+    Given docs/requirements.md defines REQ-011 REQ-014 REQ-016 REQ-018 and REQ-027
+    When the REQ-027 business rules about reset actions are read
+    Then a reset scene lights control must set every light in the selected debug scene to REQ-014 defaults and persist per REQ-011 without changing scene membership placements or canonical model coordinates
+    And a reset camera control must restore default client navigation for the debug viewport only per REQ-016 semantics without altering persisted models scenes placements or per-light state
+    And REQ-018 applies where reset actions are implemented as buttons
+
+  Scenario: REQ-027 visual debug remains usable without hover-only essential steps
+    Parent requirement: REQ-027
+    Given docs/requirements.md defines REQ-002 and REQ-027
+    When the REQ-027 business rule 5 and responsive UX notes are read
+    Then scene selection the debug viewport and both reset actions must be reachable on mobile tablet and desktop without hover-only essential steps
 ```
 
 ---

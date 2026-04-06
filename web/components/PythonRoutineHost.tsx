@@ -5,27 +5,31 @@ import { useEffect, useRef, useState } from "react";
 type WorkerOut =
   | { type: "ready" }
   | { type: "done" }
-  | { type: "error"; message: string };
+  | { type: "error"; message: string }
+  | { type: "iterationComplete"; sceneId: string };
 
-/** Architecture §3.17 — default `T_force` after cooperative stop. */
+/** Max wait for cooperative stop before forcing worker shutdown (ms). */
 const T_FORCE_MS = 5000;
 
 /**
- * Runs user Python in a Pyodide worker while a python_scene_script routine is active on the scene.
- * REQ-022 / architecture §3.17.
+ * Runs the user’s Python in a worker while a scene routine is active.
  */
 export function PythonRoutineHost(props: {
   sceneId: string;
   source: string;
   onWorkerMessage?: (msg: string) => void;
+  /** Fired after each successful script iteration (worker refreshed dims + ran user code). */
+  onIterationComplete?: (sceneId: string) => void;
 }) {
-  const { sceneId, source, onWorkerMessage } = props;
+  const { sceneId, source, onWorkerMessage, onIterationComplete } = props;
   const [phase, setPhase] = useState<
     "loading" | "running" | "finished" | "error"
   >("loading");
   const workerRef = useRef<Worker | null>(null);
   const onMsgRef = useRef(onWorkerMessage);
   onMsgRef.current = onWorkerMessage;
+  const onIterRef = useRef(onIterationComplete);
+  onIterRef.current = onIterationComplete;
 
   useEffect(() => {
     setPhase("loading");
@@ -82,6 +86,10 @@ export function PythonRoutineHost(props: {
         }
         return;
       }
+      if (m.type === "iterationComplete") {
+        onIterRef.current?.(m.sceneId);
+        return;
+      }
       if (m.type === "error") {
         if (!unmounted) {
           setPhase("error");
@@ -134,12 +142,8 @@ export function PythonRoutineHost(props: {
   return (
     <p className="text-xs text-emerald-800 dark:text-emerald-200">
       Python routine is executing in your browser. Stop the routine to end
-      execution; if the worker does not exit cooperatively, it is terminated
-      after up to {T_FORCE_MS / 1000} seconds (
-      <code className="rounded bg-slate-200 px-0.5 dark:bg-slate-800">
-        T_force
-      </code>{" "}
-      per architecture §3.17).
+      execution. If it does not stop when asked, it is shut down automatically
+      after about {T_FORCE_MS / 1000} seconds so the page does not freeze.
     </p>
   );
 }
