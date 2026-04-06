@@ -6,11 +6,13 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { boundingFromLights } from "@/lib/lightBounds";
 import type { Light } from "@/lib/models";
 import {
+  additiveGlowShellMaterialForOnLight,
   meshStandardMaterialForOnLight,
   normalizeLightHex,
 } from "@/lib/lightAppearance";
 import {
   buildWireSegmentPositions,
+  LIGHT_SPHERE_GLOW_RADIUS_FACTOR,
   SPHERE_RADIUS_M,
 } from "@/lib/wireSegments";
 import {
@@ -191,8 +193,14 @@ function ModelLightsCanvas({
     scene.add(dir);
 
     const sphereGeom = new THREE.SphereGeometry(SPHERE_RADIUS_M, 20, 16);
+    const glowGeom = new THREE.SphereGeometry(
+      SPHERE_RADIUS_M * LIGHT_SPHERE_GLOW_RADIUS_FACTOR,
+      18,
+      14,
+    );
     /** Per-(hex, brightness) materials; shared across lights with identical appearance (§4.7 option B, REQ-028). */
     const onMaterialCache = new Map<string, THREE.MeshStandardMaterial>();
+    const glowMaterialCache = new Map<string, THREE.MeshBasicMaterial>();
     function standardMaterialForOnLight(L: Light): THREE.MeshStandardMaterial {
       const key = `${normalizeLightHex(lightColor(L))}:${lightBrightness(L)}`;
       let m = onMaterialCache.get(key);
@@ -202,6 +210,18 @@ function ModelLightsCanvas({
           lightBrightness(L),
         );
         onMaterialCache.set(key, m);
+      }
+      return m;
+    }
+    function glowMaterialForOnLight(L: Light): THREE.MeshBasicMaterial {
+      const key = `${normalizeLightHex(lightColor(L))}:${lightBrightness(L)}`;
+      let m = glowMaterialCache.get(key);
+      if (!m) {
+        m = additiveGlowShellMaterialForOnLight(
+          lightColor(L),
+          lightBrightness(L),
+        );
+        glowMaterialCache.set(key, m);
       }
       return m;
     }
@@ -230,9 +250,14 @@ function ModelLightsCanvas({
       for (let j = 0; j < onSortedIdx.length; j++) {
         const si = onSortedIdx[j]!;
         const L = sorted[si]!;
+        const glow = new THREE.Mesh(glowGeom, glowMaterialForOnLight(L));
+        glow.position.set(L.x, L.y, L.z);
+        glow.renderOrder = 0;
+        scene.add(glow);
         const mesh = new THREE.Mesh(sphereGeom, standardMaterialForOnLight(L));
         mesh.position.set(L.x, L.y, L.z);
         mesh.userData.sortedIdx = si;
+        mesh.renderOrder = 1;
         scene.add(mesh);
         onMeshes.push(mesh);
       }
@@ -440,10 +465,15 @@ function ModelLightsCanvas({
       wrap.removeEventListener("pointerleave", onPointerLeave);
       controls.dispose();
       sphereGeom.dispose();
+      glowGeom.dispose();
       for (const m of onMaterialCache.values()) {
         m.dispose();
       }
       onMaterialCache.clear();
+      for (const m of glowMaterialCache.values()) {
+        m.dispose();
+      }
+      glowMaterialCache.clear();
       matOff.dispose();
       if (lineSegments) {
         lineSegments.geometry.dispose();

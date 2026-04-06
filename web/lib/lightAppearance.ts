@@ -34,8 +34,9 @@ export function emissiveColorFromHex(hex: string): THREE.Color {
 /** REQ-028: monotonic emissive strength vs brightness 0–100%; tuned for dark-grey viewport (§4.7). */
 export function emissiveIntensityFromBrightness(brightnessPct: number): number {
   const b = Math.max(0, Math.min(100, brightnessPct)) / 100;
-  const k = 0.95;
-  const cap = 2.2;
+  // k = emissiveIntensity at 100%; cap reduces blow-out when many lights are fully on.
+  const k = 5.5;
+  const cap = 8;
   return Math.min(k * b, cap);
 }
 
@@ -49,6 +50,27 @@ export function meshStandardMaterialForOnLight(
     emissive: emissiveColorFromHex(hex),
     emissiveIntensity: emissiveIntensityFromBrightness(brightnessPct),
     metalness: 0,
-    roughness: 0.35,
+    roughness: 0.25,
+  });
+}
+
+/**
+ * Additive outer shell so on-lights read as glowing (tone mapping dulls emissive-only cues).
+ * `toneMapped: false` keeps the halo vivid; not used for picking.
+ */
+export function additiveGlowShellMaterialForOnLight(
+  hex: string,
+  brightnessPct: number,
+): THREE.MeshBasicMaterial {
+  const b = Math.max(0, Math.min(100, brightnessPct)) / 100;
+  const col = emissiveColorFromHex(hex).clone();
+  col.multiplyScalar(0.5 + 1.1 * b);
+  return new THREE.MeshBasicMaterial({
+    color: col,
+    transparent: true,
+    opacity: 0.22 + 0.68 * b,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    toneMapped: false,
   });
 }

@@ -9,5 +9,5 @@ export const VIZ_VIEWPORT_BG_CSS = "#262626";
 export function configureVizWebGLRenderer(renderer: THREE.WebGLRenderer): void {
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 0.95;
+  renderer.toneMappingExposure = 1.12;
 }

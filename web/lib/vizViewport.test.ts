@@ -21,6 +21,6 @@ describe("vizViewport", () => {
     configureVizWebGLRenderer(renderer);
     expect(renderer.outputColorSpace).toBe(THREE.SRGBColorSpace);
     expect(renderer.toneMapping).toBe(THREE.ACESFilmicToneMapping);
-    expect(renderer.toneMappingExposure).toBe(0.95);
+    expect(renderer.toneMappingExposure).toBe(1.12);
   });
 });

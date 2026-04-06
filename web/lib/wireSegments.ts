@@ -3,6 +3,9 @@ import type { Light } from "@/lib/models";
 /** Sphere radius (m); diameter = 2 cm per REQ-010. */
 export const SPHERE_RADIUS_M = 0.01;
 
+/** Larger sphere for additive glow shell around on-lights (visual only; raycast uses core sphere). */
+export const LIGHT_SPHERE_GLOW_RADIUS_FACTOR = 2.5;
+
 /** Vertex pairs for LineSegments: (x0,y0,z0,x1,y1,z1, ...) along ascending `id`. */
 export function buildWireSegmentPositions(lights: Light[]): Float32Array {
   if (lights.length < 2) {

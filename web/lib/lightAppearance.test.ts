@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import * as THREE from "three";
 import {
+  additiveGlowShellMaterialForOnLight,
   colorFromHexAndBrightness,
   emissiveColorFromHex,
   emissiveIntensityFromBrightness,
@@ -63,9 +64,19 @@ describe("meshStandardMaterialForOnLight (REQ-028)", () => {
   it("uses emissive tied to hex and intensity from brightness", () => {
     const m = meshStandardMaterialForOnLight("#00ff00", 100);
     expect(m.metalness).toBe(0);
-    expect(m.roughness).toBe(0.35);
+    expect(m.roughness).toBe(0.25);
     expect(m.emissiveIntensity).toBe(emissiveIntensityFromBrightness(100));
     expect(m.emissive.g).toBeGreaterThan(0.9);
     m.dispose();
+  });
+});
+
+describe("additiveGlowShellMaterialForOnLight", () => {
+  it("uses additive blending and skips tone mapping for visible halo", () => {
+    const g = additiveGlowShellMaterialForOnLight("#ff0000", 100);
+    expect(g.blending).toBe(THREE.AdditiveBlending);
+    expect(g.toneMapped).toBe(false);
+    expect(g.opacity).toBeGreaterThan(0.5);
+    g.dispose();
   });
 });
