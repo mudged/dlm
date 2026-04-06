@@ -1171,3 +1171,46 @@ As a **user** **debugging** **a** **Python** **routine**, I want **to** **demons
 - **Whether** **reset** **scene** **lights** **also** **stops** **an** **active** **run** **or** **leaves** **run** **state** **unchanged** **(**architecture** **must** **define** **to** **avoid** **surprise** **re-application** **of** **routine** **effects**)**.
 
 ---
+
+### REQ-028 — Three.js light spheres: brightness-scaled emissive glow
+
+| Field | Value |
+|-------|-------|
+| **ID** | REQ-028 |
+| **Title** | Three.js light spheres: brightness-scaled emissive glow |
+| **Priority** | Must |
+| **Actor(s)** | End user |
+
+**User story**
+
+As a **user** **viewing** **a** **scene** **(**or** **a** **single** **model**)** **in** **three.js**, I want **each** **on** **light’s** **sphere** **to** **glow** **in** **proportion** **to** **its** **brightness** **and** **to** **read** **as** **emitting** **light**, **so** **that** **100%** **brightness** **looks** **clearly** **bright** **and** **dimmer** **settings** **look** **appropriately** **subdued**.
+
+**Scope**
+
+- In scope: **three.js** **rendering** **of** **light** **spheres** **where** **REQ-012** **already** **governs** **colour** **and** **on**/**off** **appearance** **(**single-model** **detail** **per** **REQ-010**, **scene** **composite** **detail** **per** **REQ-015**, **and** **Python** **routine** **visual** **debug** **per** **REQ-027** **where** **those** **spheres** **are** **shown**)**. **For** **lights** **in** **the** **on** **state**, **the** **material** **MUST** **use** **an** **emissive** **(**self-illuminated**)** **treatment** **so** **the** **sphere** **appears** **to** **emit** **light**, **not** **only** **a** **flat** **tinted** **surface**. **The** **strength** **of** **that** **glow** **(**or** **architecture-defined** **equivalent** **visual** **metric**)** **MUST** **scale** **monotonically** **with** **the** **persisted** **brightness** **percentage** **from** **REQ-011** **(**0** **through** **100**)** **so** **that** **100%** **reads** **as** **strong** **glow** **and** **lower** **values** **read** **weaker** **while** **remaining** **ordered** **(**no** **inversion** **where** **a** **lower** **percent** **looks** **brighter** **than** **a** **higher** **one** **for** **the** **same** **hex** **colour**)**. **REQ-019** **dark-grey** **viewport** **remains** **so** **glow** **is** **visible** **against** **the** **background**.
+- Out of scope: **Mandating** **a** **specific** **three.js** **API** **(**e.g.** **`MeshStandardMaterial.emissive`** **vs** **post-processing**)**; **physical** **global** **illumination** **or** **accurate** **luminaire** **photometry**; **changing** **REQ-010** **2** **cm** **sphere** **diameter** **or** **wire** **segment** **styling** **except** **where** **architecture** **must** **reconcile** **glow** **with** **existing** **rules**.
+
+**Business rules**
+
+1. **On** **lights** **(**`on` **true** **per** **REQ-011**/**REQ-012**)** **MUST** **use** **a** **material** **that** **includes** **a** **clear** **emissive** **(**light-emitting**)** **component** **tied** **to** **the** **current** **hex** **colour** **so** **the** **sphere** **reads** **as** **a** **light** **source** **rather** **than** **a** **purely** **diffuse** **ball**.
+2. **Emissive** **strength** **(**or** **documented** **equivalent**)** **MUST** **scale** **with** **brightness** **percentage** **from** **REQ-011**: **at** **100%** **brightness** **the** **glow** **MUST** **be** **visibly** **strong**; **at** **lower** **percents** **the** **glow** **MUST** **be** **weaker** **in** **a** **way** **users** **can** **perceive** **as** **dimmer** **light** **(**exact** **curve** **per** **architecture**, **subject** **to** **monotonicity** **in** **rule** **3**)**.
+3. **For** **two** **on** **lights** **with** **the** **same** **hex** **colour** **and** **different** **brightness** **values**, **the** **higher** **brightness** **MUST** **not** **appear** **less** **glowing** **than** **the** **lower** **(**monotonic** **ordering** **of** **glow** **vs** **percent**)**.
+4. **Off** **lights** **MUST** **keep** **REQ-012** **dim** **grey** **transparent** **appearance**; **their** **emissive** **contribution** **MUST** **remain** **negligible** **so** **they** **do** **not** **appear** **to** **glow** **like** **on** **lights** **or** **outshine** **REQ-010** **wire** **segments**.
+5. **When** **per-light** **state** **updates** **(**REQ-011**, **REQ-012**)** **or** **the** **user** **navigates** **between** **views**, **glow** **MUST** **stay** **consistent** **with** **persisted** **state** **(**no** **indefinite** **staleness** **after** **successful** **writes**)** **for** **the** **same** **semantics** **as** **REQ-012** **colour**/**opacity** **updates**.
+6. **`docs/architecture.md`** **MUST** **describe** **the** **chosen** **three.js** **material**/**rendering** **approach** **for** **REQ-028** **(**including** **how** **brightness** **maps** **to** **emissive** **intensity** **or** **equivalent**)** **and** **how** **it** **fits** **Pi**/**WebGL** **constraints** **from** **REQ-003** **where** **relevant**.
+
+**Responsive / UX notes** *(when UI is involved)*
+
+- Mobile: **Glow** **and** **sphere** **legibility** **remain** **acceptable** **on** **small** **WebGL** **viewports**; **touch** **hover-equivalent** **(**REQ-010**)** **unchanged**.
+- Tablet: **Same** **as** **mobile**; **no** **hover-only** **dependency** **for** **perceiving** **brightness** **differences** **(**REQ-002**)**.
+- Desktop: **User** **can** **compare** **brightness** **levels** **when** **multiple** **on** **lights** **are** **visible** **without** **excessive** **bloom** **that** **obscures** **ids** **(**architecture** **may** **cap** **or** **tone-map** **as** **needed**)**.
+
+**Dependencies**
+
+- REQ-002, REQ-003, REQ-010, REQ-011, REQ-012, REQ-015, REQ-019, REQ-027
+
+**Open questions**
+
+- **Whether** **a** **single** **global** **cap** **on** **emissive** **intensity** **is** **needed** **when** **many** **100%** **lights** **fill** **the** **viewport** **(**architecture** **trade-off** **vs** **REQ-010** **“do** **not** **merge** **lights”**)**.
+
+---

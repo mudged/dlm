@@ -7,14 +7,18 @@ import { boundingFromLights } from "@/lib/lightBounds";
 import type { Light } from "@/lib/models";
 import type { SceneItem } from "@/lib/scenes";
 import {
-  colorFromHexAndBrightness,
+  meshStandardMaterialForOnLight,
   normalizeLightHex,
 } from "@/lib/lightAppearance";
 import {
   buildWireSegmentPositions,
   SPHERE_RADIUS_M,
 } from "@/lib/wireSegments";
-import { VIZ_VIEWPORT_BG, VIZ_VIEWPORT_BG_CSS } from "@/lib/vizViewport";
+import {
+  configureVizWebGLRenderer,
+  VIZ_VIEWPORT_BG,
+  VIZ_VIEWPORT_BG_CSS,
+} from "@/lib/vizViewport";
 
 type Props = {
   items: SceneItem[];
@@ -182,6 +186,7 @@ export default function SceneLightsCanvas({
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setClearColor(VIZ_VIEWPORT_BG, 1);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    configureVizWebGLRenderer(renderer);
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
@@ -243,22 +248,21 @@ export default function SceneLightsCanvas({
       });
     };
 
-    scene.add(new THREE.AmbientLight(0xffffff, 0.55));
-    const dir = new THREE.DirectionalLight(0xffffff, 0.9);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.38));
+    const dir = new THREE.DirectionalLight(0xffffff, 0.28);
     dir.position.set(1, 1.5, 0.8);
     scene.add(dir);
 
     const sphereGeom = new THREE.SphereGeometry(SPHERE_RADIUS_M, 20, 16);
-    const onMaterialCache = new Map<string, THREE.MeshBasicMaterial>();
-    function basicMaterialForLight(L: Light): THREE.MeshBasicMaterial {
+    const onMaterialCache = new Map<string, THREE.MeshStandardMaterial>();
+    function standardMaterialForOnLight(L: Light): THREE.MeshStandardMaterial {
       const key = `${normalizeLightHex(lightColor(L))}:${lightBrightness(L)}`;
       let m = onMaterialCache.get(key);
       if (!m) {
-        const col = colorFromHexAndBrightness(
+        m = meshStandardMaterialForOnLight(
           lightColor(L),
           lightBrightness(L),
         );
-        m = new THREE.MeshBasicMaterial({ color: col });
         onMaterialCache.set(key, m);
       }
       return m;
@@ -290,7 +294,7 @@ export default function SceneLightsCanvas({
         const e = sorted[si]!;
         const mesh = new THREE.Mesh(
           sphereGeom,
-          basicMaterialForLight(e.L),
+          standardMaterialForOnLight(e.L),
         );
         mesh.position.set(e.L.sx, e.L.sy, e.L.sz);
         mesh.userData.sortedIdx = si;

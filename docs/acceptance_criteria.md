@@ -891,6 +891,43 @@ Feature: Python routine visual debug viewport and resets (REQ-027)
     Given docs/requirements.md defines REQ-002 and REQ-027
     When the REQ-027 business rule 5 and responsive UX notes are read
     Then scene selection the debug viewport and both reset actions must be reachable on mobile tablet and desktop without hover-only essential steps
+
+Feature: Three.js emissive glow scaled by brightness (REQ-028)
+
+  Scenario: REQ-028 requires emissive appearance for on light spheres in three.js views
+    Parent requirement: REQ-028
+    Given docs/requirements.md defines REQ-010 REQ-012 REQ-015 REQ-027 and REQ-028
+    When the REQ-028 scope and business rules are read
+    Then on lights must use a material with a clear emissive light-emitting component in the single-model view scene composite view and Python visual debug viewport where REQ-012 spheres apply
+    And the sphere must read as emitting light not only as a diffuse tinted surface
+
+  Scenario: REQ-028 ties glow strength to REQ-011 brightness with strong appearance at 100 percent
+    Parent requirement: REQ-028
+    Given docs/requirements.md defines REQ-011 and REQ-028
+    When the REQ-028 business rules about brightness scaling are read
+    Then emissive strength or documented equivalent must scale with brightness percentage from zero through one hundred
+    And at 100 percent brightness the glow must be visibly strong
+    And at lower percents the glow must be weaker in a perceptibly dimmer way
+
+  Scenario: REQ-028 requires monotonic glow versus brightness for the same hex colour
+    Parent requirement: REQ-028
+    Given docs/requirements.md defines REQ-028
+    When the REQ-028 business rule about ordering is read
+    Then for two on lights with the same hex colour the higher brightness must not appear less glowing than the lower brightness
+
+  Scenario: REQ-028 preserves REQ-012 off appearance without glow like on lights
+    Parent requirement: REQ-028
+    Given docs/requirements.md defines REQ-010 REQ-012 and REQ-028
+    When the REQ-028 business rules for off lights are read
+    Then off lights must keep REQ-012 dim grey transparent styling
+    And emissive contribution for off lights must remain negligible so they do not glow like on lights or outshine wire segments
+
+  Scenario: REQ-028 binds visualization timeliness and architecture documentation
+    Parent requirement: REQ-028
+    Given docs/requirements.md defines REQ-003 REQ-011 REQ-012 and REQ-028
+    When the REQ-028 business rules about updates and architecture are read
+    Then glow must follow persisted state without indefinite staleness after successful writes consistent with REQ-012
+    And docs architecture.md must describe the three.js material approach and brightness mapping including Pi WebGL notes where relevant
 ```
 
 ---

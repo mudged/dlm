@@ -6,14 +6,18 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { boundingFromLights } from "@/lib/lightBounds";
 import type { Light } from "@/lib/models";
 import {
-  colorFromHexAndBrightness,
+  meshStandardMaterialForOnLight,
   normalizeLightHex,
 } from "@/lib/lightAppearance";
 import {
   buildWireSegmentPositions,
   SPHERE_RADIUS_M,
 } from "@/lib/wireSegments";
-import { VIZ_VIEWPORT_BG, VIZ_VIEWPORT_BG_CSS } from "@/lib/vizViewport";
+import {
+  configureVizWebGLRenderer,
+  VIZ_VIEWPORT_BG,
+  VIZ_VIEWPORT_BG_CSS,
+} from "@/lib/vizViewport";
 
 type Props = {
   lights: Light[];
@@ -126,6 +130,7 @@ function ModelLightsCanvas({
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setClearColor(VIZ_VIEWPORT_BG, 1);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    configureVizWebGLRenderer(renderer);
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
@@ -179,23 +184,23 @@ function ModelLightsCanvas({
       }
     };
 
-    scene.add(new THREE.AmbientLight(0xffffff, 0.55));
-    const dir = new THREE.DirectionalLight(0xffffff, 0.9);
+    // Modest fill so MeshStandardMaterial emissive reads as “light source” (REQ-028, §4.7).
+    scene.add(new THREE.AmbientLight(0xffffff, 0.38));
+    const dir = new THREE.DirectionalLight(0xffffff, 0.28);
     dir.position.set(1, 1.5, 0.8);
     scene.add(dir);
 
     const sphereGeom = new THREE.SphereGeometry(SPHERE_RADIUS_M, 20, 16);
-    /** Per-(hex, brightness) materials; shared across lights with identical appearance (§4.7 option B). */
-    const onMaterialCache = new Map<string, THREE.MeshBasicMaterial>();
-    function basicMaterialForLight(L: Light): THREE.MeshBasicMaterial {
+    /** Per-(hex, brightness) materials; shared across lights with identical appearance (§4.7 option B, REQ-028). */
+    const onMaterialCache = new Map<string, THREE.MeshStandardMaterial>();
+    function standardMaterialForOnLight(L: Light): THREE.MeshStandardMaterial {
       const key = `${normalizeLightHex(lightColor(L))}:${lightBrightness(L)}`;
       let m = onMaterialCache.get(key);
       if (!m) {
-        const col = colorFromHexAndBrightness(
+        m = meshStandardMaterialForOnLight(
           lightColor(L),
           lightBrightness(L),
         );
-        m = new THREE.MeshBasicMaterial({ color: col });
         onMaterialCache.set(key, m);
       }
       return m;
@@ -225,7 +230,7 @@ function ModelLightsCanvas({
       for (let j = 0; j < onSortedIdx.length; j++) {
         const si = onSortedIdx[j]!;
         const L = sorted[si]!;
-        const mesh = new THREE.Mesh(sphereGeom, basicMaterialForLight(L));
+        const mesh = new THREE.Mesh(sphereGeom, standardMaterialForOnLight(L));
         mesh.position.set(L.x, L.y, L.z);
         mesh.userData.sortedIdx = si;
         scene.add(mesh);
