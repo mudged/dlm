@@ -984,3 +984,198 @@ func TestAcceptance_REQ022_pythonSceneRoutinesAndCodeMirror6(t *testing.T) {
 		t.Fatal("PythonCodeMirrorEditor must import from the codemirror package (e.g. basicSetup)")
 	}
 }
+
+func TestAcceptance_REQ024_pythonRoutineBottomApiCatalog(t *testing.T) {
+	doc := readRequirements(t)
+	block := requirementBlock(doc, "REQ-024")
+	if block == "" {
+		t.Fatal("requirements must contain ### REQ-024 section")
+	}
+	lower := strings.ToLower(block)
+	for _, kw := range []string{"bottom", "snippet", "scene", "python"} {
+		if !strings.Contains(lower, kw) {
+			t.Fatalf("REQ-024 must mention %q", kw)
+		}
+	}
+	if !strings.Contains(lower, "req-002") || !strings.Contains(lower, "req-022") {
+		t.Fatal("REQ-024 dependencies must reference REQ-002 and REQ-022")
+	}
+	if !strings.Contains(block, "| **Priority** | Must |") {
+		t.Fatal("REQ-024 metadata must state priority Must")
+	}
+
+	root := repoRoot(t)
+	editorPath := filepath.Join(root, "web", "app", "routines", "python", "PythonRoutineEditorClient.tsx")
+	ed, err := os.ReadFile(editorPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", editorPath, err)
+	}
+	edStr := string(ed)
+	if !strings.Contains(edStr, "python-scene-api-catalog") {
+		t.Fatal("PythonRoutineEditorClient must include anchor id python-scene-api-catalog (REQ-024)")
+	}
+	if !strings.Contains(edStr, "PythonSceneApiCatalogSection") {
+		t.Fatal("PythonRoutineEditorClient must render PythonSceneApiCatalogSection (REQ-024)")
+	}
+
+	catPath := filepath.Join(root, "web", "lib", "pythonSceneApiCatalog.ts")
+	catBytes, err := os.ReadFile(catPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", catPath, err)
+	}
+	catStr := string(catBytes)
+	if !strings.Contains(catStr, "SCENE_API_CATALOG") {
+		t.Fatal("pythonSceneApiCatalog.ts must export SCENE_API_CATALOG (REQ-024)")
+	}
+}
+
+func TestAcceptance_REQ025_pythonRoutineDefaultSphereTemplate(t *testing.T) {
+	doc := readRequirements(t)
+	block := requirementBlock(doc, "REQ-025")
+	if block == "" {
+		t.Fatal("requirements must contain ### REQ-025 section")
+	}
+	lower := strings.ToLower(block)
+	for _, kw := range []string{"sphere", "template", "colour", "scene"} {
+		if !strings.Contains(lower, kw) {
+			t.Fatalf("REQ-025 must mention %q", kw)
+		}
+	}
+	if !strings.Contains(lower, "req-011") {
+		t.Fatal("REQ-025 must reference REQ-011 for light state fields")
+	}
+	if !strings.Contains(lower, "req-020") {
+		t.Fatal("REQ-025 must reference REQ-020 for scene-space geometry")
+	}
+	if !strings.Contains(block, "| **Priority** | Must |") {
+		t.Fatal("REQ-025 metadata must state priority Must")
+	}
+
+	root := repoRoot(t)
+	catPath := filepath.Join(root, "web", "lib", "pythonSceneApiCatalog.ts")
+	catBytes, err := os.ReadFile(catPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", catPath, err)
+	}
+	catStr := string(catBytes)
+	if !strings.Contains(catStr, "PYTHON_ROUTINE_DEFAULT_SOURCE") {
+		t.Fatal("pythonSceneApiCatalog.ts must define PYTHON_ROUTINE_DEFAULT_SOURCE (REQ-025)")
+	}
+	if !strings.Contains(catStr, "set_lights_in_sphere") {
+		t.Fatal("default template must use set_lights_in_sphere (REQ-025 sphere demo)")
+	}
+
+	newPath := filepath.Join(root, "web", "app", "routines", "new", "RoutineNewClient.tsx")
+	newBytes, err := os.ReadFile(newPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", newPath, err)
+	}
+	newStr := string(newBytes)
+	if !strings.Contains(newStr, "PYTHON_ROUTINE_DEFAULT_SOURCE") {
+		t.Fatal("RoutineNewClient must seed new Python routines with PYTHON_ROUTINE_DEFAULT_SOURCE (REQ-025)")
+	}
+}
+
+func TestAcceptance_REQ026_pythonSceneWidthDepthHeight(t *testing.T) {
+	doc := readRequirements(t)
+	block := requirementBlock(doc, "REQ-026")
+	if block == "" {
+		t.Fatal("requirements must contain ### REQ-026 section")
+	}
+	lower := strings.ToLower(block)
+	for _, dim := range []string{"width", "depth", "height"} {
+		if !strings.Contains(lower, dim) {
+			t.Fatalf("REQ-026 must mention %q", dim)
+		}
+	}
+	if !strings.Contains(lower, "req-020") {
+		t.Fatal("REQ-026 must reference REQ-020 for dimension semantics")
+	}
+	if !strings.Contains(block, "| **Priority** | Must |") {
+		t.Fatal("REQ-026 metadata must state priority Must")
+	}
+
+	root := repoRoot(t)
+	workerPath := filepath.Join(root, "web", "public", "dlm-python-scene-worker.mjs")
+	wb, err := os.ReadFile(workerPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", workerPath, err)
+	}
+	ws := string(wb)
+	if !strings.Contains(ws, "get width()") {
+		t.Fatal("dlm-python-scene-worker.mjs must expose scene.width (REQ-026)")
+	}
+	if !strings.Contains(ws, "get depth()") {
+		t.Fatal("dlm-python-scene-worker.mjs must expose scene.depth (REQ-026)")
+	}
+	if !strings.Contains(ws, "get height()") {
+		t.Fatal("dlm-python-scene-worker.mjs must expose scene.height (REQ-026)")
+	}
+
+	catPath := filepath.Join(root, "web", "lib", "pythonSceneApiCatalog.ts")
+	catBytes, err := os.ReadFile(catPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", catPath, err)
+	}
+	catStr := string(catBytes)
+	for _, label := range []string{"scene.width", "scene.depth", "scene.height"} {
+		if !strings.Contains(catStr, label) {
+			t.Fatalf("pythonSceneApiCatalog.ts must document %s (REQ-026)", label)
+		}
+	}
+}
+
+func TestAcceptance_REQ027_pythonRoutineVisualDebug(t *testing.T) {
+	doc := readRequirements(t)
+	block := requirementBlock(doc, "REQ-027")
+	if block == "" {
+		t.Fatal("requirements must contain ### REQ-027 section")
+	}
+	lower := strings.ToLower(block)
+	for _, kw := range []string{"visual", "three.js", "reset", "scene"} {
+		if !strings.Contains(lower, kw) {
+			t.Fatalf("REQ-027 must mention %q", kw)
+		}
+	}
+	for _, dep := range []string{"REQ-016", "REQ-014", "REQ-018", "REQ-002"} {
+		if !strings.Contains(block, dep) {
+			t.Fatalf("REQ-027 dependencies or scope must reference %s", dep)
+		}
+	}
+	if !strings.Contains(block, "| **Priority** | Must |") {
+		t.Fatal("REQ-027 metadata must state priority Must")
+	}
+
+	root := repoRoot(t)
+	editorPath := filepath.Join(root, "web", "app", "routines", "python", "PythonRoutineEditorClient.tsx")
+	ed, err := os.ReadFile(editorPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", editorPath, err)
+	}
+	edStr := string(ed)
+	if !strings.Contains(edStr, "SceneLightsCanvas") {
+		t.Fatal("PythonRoutineEditorClient must mount SceneLightsCanvas for visual debug (REQ-027)")
+	}
+	if !strings.Contains(edStr, "Visual debug") {
+		t.Fatal("PythonRoutineEditorClient must label the visual debug region (REQ-027)")
+	}
+	if !strings.Contains(edStr, "Reset scene lights") {
+		t.Fatal("PythonRoutineEditorClient must expose Reset scene lights (REQ-027)")
+	}
+	if !strings.Contains(edStr, "patchSceneLightsStateScene") {
+		t.Fatal("PythonRoutineEditorClient must call patchSceneLightsStateScene for reset (REQ-027)")
+	}
+	if !strings.Contains(edStr, "cameraResetVersion") {
+		t.Fatal("PythonRoutineEditorClient must use cameraResetVersion for camera reset (REQ-027 / REQ-016)")
+	}
+
+	scenesPath := filepath.Join(root, "web", "lib", "scenes.ts")
+	sb, err := os.ReadFile(scenesPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", scenesPath, err)
+	}
+	ss := string(sb)
+	if !strings.Contains(ss, "patchSceneLightsStateScene") || !strings.Contains(ss, "/lights/state/scene") {
+		t.Fatal("scenes.ts must implement PATCH …/lights/state/scene helper for REQ-027 reset")
+	}
+}
