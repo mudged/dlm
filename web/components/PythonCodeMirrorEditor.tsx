@@ -7,17 +7,19 @@ import { EditorSelection, EditorState, type Extension } from "@codemirror/state"
 import { EditorView, keymap } from "@codemirror/view";
 import { basicSetup } from "codemirror";
 import { oneDark } from "@codemirror/theme-one-dark";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type MutableRefObject } from "react";
 
 type Props = {
   value: string;
   onChange: (value: string) => void;
   extensions?: Extension[];
   className?: string;
+  /** REQ-024: parent holds ref for “insert example” into the live buffer. */
+  editorViewRef?: MutableRefObject<EditorView | null>;
 };
 
 export function PythonCodeMirrorEditor(props: Props) {
-  const { value, onChange, extensions = [], className } = props;
+  const { value, onChange, extensions = [], className, editorViewRef } = props;
   const parentRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const onChangeRef = useRef(onChange);
@@ -56,9 +58,15 @@ export function PythonCodeMirrorEditor(props: Props) {
     });
     const view = new EditorView({ state, parent });
     viewRef.current = view;
+    if (editorViewRef) {
+      editorViewRef.current = view;
+    }
     return () => {
       view.destroy();
       viewRef.current = null;
+      if (editorViewRef) {
+        editorViewRef.current = null;
+      }
     };
     // Intentionally run once on mount; `value` sync is handled below.
     // eslint-disable-next-line react-hooks/exhaustive-deps

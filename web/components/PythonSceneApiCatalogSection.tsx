@@ -1,8 +1,24 @@
 "use client";
 
+import { Button } from "@/components/ui/Button";
 import { SCENE_API_CATALOG } from "@/lib/pythonSceneApiCatalog";
+import { faSquarePlus } from "@fortawesome/free-solid-svg-icons";
+import { useMemo, useState } from "react";
 
-export function PythonSceneApiCatalogSection() {
+type Props = {
+  /** REQ-024: inserts the currently shown example into the editor. */
+  onInsertSnippet: (snippet: string) => void;
+};
+
+export function PythonSceneApiCatalogSection({ onInsertSnippet }: Props) {
+  const firstId = SCENE_API_CATALOG[0]?.id ?? "";
+  const [selectedId, setSelectedId] = useState(firstId);
+
+  const entry = useMemo(
+    () => SCENE_API_CATALOG.find((e) => e.id === selectedId) ?? SCENE_API_CATALOG[0],
+    [selectedId],
+  );
+
   return (
     <section
       id="python-scene-api-catalog"
@@ -13,28 +29,44 @@ export function PythonSceneApiCatalogSection() {
         id="python-scene-api-catalog-heading"
         className="text-lg font-semibold text-slate-900 dark:text-slate-100"
       >
-        Scene API reference (complete)
+        Scene API — pick one to read more
       </h2>
       <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
-        Every <code className="rounded bg-slate-100 px-1 dark:bg-slate-800">scene</code> name
-        you can use in your Python here. Width, height, and depth are the room size in metres.
+        <code className="rounded bg-slate-100 px-1 dark:bg-slate-800">scene</code> is the room
+        your script runs on after you press Start. Below is every name you can use, with a
+        short example. Comments in the example explain each part.
       </p>
-      <ul className="mt-4 space-y-6">
-        {SCENE_API_CATALOG.map((e) => (
-          <li key={e.id} id={e.id} className="border-t border-slate-100 pt-4 first:border-t-0 first:pt-0 dark:border-slate-800">
-            <h3 className="font-mono text-sm font-semibold text-sky-800 dark:text-sky-300">
-              {e.label}
-              <span className="ml-2 font-sans text-xs font-normal text-slate-500">
-                ({e.kind})
-              </span>
-            </h3>
-            <p className="mt-1 text-xs text-slate-700 dark:text-slate-300">{e.description}</p>
-            <pre className="mt-2 max-w-full overflow-x-auto rounded-lg bg-slate-900 p-3 text-xs text-slate-100">
-              <code>{e.snippet.trimEnd()}</code>
-            </pre>
-          </li>
-        ))}
-      </ul>
+
+      <label className="mt-4 flex flex-col gap-1 text-xs">
+        <span className="text-slate-600 dark:text-slate-400">Choose a name</span>
+        <select
+          value={selectedId}
+          onChange={(e) => setSelectedId(e.target.value)}
+          className="min-h-11 max-w-xl rounded border border-slate-300 bg-white px-2 py-2 text-sm dark:border-slate-600 dark:bg-slate-900"
+        >
+          {SCENE_API_CATALOG.map((e) => (
+            <option key={e.id} value={e.id}>
+              {e.label} ({e.kind})
+            </option>
+          ))}
+        </select>
+      </label>
+
+      {entry ? (
+        <div className="mt-4 space-y-3">
+          <p className="text-sm text-slate-700 dark:text-slate-300">{entry.description}</p>
+          <pre className="max-w-full overflow-x-auto rounded-lg bg-slate-900 p-3 text-xs text-slate-100">
+            <code>{entry.snippet.trimEnd()}</code>
+          </pre>
+          <Button
+            type="button"
+            icon={faSquarePlus}
+            onClick={() => onInsertSnippet(entry.snippet.trimEnd())}
+          >
+            Put this example in your code
+          </Button>
+        </div>
+      ) : null}
     </section>
   );
 }

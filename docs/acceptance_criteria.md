@@ -762,11 +762,19 @@ Feature: Python scene routines editor API docs and execution (REQ-022)
 
   Scenario: REQ-022 requires documented Python scene library on the same page as the editor
     Parent requirement: REQ-022
-    Given docs/requirements.md defines REQ-022 REQ-020 and REQ-011
+    Given docs/requirements.md defines REQ-022 REQ-020 REQ-024 and REQ-011
     When the REQ-022 business rules about documentation are read
     Then reference documentation for the Python scene library must appear on the same page as the editor
-    And the documentation must target novices with plain language parameter descriptions and at least one short example per major operation
+    And the documentation must satisfy REQ-024 for placement below the code editor and for selectable entries commented samples and insert-at-caret-or-end behavior
+    And the documentation must target novices with plain language and parameter descriptions
     And the Python API must map to scene capabilities consistent with REQ-020 and REQ-011 light-state semantics
+
+  Scenario: REQ-022 requires instructional wording for a twelve-year-old beginner in Python
+    Parent requirement: REQ-022
+    Given docs/requirements.md defines REQ-022
+    When the REQ-022 business rule 10 about user-visible instructional text is read
+    Then the Python routine authoring surface must require wording understandable to a twelve-year-old who has just started learning Python for headings labels primary tooltips empty states and short inline help
+    And that wording must use short sentences everyday words and brief explanations for unavoidable specialist terms without long expository paragraphs in the chrome around the editor
 
   Scenario: REQ-022 requires illustrative scene API names documented in architecture and on-page reference
     Parent requirement: REQ-022
@@ -801,7 +809,7 @@ Feature: Python scene routines editor API docs and execution (REQ-022)
   Scenario: REQ-022 ties editor docs and run controls to responsive non-hover-only use
     Parent requirement: REQ-022
     Given docs/requirements.md defines REQ-002 and REQ-022
-    When the REQ-022 business rule 10 and responsive UX notes are read
+    When the REQ-022 business rule 11 and responsive UX notes are read
     Then the editor documentation and run and stop controls must remain usable on mobile tablet and desktop
     And essential steps must not rely on hover-only affordances
 
@@ -833,30 +841,39 @@ Feature: Create routine type selection dropdown (REQ-023)
     When the REQ-023 business rule 4 and responsive UX notes are read
     Then the type control must be operable on mobile tablet and desktop without hover-only essential steps
 
-Feature: Python routine bottom API catalog (REQ-024)
+Feature: Python routine API reference below editor (REQ-024)
 
-  Scenario: REQ-024 requires a bottom-of-page API list with description and snippet per operation
+  Scenario: REQ-024 requires API reference directly below the code editor
     Parent requirement: REQ-024
     Given docs/requirements.md defines REQ-002 REQ-022 and REQ-024
     When the REQ-024 scope and business rules are read
-    Then the Python routine view must include a reference section at the bottom of the page after primary authoring and run workflow regions in document flow order
-    And the list must enumerate every Python-exposed public scene API operation for routines with no deliberate omissions
-    And each item must include a plain-language description and at least one sample code snippet
+    Then the Python routine view must place the API reference section directly below the code editor in vertical document order with no other primary workflow block between editor and reference except minimal separators or headings per architecture
+    And the catalog must enumerate every Python-exposed public scene API surface element for routines with no deliberate omissions
 
-  Scenario: REQ-024 bottom catalog remains usable on all device classes
+  Scenario: REQ-024 requires selectable API entries with detail sample usage commented snippets and insert control
     Parent requirement: REQ-024
-    Given docs/requirements.md defines REQ-002 and REQ-024
-    When the REQ-024 business rule 4 and responsive UX notes are read
-    Then the bottom section must remain readable and scrollable on mobile tablet and desktop without horizontal scrolling for primary snippet content where avoidable
+    Given docs/requirements.md defines REQ-022 and REQ-024
+    When the REQ-024 business rules about catalog interaction and samples are read
+    Then the user must be able to choose one function method or documented attribute at a time to view expanded detail and sample usage for that item
+    And every sample code snippet shown in the reference must include Python hash comments that briefly describe what the code does without being verbose
+    And the product must expose a control that inserts the currently shown example into the editor at the caret when the caret is active in the editor otherwise at the end of the buffer
+
+  Scenario: REQ-024 API reference remains usable on all device classes
+    Parent requirement: REQ-024
+    Given docs/requirements.md defines REQ-002 REQ-022 and REQ-024
+    When the REQ-024 business rule 6 and responsive UX notes are read
+    Then the reference region selector and insert control must remain usable on mobile tablet and desktop without hover-only essential steps
+    And the section must remain readable and scrollable without horizontal scrolling for primary snippet content where avoidable
 
 Feature: Python routine default sphere colour template (REQ-025)
 
   Scenario: REQ-025 requires new Python routines to open with sphere-region colour change template
     Parent requirement: REQ-025
-    Given docs/requirements.md defines REQ-011 REQ-020 REQ-022 and REQ-025
+    Given docs/requirements.md defines REQ-011 REQ-020 REQ-022 REQ-024 and REQ-025
     When the REQ-025 scope and business rules are read
     Then newly created Python routine definitions must open with default template code whose primary illustrated behavior is changing colours for lights inside a sphere region in scene space
     And the template must use sphere targeting consistent with REQ-020 and must not rewrite canonical model coordinates
+    And the template must include Python hash comments that briefly explain each main step to the same brevity standard as REQ-024 samples
 
 Feature: Python scene binding width depth height (REQ-026)
 
@@ -866,31 +883,33 @@ Feature: Python scene binding width depth height (REQ-026)
     When the REQ-026 business rules are read
     Then the Python scene object must expose height and must also expose width and depth or equivalent documented names for all three axis-aligned extents
     And values must align with REQ-020 dimension semantics for the same scene snapshot
-    And docs architecture.md the REQ-022 on-page reference and the REQ-024 bottom catalog must document all three attributes including which world axis each maps to
+    And docs architecture.md the REQ-022 on-page reference and the REQ-024 API reference must document all three attributes including which world axis each maps to
 
-Feature: Python routine visual debug viewport and resets (REQ-027)
+Feature: Python routine unified run-in-scene and live viewport (REQ-027)
 
-  Scenario: REQ-027 requires selectable scene and live scene visualization for visual debug
+  Scenario: REQ-027 requires one unified region for scene target run stop and live three.js viewport
     Parent requirement: REQ-027
     Given docs/requirements.md defines REQ-002 REQ-010 REQ-012 REQ-015 REQ-019 REQ-022 and REQ-027
     When the REQ-027 scope and business rules are read
-    Then the user must be able to select an existing scene as the target for visual debug of the Python routine
-    And light state changes from the routine must become visible in the debug viewport within the same class of timeliness as REQ-012 after successful writes
+    Then the product must present exactly one unified run scene viewport region on the Python routine authoring surface
+    And that region must combine scene selection for routine execution run or stop controls tied to that scene and the live three.js viewport showing the same scene
+    And the product must not split run in scene from visual debug into parallel sections with duplicate scene pickers or viewports for the same workflow
+    And light state changes from the routine must become visible in the viewport within the same class of timeliness as REQ-012 after successful writes
     And the viewport must follow REQ-010 REQ-012 REQ-015 and REQ-019 visual rules for scene composite views as applicable
 
   Scenario: REQ-027 requires reset scene lights and reset camera controls
     Parent requirement: REQ-027
     Given docs/requirements.md defines REQ-011 REQ-014 REQ-016 REQ-018 and REQ-027
     When the REQ-027 business rules about reset actions are read
-    Then a reset scene lights control must set every light in the selected debug scene to REQ-014 defaults and persist per REQ-011 without changing scene membership placements or canonical model coordinates
-    And a reset camera control must restore default client navigation for the debug viewport only per REQ-016 semantics without altering persisted models scenes placements or per-light state
+    Then a reset scene lights control must set every light in the selected scene to REQ-014 defaults and persist per REQ-011 without changing scene membership placements or canonical model coordinates
+    And a reset camera control must restore default client navigation for that viewport only per REQ-016 semantics without altering persisted models scenes placements or per-light state
     And REQ-018 applies where reset actions are implemented as buttons
 
-  Scenario: REQ-027 visual debug remains usable without hover-only essential steps
+  Scenario: REQ-027 unified region remains usable without hover-only essential steps
     Parent requirement: REQ-027
     Given docs/requirements.md defines REQ-002 and REQ-027
-    When the REQ-027 business rule 5 and responsive UX notes are read
-    Then scene selection the debug viewport and both reset actions must be reachable on mobile tablet and desktop without hover-only essential steps
+    When the REQ-027 business rule 6 and responsive UX notes are read
+    Then scene selection run stop viewport and both reset actions must be reachable on mobile tablet and desktop without hover-only essential steps
 
 Feature: Three.js emissive glow scaled by brightness (REQ-028)
 
@@ -898,7 +917,7 @@ Feature: Three.js emissive glow scaled by brightness (REQ-028)
     Parent requirement: REQ-028
     Given docs/requirements.md defines REQ-010 REQ-012 REQ-015 REQ-027 and REQ-028
     When the REQ-028 scope and business rules are read
-    Then on lights must use a material with a clear emissive light-emitting component in the single-model view scene composite view and Python visual debug viewport where REQ-012 spheres apply
+    Then on lights must use a material with a clear emissive light-emitting component in the single-model view scene composite view and Python routine unified live viewport where REQ-012 spheres apply
     And the sphere must read as emitting light not only as a diffuse tinted surface
 
   Scenario: REQ-028 ties glow strength to REQ-011 brightness with strong appearance at 100 percent

@@ -17,5 +17,12 @@ describe("pythonSceneApiCatalog", () => {
   it("default template demonstrates sphere colour update", () => {
     expect(PYTHON_ROUTINE_DEFAULT_SOURCE).toContain("set_lights_in_sphere");
     expect(PYTHON_ROUTINE_DEFAULT_SOURCE).toContain("await");
+    expect(PYTHON_ROUTINE_DEFAULT_SOURCE.split("\n").filter((l) => l.trim().startsWith("#")).length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("each catalog snippet includes at least one Python comment for learners", () => {
+    for (const e of SCENE_API_CATALOG) {
+      expect(e.snippet, e.id).toMatch(/^\s*#/m);
+    }
   });
 });

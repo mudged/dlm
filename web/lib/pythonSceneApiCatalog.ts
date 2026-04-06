@@ -16,9 +16,13 @@ export const PYTHON_ROUTINE_DEFAULT_SOURCE = `# Demo: change colours of lights i
 # Adjust center, radius, and colours for your layout.
 import random
 
+# Middle of a typical room (metres)
 cx, cy, cz = 1.0, 1.0, 1.0
+# How big the bubble is (metres)
 radius = 0.8
+# Random bright colour
 colour = "#%06x" % random.randrange(0x1000000)
+# Turn on lights inside the sphere and paint them
 await scene.set_lights_in_sphere(
     {"x": cx, "y": cy, "z": cz},
     radius,
@@ -32,22 +36,24 @@ export const SCENE_API_CATALOG: SceneApiCatalogEntry[] = [
     label: "scene.width",
     kind: "property",
     description: "How wide the room is in metres (left to right).",
-    snippet: `w = scene.width
-# Room width in metres`,
+    snippet: `# Room width in metres (left to right)
+w = scene.width`,
   },
   {
     id: "scene-height",
     label: "scene.height",
     kind: "property",
     description: "How tall the room is in metres (floor to ceiling).",
-    snippet: `h = scene.height`,
+    snippet: `# How tall the room is (floor to ceiling, metres)
+h = scene.height`,
   },
   {
     id: "scene-depth",
     label: "scene.depth",
     kind: "property",
     description: "How deep the room is in metres (front to back).",
-    snippet: `d = scene.depth`,
+    snippet: `# Front-to-back size of the room (metres)
+d = scene.depth`,
   },
   {
     id: "get-all-lights",
@@ -55,14 +61,16 @@ export const SCENE_API_CATALOG: SceneApiCatalogEntry[] = [
     kind: "method",
     description:
       "Returns every light in the scene with sx, sy, sz and state fields.",
-    snippet: `lights = await scene.get_all_lights()`,
+    snippet: `# Get every light and its on/off, colour, and position
+lights = await scene.get_all_lights()`,
   },
   {
     id: "get-lights-sphere",
     label: "get_lights_within_sphere",
     kind: "method",
     description: "Query lights whose scene-space position lies inside a sphere.",
-    snippet: `found = await scene.get_lights_within_sphere(
+    snippet: `# Lights inside a ball around a point (centre + radius in metres)
+found = await scene.get_lights_within_sphere(
     {"x": 0, "y": 0, "z": 0},
     1.0,
 )`,
@@ -72,7 +80,8 @@ export const SCENE_API_CATALOG: SceneApiCatalogEntry[] = [
     label: "get_lights_within_cuboid",
     kind: "method",
     description: "Query lights inside an axis-aligned cuboid in scene space.",
-    snippet: `found = await scene.get_lights_within_cuboid(
+    snippet: `# Lights inside a box: corner + width, height, depth
+found = await scene.get_lights_within_cuboid(
     {"x": 0, "y": 0, "z": 0},
     {"width": 2, "height": 2, "depth": 2},
 )`,
@@ -82,7 +91,8 @@ export const SCENE_API_CATALOG: SceneApiCatalogEntry[] = [
     label: "set_all_lights",
     kind: "method",
     description: "Apply the same state patch to every light in the scene.",
-    snippet: `await scene.set_all_lights(
+    snippet: `# Same look for every light (off, white, full brightness)
+await scene.set_all_lights(
     {"on": False, "color": "#ffffff", "brightness_pct": 100},
 )`,
   },
@@ -91,7 +101,8 @@ export const SCENE_API_CATALOG: SceneApiCatalogEntry[] = [
     label: "set_lights_in_sphere",
     kind: "method",
     description: "Bulk-update state for lights inside a sphere (scene coordinates).",
-    snippet: `await scene.set_lights_in_sphere(
+    snippet: `# Turn on lights in a ball and set their colour
+await scene.set_lights_in_sphere(
     {"x": 1, "y": 1, "z": 1},
     0.5,
     {"on": True, "color": "#ff6600", "brightness_pct": 100},
@@ -102,7 +113,8 @@ export const SCENE_API_CATALOG: SceneApiCatalogEntry[] = [
     label: "set_lights_in_cuboid",
     kind: "method",
     description: "Bulk-update state for lights inside a cuboid.",
-    snippet: `await scene.set_lights_in_cuboid(
+    snippet: `# Change lights inside a box-shaped region
+await scene.set_lights_in_cuboid(
     {"x": 0, "y": 0, "z": 0},
     {"width": 1, "height": 1, "depth": 1},
     {"on": True, "color": "#00ff00", "brightness_pct": 80},
@@ -113,7 +125,8 @@ export const SCENE_API_CATALOG: SceneApiCatalogEntry[] = [
     label: "update_lights_batch",
     kind: "method",
     description: "Per-light updates; each entry needs model_id, light_id, and state fields.",
-    snippet: `await scene.update_lights_batch(
+    snippet: `# Change only specific lights (replace model id with a real one)
+await scene.update_lights_batch(
     [
         {
             "model_id": "<uuid>",

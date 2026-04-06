@@ -3,6 +3,7 @@ package acceptance
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -42,7 +43,7 @@ func requirementBlock(doc, reqID string) string {
 	if next < 0 {
 		return rest
 	}
-	return rest[: len(prefix)+next]
+	return rest[:len(prefix)+next]
 }
 
 func TestAcceptance_REQ001_fullStackComposition(t *testing.T) {
@@ -982,6 +983,140 @@ func TestAcceptance_REQ022_pythonSceneRoutinesAndCodeMirror6(t *testing.T) {
 	}
 	if !strings.Contains(cmStr, `from "codemirror"`) {
 		t.Fatal("PythonCodeMirrorEditor must import from the codemirror package (e.g. basicSetup)")
+	}
+}
+
+func TestAcceptance_REQ024_pythonRoutineApiReferenceBelowEditor(t *testing.T) {
+	doc := readRequirements(t)
+	block := requirementBlock(doc, "REQ-024")
+	if block == "" {
+		t.Fatal("requirements must contain ### REQ-024 section")
+	}
+	lower := strings.ToLower(block)
+	for _, kw := range []string{
+		"below", "editor", "codemirror", "insert", "sample", "catalog",
+	} {
+		if !strings.Contains(lower, kw) {
+			t.Fatalf("REQ-024 must mention %q (API reference / editor integration)", kw)
+		}
+	}
+	for _, dep := range []string{"req-002", "req-018", "req-022", "req-027"} {
+		if !strings.Contains(lower, dep) {
+			t.Fatalf("REQ-024 dependencies must reference %s", dep)
+		}
+	}
+	if !strings.Contains(block, "| **Priority** | Must |") {
+		t.Fatal("REQ-024 metadata must state priority Must")
+	}
+
+	root := repoRoot(t)
+	editorPath := filepath.Join(root, "web", "app", "routines", "python", "PythonRoutineEditorClient.tsx")
+	ed, err := os.ReadFile(editorPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", editorPath, err)
+	}
+	edStr := string(ed)
+	idxEditor := strings.Index(edStr, "<PythonCodeMirrorEditor")
+	idxCatalog := strings.Index(edStr, "<PythonSceneApiCatalogSection")
+	if idxEditor < 0 || idxCatalog < 0 || idxEditor > idxCatalog {
+		t.Fatal("REQ-024: PythonCodeMirrorEditor must appear before PythonSceneApiCatalogSection in document order")
+	}
+	if !strings.Contains(edStr, "editorViewRef={editorViewRef}") {
+		t.Fatal("REQ-024: editor must expose EditorView ref for caret-based insert")
+	}
+	if !strings.Contains(edStr, "insertSnippetInPythonEditor") {
+		t.Fatal("REQ-024: routine editor must use insertSnippetInPythonEditor for snippet insertion")
+	}
+	if !strings.Contains(edStr, "onInsertSnippet={onInsertSnippet}") {
+		t.Fatal("REQ-024: catalog section must receive onInsertSnippet")
+	}
+
+	catPath := filepath.Join(root, "web", "components", "PythonSceneApiCatalogSection.tsx")
+	catBytes, err := os.ReadFile(catPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", catPath, err)
+	}
+	catStr := string(catBytes)
+	if !strings.Contains(catStr, `id="python-scene-api-catalog"`) {
+		t.Fatal("PythonSceneApiCatalogSection must expose stable id python-scene-api-catalog")
+	}
+	if !strings.Contains(catStr, "<select") {
+		t.Fatal("REQ-024: catalog must provide a selectable control (e.g. select) for entries")
+	}
+	if !strings.Contains(catStr, "Put this example in your code") {
+		t.Fatal("REQ-024: catalog must expose an insert affordance for the shown example")
+	}
+
+	insertPath := filepath.Join(root, "web", "lib", "insertPythonEditorSnippet.ts")
+	insertBytes, err := os.ReadFile(insertPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", insertPath, err)
+	}
+	if !strings.Contains(string(insertBytes), "insertSnippetInPythonEditor") {
+		t.Fatal("insertPythonEditorSnippet.ts must export insertSnippetInPythonEditor")
+	}
+
+	catalogSrcPath := filepath.Join(root, "web", "lib", "pythonSceneApiCatalog.ts")
+	catalogSrc, err := os.ReadFile(catalogSrcPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", catalogSrcPath, err)
+	}
+	cs := string(catalogSrc)
+	snippetRe := regexp.MustCompile("(?s)snippet:\\s+`([^`]+)`")
+	matches := snippetRe.FindAllStringSubmatch(cs, -1)
+	if len(matches) < 5 {
+		t.Fatalf("pythonSceneApiCatalog.ts must define multiple catalog snippets (got %d)", len(matches))
+	}
+	for i, m := range matches {
+		if len(m) < 2 || !strings.Contains(m[1], "#") {
+			t.Fatalf("REQ-024: catalog snippet %d must include at least one Python # comment", i)
+		}
+	}
+}
+
+func TestAcceptance_REQ027_pythonRoutineUnifiedRunAndViewport(t *testing.T) {
+	doc := readRequirements(t)
+	block := requirementBlock(doc, "REQ-027")
+	if block == "" {
+		t.Fatal("requirements must contain ### REQ-027 section")
+	}
+	lower := strings.ToLower(block)
+	for _, kw := range []string{"unified", "viewport", "three.js", "scene", "req-012", "req-014", "req-016"} {
+		if !strings.Contains(lower, kw) {
+			t.Fatalf("REQ-027 must mention %q", kw)
+		}
+	}
+	if !strings.Contains(lower, "req-022") {
+		t.Fatal("REQ-027 must reference REQ-022 for the authoring surface")
+	}
+	if !strings.Contains(block, "| **Priority** | Must |") {
+		t.Fatal("REQ-027 metadata must state priority Must")
+	}
+
+	root := repoRoot(t)
+	editorPath := filepath.Join(root, "web", "app", "routines", "python", "PythonRoutineEditorClient.tsx")
+	ed, err := os.ReadFile(editorPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", editorPath, err)
+	}
+	edStr := string(ed)
+	if strings.Count(edStr, "value={targetSceneId}") != 1 {
+		t.Fatal("REQ-027: exactly one scene selector must bind targetSceneId (run + viewport)")
+	}
+	if strings.Count(edStr, "<SceneLightsCanvas") != 1 {
+		t.Fatal("REQ-027: unified region must render a single SceneLightsCanvas for the live view")
+	}
+	if !strings.Contains(edStr, "startSceneRoutine(targetSceneId") {
+		t.Fatal("REQ-027: Start must target the same scene id as the viewport")
+	}
+	if !strings.Contains(edStr, "Run your script and watch the room") {
+		t.Fatal("REQ-027: unified run/viewport section must be clearly labeled for beginners")
+	}
+	if !strings.Contains(edStr, "Reset room lights") || !strings.Contains(edStr, "Reset camera") {
+		t.Fatal("REQ-027: unified region must expose reset scene lights and reset camera controls")
+	}
+	if strings.Contains(edStr, "debugSceneId") || strings.Contains(edStr, "runSceneId") {
+		t.Fatal("REQ-027: must not split run vs debug with separate scene id state")
 	}
 }
 
