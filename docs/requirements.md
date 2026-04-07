@@ -1263,3 +1263,45 @@ As an integrator or operator driving dynamic lighting, I want the system to sust
 - How **multi-tab** or **multi-client** viewers stay consistent when push channels are used.
 
 ---
+
+### REQ-030 — Python scene binding: random hex colour helper
+
+| Field | Value |
+|-------|-------|
+| **ID** | REQ-030 |
+| **Title** | Python scene binding: random hex colour helper |
+| **Priority** | Must |
+| **Actor(s)** | End user |
+
+**User story**
+
+As a **user** **writing** **Python** **routines**, I want **the** **`scene`** **binding** **(**or** **documented** **equivalent** **per** **architecture**)** **to** **offer** **a** **simple** **way** **to** **get** **a** **random** **colour** **string** **I** **can** **pass** **into** **light** **state** **updates**, **with** **the** **same** **kind** **of** **value** **as** **`"#%06x"** **%** **random.randrange(0x1000000)`**, **so** **that** **I** **do** **not** **have** **to** **remember** **that** **formatting** **pattern** **or** **import** **`random`** **just** **for** **this** **one** **job**.
+
+**Scope**
+
+- In scope: A **single** **documented** **callable** **on** **the** **Python** **routine** **scene** **surface** **(**REQ-022**)** **that** **returns** **a** **string** **valid** **as** **`color`** **in** **REQ-011** **(**`#` **plus** **six** **hex** **digits**)** **for** **each** **call**, **using** **the** **statistical** **behavior** **defined** **in** **business** **rule** **2** **below**. **On-page** **reference** **(**REQ-024**)** **and** **`docs/architecture.md`** **MUST** **name** **the** **callable** **and** **show** **a** **short** **commented** **example** **consistent** **with** **REQ-024** **sample** **style**.
+- Out of scope: **Palettes** **biased** **toward** **“bright”** **or** **pastel** **colours** **(**this** **requirement** **fixes** **the** **uniform** **24-bit** **pattern** **only**)**; **changing** **REQ-025** **default** **template** **wording** **unless** **architecture** **chooses** **to** **switch** **the** **template** **to** **the** **new** **helper**.
+
+**Business rules**
+
+1. The **product** **MUST** **expose** **exactly** **one** **primary** **documented** **entry** **point** **(**synchronous** **function**, **`async`** **function**, **or** **`scene`** **method** **per** **architecture**)** **for** **“random** **hex** **colour** **for** **light** **state”** **on** **the** **Python** **scene** **binding** **used** **during** **routines** **(**REQ-022**)**.
+2. **Each** **call** **MUST** **return** **a** **string** **equivalent** **to** **formatting** **one** **integer** **sample** **uniformly** **from** **`0`** **inclusive** **through** **`0xFFFFFF`** **inclusive** **as** **`"#%06x"** **%** **that_integer`** **(**same** **distribution** **and** **string** **shape** **as** **`"#%06x"** **%** **random.randrange(0x1000000)`** **in** **standard** **Python** **3**)**. **Hex** **digits** **MUST** **be** **lowercase** **unless** **architecture** **documents** **a** **single** **consistent** **uppercase** **policy** **that** **still** **satisfies** **REQ-011**.
+3. **The** **REQ-024** **API** **catalog** **MUST** **include** **this** **callable** **with** **a** **brief** **description** **and** **a** **sample** **that** **uses** **Python** **`#`** **line** **comments** **(**REQ-024** **sample** **rules**)**.
+4. **CodeMirror** **completions** **(**REQ-022**)** **and** **the** **worker** **implementation** **(**`docs/architecture.md`** **§3.17**)** **MUST** **stay** **aligned** **with** **the** **chosen** **Python** **name** **and** **sync**/**`async`** **semantics**.
+
+**Responsive / UX notes** *(when UI is involved)*
+
+- Mobile: **N/A** **(**API** **surface** **only**)**; **any** **UI** **labels** **for** **this** **feature** **follow** **REQ-002**/**REQ-018**.
+- Tablet: **N/A**
+- Desktop: **N/A**
+
+**Dependencies**
+
+- REQ-011, REQ-022, REQ-024
+
+**Open questions**
+
+- **Exact** **identifier** **(**e.g.** **`scene.random_hex_colour`** **vs** **module-level** **helper**)** **and** **whether** **the** **callable** **is** **`async`**.
+- **Whether** **REQ-025** **default** **template** **should** **replace** **inline** **`random.randrange`** **with** **the** **new** **helper** **for** **pedagogical** **consistency**.
+
+---

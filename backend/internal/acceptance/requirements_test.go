@@ -1120,6 +1120,61 @@ func TestAcceptance_REQ027_pythonRoutineUnifiedRunAndViewport(t *testing.T) {
 	}
 }
 
+func TestAcceptance_REQ030_pythonSceneRandomHexColour(t *testing.T) {
+	doc := readRequirements(t)
+	block := requirementBlock(doc, "REQ-030")
+	if block == "" {
+		t.Fatal("requirements must contain ### REQ-030 section")
+	}
+	lower := strings.ToLower(block)
+	if !strings.Contains(lower, "random") && !strings.Contains(lower, "randrange") {
+		t.Fatal("REQ-030 must describe random hex colour behaviour")
+	}
+	if !strings.Contains(lower, "req-011") || !strings.Contains(lower, "req-022") || !strings.Contains(lower, "req-024") {
+		t.Fatal("REQ-030 must list REQ-011, REQ-022, and REQ-024 in dependencies or body")
+	}
+	if !strings.Contains(block, "| **Priority** | Must |") {
+		t.Fatal("REQ-030 metadata must state priority Must")
+	}
+
+	root := repoRoot(t)
+	workerPath := filepath.Join(root, "web", "public", "dlm-python-scene-worker.mjs")
+	wb, err := os.ReadFile(workerPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", workerPath, err)
+	}
+	ws := string(wb)
+	if !strings.Contains(ws, "random_hex_colour") {
+		t.Fatal("dlm-python-scene-worker.mjs must expose random_hex_colour on the scene shim")
+	}
+	if !strings.Contains(ws, "randrange") {
+		t.Fatal("REQ-030 worker must use Python random.randrange for distribution parity")
+	}
+
+	catalogPath := filepath.Join(root, "web", "lib", "pythonSceneApiCatalog.ts")
+	cb, err := os.ReadFile(catalogPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", catalogPath, err)
+	}
+	cs := string(cb)
+	if !strings.Contains(cs, "random_hex_colour") {
+		t.Fatal("pythonSceneApiCatalog must list random_hex_colour for REQ-024")
+	}
+	if !strings.Contains(cs, "scene.random_hex_colour()") {
+		t.Fatal("pythonSceneApiCatalog must show scene.random_hex_colour() in template or snippet")
+	}
+
+	archPath := filepath.Join(root, "docs", "architecture.md")
+	archBytes, err := os.ReadFile(archPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", archPath, err)
+	}
+	archStr := string(archBytes)
+	if !strings.Contains(archStr, "random_hex_colour") {
+		t.Fatal("docs/architecture.md must document scene.random_hex_colour (REQ-030)")
+	}
+}
+
 func TestAcceptance_REQ029_highThroughputLightUpdates(t *testing.T) {
 	doc := readRequirements(t)
 	block := requirementBlock(doc, "REQ-029")

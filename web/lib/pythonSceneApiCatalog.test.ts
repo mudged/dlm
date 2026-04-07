@@ -10,6 +10,7 @@ describe("pythonSceneApiCatalog", () => {
     expect(labels).toContain("scene.width");
     expect(labels).toContain("scene.height");
     expect(labels).toContain("scene.depth");
+    expect(labels).toContain("random_hex_colour");
     expect(labels).toContain("set_lights_in_sphere");
     expect(labels).toContain("update_lights_batch");
   });
@@ -17,6 +18,8 @@ describe("pythonSceneApiCatalog", () => {
   it("default template demonstrates sphere colour update", () => {
     expect(PYTHON_ROUTINE_DEFAULT_SOURCE).toContain("set_lights_in_sphere");
     expect(PYTHON_ROUTINE_DEFAULT_SOURCE).toContain("await");
+    expect(PYTHON_ROUTINE_DEFAULT_SOURCE).toContain("scene.random_hex_colour()");
+    expect(PYTHON_ROUTINE_DEFAULT_SOURCE).not.toMatch(/^\s*import random\s*$/m);
     expect(PYTHON_ROUTINE_DEFAULT_SOURCE.split("\n").filter((l) => l.trim().startsWith("#")).length).toBeGreaterThanOrEqual(3);
   });
 

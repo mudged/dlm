@@ -976,6 +976,29 @@ Feature: High-throughput light updates (REQ-029)
     Given docs/requirements.md defines REQ-003 and REQ-029
     When the REQ-029 scope is read
     Then solutions for high-throughput light updates must remain plausible on Raspberry Pi 4 constraints from REQ-003
+
+Feature: Python scene API random hex colour helper (REQ-030)
+
+  Scenario: REQ-030 requires a documented random colour helper on the Python scene binding
+    Parent requirement: REQ-030
+    Given docs/requirements.md defines REQ-022 REQ-011 and REQ-030
+    When the REQ-030 scope and business rules are read
+    Then the Python routine scene surface must expose exactly one primary documented callable for a random hex colour suitable for light state color fields
+    And docs architecture.md must name the callable and its sync or async semantics
+
+  Scenario: REQ-030 matches uniform 24-bit hex distribution and REQ-011 string shape
+    Parent requirement: REQ-030
+    Given docs/requirements.md defines REQ-011 and REQ-030
+    When the REQ-030 business rule about return value formatting is read
+    Then each call must return a string equivalent to formatting one integer uniformly from 0 through 0xFFFFFF as "#%06x" % that integer
+    And the string must be valid as REQ-011 color with hash plus six hex digits
+
+  Scenario: REQ-030 requires REQ-024 catalog completion and worker editor alignment
+    Parent requirement: REQ-030
+    Given docs/requirements.md defines REQ-022 REQ-024 and REQ-030
+    When the REQ-030 business rules about documentation and tooling are read
+    Then the REQ-024 API catalog must list the callable with a commented sample per REQ-024
+    And CodeMirror completions and the scene worker must stay aligned with the chosen Python name and async or sync semantics
 ```
 
 ---

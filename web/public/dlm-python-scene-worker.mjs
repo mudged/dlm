@@ -37,6 +37,9 @@ async function refreshDims() {
 function buildScene() {
   const base = () => `/api/v1/scenes/${sceneId}`;
   return {
+    /** REQ-030: same distribution as "#%06x" % random.randrange(0x1000000) in Pyodide. */
+    random_hex_colour: () =>
+      pyodide.runPython('"#%06x" % __import__("random").randrange(0x1000000)'),
     get width() {
       return dimsCache?.size?.width ?? 0;
     },

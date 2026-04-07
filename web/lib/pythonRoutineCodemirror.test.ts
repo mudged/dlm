@@ -7,6 +7,7 @@ describe("pythonRoutineCodemirror", () => {
     expect(labels).toContain("width");
     expect(labels).toContain("height");
     expect(labels).toContain("depth");
+    expect(labels).toContain("random_hex_colour");
     expect(labels).toContain("get_all_lights");
     expect(labels).toContain("update_lights_batch");
   });

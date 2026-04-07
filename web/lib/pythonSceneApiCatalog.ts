@@ -10,18 +10,19 @@ export type SceneApiCatalogEntry = {
   description: string;
   /** Copy-paste example; may use top-level await */
   snippet: string;
+  /** When set, overrides completion list detail (e.g. synchronous methods). */
+  completionDetail?: string;
 };
 
 export const PYTHON_ROUTINE_DEFAULT_SOURCE = `# Demo: change colours of lights inside a sphere in scene space.
 # Adjust center, radius, and colours for your layout.
-import random
 
 # Middle of a typical room (metres)
 cx, cy, cz = 1.0, 1.0, 1.0
 # How big the bubble is (metres)
 radius = 0.8
-# Random bright colour
-colour = "#%06x" % random.randrange(0x1000000)
+# Random colour for the lights (# + six hex digits, REQ-030)
+colour = scene.random_hex_colour()
 # Turn on lights inside the sphere and paint them
 await scene.set_lights_in_sphere(
     {"x": cx, "y": cy, "z": cz},
@@ -54,6 +55,16 @@ h = scene.height`,
     description: "How deep the room is in metres (front to back).",
     snippet: `# Front-to-back size of the room (metres)
 d = scene.depth`,
+  },
+  {
+    id: "random-hex-colour",
+    label: "random_hex_colour",
+    kind: "method",
+    description:
+      "Returns a random #rrggbb colour string you can use for light color (no import random needed).",
+    completionDetail: "() → str",
+    snippet: `# Pick a random colour string for a light
+colour = scene.random_hex_colour()`,
   },
   {
     id: "get-all-lights",
@@ -149,6 +160,8 @@ export const SCENE_API_COMPLETIONS: {
   label: e.label.startsWith("scene.")
     ? e.label.slice("scene.".length)
     : e.label,
-  detail: e.kind === "property" ? "property" : "() → await",
+  detail:
+    e.completionDetail ??
+    (e.kind === "property" ? "property" : "() → await"),
   type: e.kind === "property" ? "property" : "function",
 }));
