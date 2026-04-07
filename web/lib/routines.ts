@@ -4,6 +4,8 @@ export type RoutineDefinition = {
   description: string;
   type: string;
   python_source?: string;
+  /** Present when type is shape_animation */
+  definition_json?: unknown;
   created_at: string;
 };
 
@@ -26,10 +28,14 @@ export type StartRoutineResponse = {
 /** Legacy persisted type only (migrated to python_scene_script on open). */
 export const ROUTINE_TYPE_RANDOM_COLOUR_ALL = "random_colour_cycle_all";
 export const ROUTINE_TYPE_PYTHON_SCENE_SCRIPT = "python_scene_script";
+export const ROUTINE_TYPE_SHAPE_ANIMATION = "shape_animation";
 
-/** Only Python routines are creatable (REQ-023). */
+/** Python or shape animation (REQ-023). */
 export function isCreatableRoutineType(type: string): boolean {
-  return type === ROUTINE_TYPE_PYTHON_SCENE_SCRIPT;
+  return (
+    type === ROUTINE_TYPE_PYTHON_SCENE_SCRIPT ||
+    type === ROUTINE_TYPE_SHAPE_ANIMATION
+  );
 }
 
 export async function fetchRoutines(): Promise<RoutineDefinition[]> {
@@ -58,6 +64,7 @@ export async function createRoutine(body: {
   description: string;
   type: string;
   python_source?: string;
+  definition_json?: unknown;
 }): Promise<RoutineDefinition> {
   const res = await fetch("/api/v1/routines", {
     method: "POST",
@@ -79,6 +86,7 @@ export async function patchRoutine(
     name?: string;
     description?: string;
     python_source?: string;
+    definition_json?: unknown;
   },
 ): Promise<RoutineDefinition> {
   const res = await fetch(`/api/v1/routines/${encodeURIComponent(id)}`, {

@@ -26,8 +26,10 @@ import {
   type SceneDetail,
 } from "@/lib/scenes";
 import { PythonRoutineHost } from "@/components/PythonRoutineHost";
+import { ShapeAnimationRoutineHost } from "@/components/ShapeAnimationRoutineHost";
 import {
   ROUTINE_TYPE_PYTHON_SCENE_SCRIPT,
+  ROUTINE_TYPE_SHAPE_ANIMATION,
   fetchRoutine,
   fetchRoutines,
   fetchSceneRoutineRuns,
@@ -57,6 +59,8 @@ export function SceneDetailClient() {
   const [selectedRoutineId, setSelectedRoutineId] = useState("");
   const [pythonSource, setPythonSource] = useState<string | null>(null);
   const [pythonRunnerErr, setPythonRunnerErr] = useState<string | null>(null);
+  const [shapeDefinitionJson, setShapeDefinitionJson] = useState<string | null>(null);
+  const [shapeRunnerErr, setShapeRunnerErr] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!id) {
@@ -135,7 +139,10 @@ export function SceneDetailClient() {
   const firstRun = routineRuns[0];
   const isPythonRun =
     firstRun?.routine_type === ROUTINE_TYPE_PYTHON_SCENE_SCRIPT;
+  const isShapeRun =
+    firstRun?.routine_type === ROUTINE_TYPE_SHAPE_ANIMATION;
   const pythonRoutineId = firstRun?.routine_id;
+  const shapeRoutineId = firstRun?.routine_id;
 
   useEffect(() => {
     if (!pythonRoutineId || !isPythonRun) {
@@ -163,6 +170,37 @@ export function SceneDetailClient() {
       cancelled = true;
     };
   }, [pythonRoutineId, isPythonRun]);
+
+  useEffect(() => {
+    if (!shapeRoutineId || !isShapeRun) {
+      setShapeDefinitionJson(null);
+      setShapeRunnerErr(null);
+      return;
+    }
+    let cancelled = false;
+    setShapeRunnerErr(null);
+    void fetchRoutine(shapeRoutineId)
+      .then((r) => {
+        if (!cancelled) {
+          try {
+            setShapeDefinitionJson(JSON.stringify(r.definition_json ?? {}));
+          } catch {
+            setShapeDefinitionJson("{}");
+          }
+        }
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setShapeDefinitionJson(null);
+          setShapeRunnerErr(
+            e instanceof Error ? e.message : "Could not load shape routine",
+          );
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [shapeRoutineId, isShapeRun]);
 
   const inSceneIds = useMemo(() => {
     if (!scene) {
@@ -357,6 +395,9 @@ export function SceneDetailClient() {
                 {isPythonRun ? (
                   <span className="ml-2 text-xs text-slate-500">(script)</span>
                 ) : null}
+                {isShapeRun ? (
+                  <span className="ml-2 text-xs text-slate-500">(shapes)</span>
+                ) : null}
               </p>
               <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                 {isPythonRun ? (
@@ -368,6 +409,21 @@ export function SceneDetailClient() {
                     onClick={() =>
                       router.push(
                         `/routines/python?id=${encodeURIComponent(routineRuns[0].routine_id)}&scene=${encodeURIComponent(id)}`,
+                      )
+                    }
+                  >
+                    Edit routine
+                  </Button>
+                ) : null}
+                {isShapeRun ? (
+                  <Button
+                    type="button"
+                    icon={faPenToSquare}
+                    className="min-h-11 w-full sm:w-auto"
+                    disabled={busy}
+                    onClick={() =>
+                      router.push(
+                        `/routines/shape?id=${encodeURIComponent(routineRuns[0].routine_id)}&scene=${encodeURIComponent(id)}`,
                       )
                     }
                   >
@@ -401,6 +457,29 @@ export function SceneDetailClient() {
                     sceneId={id}
                     source={pythonSource}
                     onWorkerMessage={(m) => setPythonRunnerErr(m)}
+                  />
+                )}
+              </div>
+            ) : null}
+            {isShapeRun && firstRun && id ? (
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-600 dark:bg-slate-950/50">
+                {shapeRunnerErr ? (
+                  <p className="mb-2 text-xs text-red-600 dark:text-red-400">
+                    {shapeRunnerErr}
+                  </p>
+                ) : null}
+                {shapeDefinitionJson === null ? (
+                  <p className="text-xs text-slate-600 dark:text-slate-400">
+                    Loading shape definition…
+                  </p>
+                ) : (
+                  <ShapeAnimationRoutineHost
+                    sceneId={id}
+                    runId={firstRun.id}
+                    definitionJson={shapeDefinitionJson}
+                    onSceneRefresh={() => void load()}
+                    onError={(m) => setShapeRunnerErr(m)}
+                    onStopped={() => void load()}
                   />
                 )}
               </div>

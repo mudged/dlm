@@ -29,12 +29,82 @@ export type SceneDetail = {
   items: SceneItem[];
 };
 
+export type SceneDimensionsResponse = {
+  origin: { x: number; y: number; z: number };
+  size: { width: number; height: number; depth: number };
+  max: { x: number; y: number; z: number };
+  margin_m: number;
+};
+
+export type SceneLightFlatRow = {
+  scene_id: string;
+  model_id: string;
+  light_id: number;
+  sx: number;
+  sy: number;
+  sz: number;
+};
+
 export async function fetchScenes(): Promise<SceneSummary[]> {
   const res = await fetch("/api/v1/scenes", { cache: "no-store" });
   if (!res.ok) {
     throw new Error(`scenes list failed (${res.status})`);
   }
   return res.json() as Promise<SceneSummary[]>;
+}
+
+export async function fetchSceneDimensions(
+  sceneId: string,
+): Promise<SceneDimensionsResponse> {
+  const res = await fetch(
+    `/api/v1/scenes/${encodeURIComponent(sceneId)}/dimensions`,
+    { cache: "no-store" },
+  );
+  if (!res.ok) {
+    throw new Error(`scene dimensions failed (${res.status})`);
+  }
+  return res.json() as Promise<SceneDimensionsResponse>;
+}
+
+export async function fetchSceneLightsFlat(
+  sceneId: string,
+): Promise<SceneLightFlatRow[]> {
+  const res = await fetch(
+    `/api/v1/scenes/${encodeURIComponent(sceneId)}/lights`,
+    { cache: "no-store" },
+  );
+  if (!res.ok) {
+    throw new Error(`scene lights list failed (${res.status})`);
+  }
+  return res.json() as Promise<SceneLightFlatRow[]>;
+}
+
+export async function patchSceneLightsStateBatch(
+  sceneId: string,
+  updates: {
+    model_id: string;
+    light_id: number;
+    on: boolean;
+    color: string;
+    brightness_pct: number;
+  }[],
+): Promise<void> {
+  const res = await fetch(
+    `/api/v1/scenes/${encodeURIComponent(sceneId)}/lights/state/batch`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ updates }),
+    },
+  );
+  if (!res.ok) {
+    const j = (await res.json().catch(() => null)) as {
+      error?: { message?: string };
+    };
+    throw new Error(
+      j?.error?.message ?? `scene batch update failed (${res.status})`,
+    );
+  }
 }
 
 export async function fetchScene(id: string): Promise<SceneDetail> {

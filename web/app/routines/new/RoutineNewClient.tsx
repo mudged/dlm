@@ -2,15 +2,25 @@
 
 import { faArrowLeft, faPlus } from "@fortawesome/free-solid-svg-icons";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { PYTHON_ROUTINE_DEFAULT_SOURCE } from "@/lib/pythonSceneApiCatalog";
-import { ROUTINE_TYPE_PYTHON_SCENE_SCRIPT, createRoutine } from "@/lib/routines";
+import { SHAPE_ANIMATION_DEFAULT_DEFINITION } from "@/lib/shapeAnimationDefault";
+import {
+  ROUTINE_TYPE_PYTHON_SCENE_SCRIPT,
+  ROUTINE_TYPE_SHAPE_ANIMATION,
+  createRoutine,
+} from "@/lib/routines";
 
 export default function RoutineNewClient() {
   const router = useRouter();
+  const sp = useSearchParams();
+  const kindParam = sp.get("kind");
+  const initialKind: "python" | "shape" =
+    kindParam === "shape" ? "shape" : "python";
 
+  const [kind, setKind] = useState<"python" | "shape">(initialKind);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -25,13 +35,23 @@ export default function RoutineNewClient() {
       if (!n) {
         throw new Error("Name is required.");
       }
-      const created = await createRoutine({
-        name: n,
-        description,
-        type: ROUTINE_TYPE_PYTHON_SCENE_SCRIPT,
-        python_source: PYTHON_ROUTINE_DEFAULT_SOURCE,
-      });
-      router.replace(`/routines/python?id=${encodeURIComponent(created.id)}`);
+      if (kind === "python") {
+        const created = await createRoutine({
+          name: n,
+          description,
+          type: ROUTINE_TYPE_PYTHON_SCENE_SCRIPT,
+          python_source: PYTHON_ROUTINE_DEFAULT_SOURCE,
+        });
+        router.replace(`/routines/python?id=${encodeURIComponent(created.id)}`);
+      } else {
+        const created = await createRoutine({
+          name: n,
+          description,
+          type: ROUTINE_TYPE_SHAPE_ANIMATION,
+          definition_json: SHAPE_ANIMATION_DEFAULT_DEFINITION,
+        });
+        router.replace(`/routines/shape?id=${encodeURIComponent(created.id)}`);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Create failed");
     } finally {
@@ -52,9 +72,8 @@ export default function RoutineNewClient() {
           New routine
         </h1>
         <p className="mt-1 max-w-xl text-sm text-slate-600 dark:text-slate-400">
-          Routines are Python scripts that run in your browser and change lights
-          in a room via the scene API. Name your routine, then edit the starter
-          code in the next step.
+          Choose Python (script in Pyodide) or shape animation (JSON definition,
+          runs in the browser). Name your routine, then edit it on the next page.
         </p>
       </header>
 
@@ -68,6 +87,31 @@ export default function RoutineNewClient() {
         onSubmit={(e) => void onSubmit(e)}
         className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900/40"
       >
+        <fieldset className="space-y-2">
+          <legend className="text-xs font-medium text-slate-700 dark:text-slate-300">
+            Kind
+          </legend>
+          <label className="flex cursor-pointer items-center gap-2 text-sm">
+            <input
+              type="radio"
+              name="kind"
+              checked={kind === "python"}
+              onChange={() => setKind("python")}
+              className="h-4 w-4"
+            />
+            Python scene script
+          </label>
+          <label className="flex cursor-pointer items-center gap-2 text-sm">
+            <input
+              type="radio"
+              name="kind"
+              checked={kind === "shape"}
+              onChange={() => setKind("shape")}
+              className="h-4 w-4"
+            />
+            Shape animation
+          </label>
+        </fieldset>
         <label className="flex flex-col gap-1 text-xs">
           <span className="text-slate-600 dark:text-slate-400">Name</span>
           <input

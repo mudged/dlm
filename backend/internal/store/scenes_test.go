@@ -95,7 +95,7 @@ func TestRoutinesCreateStartStopDelete(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r, err := s.CreateRoutine(ctx, "fx", "d", RoutineTypePythonSceneScript, "pass")
+	r, err := s.CreateRoutine(ctx, "fx", "d", RoutineTypePythonSceneScript, "pass", "")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -14,16 +14,18 @@ import (
 const maxRoutineJSONBytes = 1 << 18 // 256 KiB
 
 type createRoutineBody struct {
-	Name          string  `json:"name"`
-	Description   string  `json:"description"`
-	Type          string  `json:"type"`
-	PythonSource  *string `json:"python_source"`
+	Name           string          `json:"name"`
+	Description    string          `json:"description"`
+	Type           string          `json:"type"`
+	PythonSource   *string         `json:"python_source"`
+	DefinitionJSON json.RawMessage `json:"definition_json"`
 }
 
 type patchRoutineBody struct {
-	Name         *string `json:"name"`
-	Description  *string `json:"description"`
-	PythonSource *string `json:"python_source"`
+	Name            *string          `json:"name"`
+	Description     *string          `json:"description"`
+	PythonSource    *string          `json:"python_source"`
+	DefinitionJSON  json.RawMessage  `json:"definition_json"`
 }
 
 type routineRunsResponse struct {
@@ -84,14 +86,22 @@ func (a *apiDeps) createRoutine(w http.ResponseWriter, r *http.Request) {
 	if body.PythonSource != nil {
 		py = *body.PythonSource
 	}
-	out, err := a.store.CreateRoutine(r.Context(), body.Name, body.Description, body.Type, py)
+	defStr := ""
+	if len(body.DefinitionJSON) > 0 {
+		defStr = string(body.DefinitionJSON)
+	}
+	out, err := a.store.CreateRoutine(r.Context(), body.Name, body.Description, body.Type, py, defStr)
 	if errors.Is(err, store.ErrRoutineUnknownType) {
 		writeAPIError(w, http.StatusBadRequest, "validation_failed", err.Error())
 		return
 	}
 	if err != nil {
 		msg := err.Error()
-		if strings.Contains(msg, "name is required") {
+		if strings.Contains(msg, "name is required") ||
+			strings.Contains(msg, "definition_json") ||
+			strings.Contains(msg, "version must") ||
+			strings.Contains(msg, "shapes") ||
+			strings.Contains(msg, "background") {
 			writeAPIError(w, http.StatusBadRequest, "validation_failed", msg)
 			return
 		}
@@ -176,13 +186,18 @@ func (a *apiDeps) patchRoutine(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusBadRequest, "bad_request", "invalid JSON")
 		return
 	}
-	out, err := a.store.PatchRoutine(r.Context(), id, body.Name, body.Description, body.PythonSource)
+	var defPtr *string
+	if len(body.DefinitionJSON) > 0 {
+		s := string(body.DefinitionJSON)
+		defPtr = &s
+	}
+	out, err := a.store.PatchRoutine(r.Context(), id, body.Name, body.Description, body.PythonSource, defPtr)
 	if errors.Is(err, store.ErrRoutineNotFound) {
 		writeAPIError(w, http.StatusNotFound, "not_found", "routine not found")
 		return
 	}
 	if errors.Is(err, store.ErrRoutineNotEditable) {
-		writeAPIError(w, http.StatusConflict, "routine_not_editable", "only Python scene routines can be updated")
+		writeAPIError(w, http.StatusConflict, "routine_not_editable", "update uses fields that do not match this routine type")
 		return
 	}
 	if errors.Is(err, store.ErrRoutineRunActive) {
@@ -191,7 +206,9 @@ func (a *apiDeps) patchRoutine(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		msg := err.Error()
-		if strings.Contains(msg, "at least one field") || strings.Contains(msg, "name is required") {
+		if strings.Contains(msg, "at least one field") || strings.Contains(msg, "name is required") ||
+			strings.Contains(msg, "definition_json") || strings.Contains(msg, "version must") ||
+			strings.Contains(msg, "shapes") || strings.Contains(msg, "background") {
 			writeAPIError(w, http.StatusBadRequest, "validation_failed", msg)
 			return
 		}
