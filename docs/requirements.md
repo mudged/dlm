@@ -1350,3 +1350,46 @@ As an **end** **user** **working** **with** **models** **or** **scenes**, I want
 - **Exact** **HTTP** **/** **API** **signaling** **when** **a** **write** **is** **skipped** **as** **a** **no-op** **(**e.g.** **204** **vs** **200** **with** **unchanged** **body**)** **for** **integrators**.
 
 ---
+
+### REQ-032 — Novice Python sample routines: growing sphere and sweeping cuboid
+
+| Field | Value |
+|-------|-------|
+| **ID** | REQ-032 |
+| **Title** | Novice Python sample routines: growing sphere and sweeping cuboid |
+| **Priority** | Must |
+| **Actor(s)** | End user learning Python routines; maintainer (documentation and product samples) |
+
+**User story**
+
+As a **novice** **Python** **user**, I want **ready-made** **sample** **routines** **that** **use** **only** **the** **standard** **documented** **Python** **scene** **API** **and** **are** **heavily** **commented** **in** **plain** **language**, **so** **that** **I** **can** **read** **and** **adapt** **two** **concrete** **animations** **(**a** **growing** **sphere** **and** **a** **sweeping** **cuboid**)** **without** **guessing** **at** **internal** **APIs** **or** **advanced** **patterns**.
+
+**Scope**
+
+- In scope: **At** **least** **two** **separate** **sample** **Python** **routine** **bodies** **(**or** **equivalent** **first-class** **product** **samples** **discoverable** **from** **the** **Python** **routine** **authoring** **experience** **per** **REQ-022**)** **that** **implement** **the** **behaviors** **in** **business** **rules** **2** **and** **3** **below**. **Each** **sample** **MUST** **rely** **only** **on** **the** **public** **Python** **scene** **binding** **and** **documented** **helpers** **(**e.g.** **REQ-030** **random** **colour** **when** **appropriate**)** **as** **named** **in** **`docs/architecture.md`** **and** **the** **REQ-024** **catalog**. **Comments** **MUST** **be** **frequent**, **short**, **and** **task-oriented** **(**what** **this** **block** **does** **and** **why**)** **for** **readers** **who** **are** **new** **to** **Python** **or** **to** **this** **API** **(**consistent** **with** **REQ-024** **sample** **comment** **style** **and** **REQ-022** **novice** **wording** **goals** **for** **supporting** **text** **where** **it** **appears** **next** **to** **these** **samples**)**.
+- Out of scope: **Changing** **REQ-025** **default** **template** **text** **unless** **architecture** **explicitly** **replaces** **it** **with** **one** **of** **these** **samples** **;** **mandating** **a** **specific** **number** **of** **HTTP** **requests** **per** **frame** **(**REQ-029** **still** **applies**)** **beyond** **“reasonable”** **smooth** **updates** **documented** **in** **architecture**.
+
+**Business rules**
+
+1. **Samples** **MUST** **be** **valid** **Python** **routine** **code** **that** **could** **run** **unchanged** **(**modulo** **user** **scene** **selection** **and** **run** **controls**)** **against** **any** **scene** **that** **satisfies** **REQ-015**/**REQ-020** **(**subject** **to** **normal** **REQ-020** **validation** **for** **regions** **and** **bulk** **updates**)**.
+2. **Growing-sphere** **sample** **(**looping** **cycle**)** **:** **(**a**)** **Choose** **a** **new** **independent** **uniform** **random** **REQ-011**-valid **hex** **colour** **each** **cycle** **(**REQ-030** **helper** **SHOULD** **be** **used** **in** **the** **sample** **unless** **architecture** **documents** **a** **clear** **reason** **not** **to**)**. **(**b**)** **Place** **a** **sphere** **in** **scene** **space** **centered** **at** **the** **geometric** **center** **of** **the** **scene** **axis-aligned** **extent** **(**same** **width**/**depth**/**height** **semantics** **as** **REQ-026**/**REQ-020**)**. **(**c**)** **The** **sphere** **starts** **with** **a** **small** **positive** **radius** **and** **over** **a** **single** **cycle** **duration** **of** **10** **SI** **seconds** **its** **radius** **increases** **monotonically** **until** **every** **light** **position** **in** **the** **scene** **lies** **inside** **or** **on** **the** **closed** **sphere** **(**inclusion** **semantics** **MUST** **match** **REQ-020** **sphere** **queries**/**updates**)** **—** **i.e.** **the** **sphere** **“fills”** **the** **scene** **volume** **for** **light** **targeting** **purposes**. **(**d**)** **While** **the** **sphere** **grows**, **every** **light** **whose** **scene** **position** **is** **inside** **the** **current** **closed** **sphere** **MUST** **be** **set** **on** **with** **brightness** **100** **percent** **and** **hex** **colour** **equal** **to** **the** **cycle** **colour** **(**REQ-011** **semantics**)**. **(**e**)** **The** **sample** **MUST** **not** **turn** **off** **or** **recolour** **lights** **solely** **because** **they** **fall** **outside** **the** **sphere** **during** **growth** **(**state** **of** **lights** **never** **yet** **enclosed** **is** **unspecified** **by** **this** **requirement** **and** **remains** **whatever** **the** **scene** **already** **had**)**. **(**f**)** **After** **the** **growth** **completes**, **the** **next** **cycle** **begins** **immediately** **with** **a** **new** **small** **sphere** **and** **a** **new** **random** **colour**, **repeating** **while** **the** **routine** **run** **remains** **active** **(**REQ-022** **loop** **semantics**)**.
+3. **Sweeping-cuboid** **sample** **(**looping** **cycle**)** **:** **(**a**)** **Each** **cycle** **uses** **a** **new** **independent** **uniform** **random** **REQ-011**-valid **hex** **colour** **(**REQ-030** **helper** **SHOULD** **be** **used** **)**. **(**b**)** **Define** **a** **cuboid** **in** **scene** **space** **with** **width** **and** **depth** **equal** **to** **the** **scene** **width** **and** **depth** **(**REQ-026**/**REQ-020**)** **and** **height** **exactly** **0.2** **SI** **meters** **(**20** **cm**)**. **(**c**)** **At** **the** **start** **of** **each** **cycle** **the** **cuboid** **is** **positioned** **so** **it** **lies** **at** **the** **bottom** **of** **the** **scene** **volume** **(**flush** **with** **the** **minimum** **extent** **on** **the** **vertical** **axis** **that** **architecture** **maps** **to** **“height”**/**up** **in** **scene** **documentation**)** **and** **spans** **the** **full** **width** **and** **depth**. **(**d**)** **Over** **10** **SI** **seconds** **the** **cuboid** **translates** **monotonically** **so** **that** **by** **the** **end** **of** **the** **cycle** **it** **occupies** **the** **top** **of** **the** **scene** **volume** **(**analogous** **alignment** **to** **the** **maximum** **extent** **on** **that** **same** **vertical** **axis**)** **without** **leaving** **the** **scene** **bounds**. **(**e**)** **At** **each** **update**, **every** **light** **whose** **scene** **position** **lies** **inside** **or** **on** **the** **closed** **cuboid** **(**REQ-020** **cuboid** **semantics**)** **MUST** **be** **on** **with** **brightness** **100** **percent** **and** **the** **cycle** **colour**. **(**f**)** **Any** **light** **that** **was** **inside** **the** **cuboid** **on** **a** **previous** **update** **in** **the** **same** **cycle** **but** **is** **no** **longer** **inside** **the** **cuboid** **MUST** **be** **set** **off** **(**`on`** **false** **per** **REQ-011**)**. **(**g**)** **After** **the** **cuboid** **reaches** **the** **top**, **the** **next** **cycle** **starts** **at** **the** **bottom** **with** **a** **new** **random** **colour**, **repeating** **while** **the** **run** **remains** **active**.
+4. **Both** **samples** **MUST** **NOT** **read** **or** **write** **canonical** **model** **coordinates** **directly** **;** **both** **MUST** **use** **scene**-space **operations** **only** **(**REQ-022**/**REQ-020**)**.
+5. **`docs/architecture.md`** **MUST** **name** **where** **these** **samples** **live** **(**e.g.** **embedded** **strings**, **files** **shipped** **with** **the** **product**, **or** **REQ-024** **catalog** **entries**)** **and** **how** **they** **relate** **to** **the** **default** **new-routine** **template** **(**REQ-025**)** **if** **applicable**.
+
+**Responsive / UX notes** *(when UI is involved)*
+
+- Mobile: **Any** **UI** **that** **surfaces** **these** **samples** **(**open**, **insert**, **duplicate**)** **MUST** **follow** **REQ-002** **and** **REQ-022**/**REQ-024** **touch** **and** **layout** **expectations**.
+- Tablet: **Same** **as** **mobile**.
+- Desktop: **Same** **non-hover-only** **expectations** **for** **essential** **actions**.
+
+**Dependencies**
+
+- REQ-011, REQ-020, REQ-022, REQ-024, REQ-026, REQ-030
+
+**Open questions**
+
+- **Whether** **both** **samples** **ship** **as** **separate** **saved** **routine** **definitions**, **as** **insertable** **REQ-024** **snippets** **only**, **or** **both**.
+- **Preferred** **temporal** **resolution** **(**number** **of** **updates** **across** **each** **10** **s** **cycle**)** **for** **smooth** **motion** **vs** **Pi**/**REQ-029** **load** **(**architecture** **trade-off**)**.
+
+---

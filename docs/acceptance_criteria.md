@@ -1044,6 +1044,50 @@ Feature: Redundant light-state skips (visualization, persistence, future WLED) (
     When docs/architecture.md is read after the architect pass
     Then it describes where equivalence is evaluated what is cached invalidation rules and documented no-op persistence behavior
     And it aligns with REQ-029 observer and refresh strategy where relevant
+
+Feature: Novice Python sample routines growing sphere and sweeping cuboid (REQ-032)
+
+  Scenario: REQ-032 mandates two documented novice-oriented samples using public scene API only
+    Parent requirement: REQ-032
+    Given docs/requirements.md defines REQ-032
+    When the REQ-032 scope and business rules are read
+    Then the product must ship or document at least two complete sample Python routines for the growing sphere and sweeping cuboid behaviors
+    And each sample must use only the public Python scene API and documented helpers such as REQ-030 as named in architecture and REQ-024
+    And each sample must include frequent short hash comments aimed at novice readers consistent with REQ-024 sample comment style
+
+  Scenario: Growing sphere sample centers fills scene over ten seconds and loops with new random colour
+    Parent requirement: REQ-032
+    Given docs/requirements.md defines REQ-011 REQ-020 REQ-022 REQ-026 REQ-030 and REQ-032
+    When the growing sphere sample behavior described in REQ-032 business rule 2 is read
+    Then each cycle must use a new independent random REQ-011 valid hex colour
+    And the sphere must be centered at the geometric center of the scene axis aligned extent per REQ-026 and REQ-020
+    And over ten SI seconds the sphere radius must increase monotonically from a small positive value until every scene light lies inside or on the closed sphere per REQ-020 inclusion semantics
+    And while growing every light inside the current closed sphere must be on with brightness 100 percent and the cycle hex colour
+    And after growth completes a new cycle must begin immediately with a new small sphere and new random colour while the run remains active
+
+  Scenario: Sweeping cuboid sample spans scene width and depth with twenty cm height and turns off exited lights
+    Parent requirement: REQ-032
+    Given docs/requirements.md defines REQ-011 REQ-020 REQ-022 REQ-026 REQ-030 and REQ-032
+    When the sweeping cuboid sample behavior described in REQ-032 business rule 3 is read
+    Then each cycle must use a new independent random REQ-011 valid hex colour
+    And the cuboid must have width and depth equal to scene width and depth and height exactly 0.2 meters
+    And each cycle must start with the cuboid at the bottom of the scene volume and over ten SI seconds move monotonically to the top without leaving scene bounds
+    And at each update every light inside or on the closed cuboid must be on with brightness 100 percent and the cycle colour
+    And any light that was inside the cuboid on a prior update in the same cycle but is no longer inside must be set off per REQ-011
+    And after reaching the top a new cycle must start at the bottom with a new random colour while the run remains active
+
+  Scenario: REQ-032 samples must not rewrite canonical model coordinates
+    Parent requirement: REQ-032
+    Given docs/requirements.md defines REQ-005 REQ-015 REQ-020 and REQ-032
+    When the REQ-032 business rule about scene API only is read
+    Then both samples must affect lights only through scene space operations
+    And canonical stored model coordinates must not be rewritten by the sample logic
+
+  Scenario: Architecture documents where REQ-032 samples live
+    Parent requirement: REQ-032
+    Given docs/requirements.md defines REQ-032 and REQ-025
+    When docs/architecture.md is read after the architect pass
+    Then it names where the REQ-032 samples live and how they relate to the default new Python routine template if applicable
 ```
 
 ---
