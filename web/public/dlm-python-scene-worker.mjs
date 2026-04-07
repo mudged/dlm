@@ -26,8 +26,34 @@ async function apiJson(method, path, body) {
   return null;
 }
 
+/** API JSON passed to Python must be native dict/list, not JsProxy (not subscriptable). */
+function jsonToPy(data) {
+  if (data == null || pyodide == null) {
+    return data;
+  }
+  return pyodide.toPy(data);
+}
+
+/**
+ * Python dicts/lists reach JS as PyProxy; spread/JSON.stringify skip their keys unless
+ * converted (see architecture §3.17 — pyodide.ffi.to_js).
+ */
+function fromPy(x) {
+  if (x == null || typeof x !== "object") {
+    return x;
+  }
+  if (typeof x.toJs === "function") {
+    return x.toJs({
+      dict_converter: Object.fromEntries,
+      create_pyproxies: false,
+    });
+  }
+  return x;
+}
+
 function point(p) {
-  return { x: Number(p.x), y: Number(p.y), z: Number(p.z) };
+  const q = fromPy(p);
+  return { x: Number(q.x), y: Number(q.y), z: Number(q.z) };
 }
 
 async function refreshDims() {
@@ -58,40 +84,64 @@ function buildScene() {
     get max_z() {
       return dimsCache?.max?.z ?? 0;
     },
-    get_all_lights: () => apiJson("GET", `${base()}/lights`),
-    get_lights_within_sphere: (c, radius) =>
-      apiJson("POST", `${base()}/lights/query/sphere`, {
-        center: point(c),
-        radius: Number(radius),
-      }),
-    get_lights_within_cuboid: (pos, dim) =>
-      apiJson("POST", `${base()}/lights/query/cuboid`, {
-        position: point(pos),
-        dimensions: {
-          width: Number(dim.width),
-          height: Number(dim.height),
-          depth: Number(dim.depth),
-        },
-      }),
-    set_all_lights: (patch) => apiJson("PATCH", `${base()}/lights/state/scene`, patch),
-    set_lights_in_sphere: (c, radius, patch) =>
-      apiJson("PATCH", `${base()}/lights/state/sphere`, {
-        center: point(c),
-        radius: Number(radius),
-        ...patch,
-      }),
-    set_lights_in_cuboid: (pos, dim, patch) =>
-      apiJson("PATCH", `${base()}/lights/state/cuboid`, {
-        position: point(pos),
-        dimensions: {
-          width: Number(dim.width),
-          height: Number(dim.height),
-          depth: Number(dim.depth),
-        },
-        ...patch,
-      }),
-    update_lights_batch: (updates) =>
-      apiJson("PATCH", `${base()}/lights/state/batch`, { updates }),
+    get_all_lights: async () =>
+      jsonToPy(await apiJson("GET", `${base()}/lights`)),
+    get_lights_within_sphere: async (c, radius) =>
+      jsonToPy(
+        await apiJson("POST", `${base()}/lights/query/sphere`, {
+          center: point(c),
+          radius: Number(radius),
+        }),
+      ),
+    get_lights_within_cuboid: async (pos, dim) => {
+      const d = fromPy(dim);
+      return jsonToPy(
+        await apiJson("POST", `${base()}/lights/query/cuboid`, {
+          position: point(pos),
+          dimensions: {
+            width: Number(d.width),
+            height: Number(d.height),
+            depth: Number(d.depth),
+          },
+        }),
+      );
+    },
+    set_all_lights: async (patch) =>
+      jsonToPy(
+        await apiJson(
+          "PATCH",
+          `${base()}/lights/state/scene`,
+          fromPy(patch),
+        ),
+      ),
+    set_lights_in_sphere: async (c, radius, patch) =>
+      jsonToPy(
+        await apiJson("PATCH", `${base()}/lights/state/sphere`, {
+          center: point(c),
+          radius: Number(radius),
+          ...fromPy(patch),
+        }),
+      ),
+    set_lights_in_cuboid: async (pos, dim, patch) => {
+      const d = fromPy(dim);
+      return jsonToPy(
+        await apiJson("PATCH", `${base()}/lights/state/cuboid`, {
+          position: point(pos),
+          dimensions: {
+            width: Number(d.width),
+            height: Number(d.height),
+            depth: Number(d.depth),
+          },
+          ...fromPy(patch),
+        }),
+      );
+    },
+    update_lights_batch: async (updates) =>
+      jsonToPy(
+        await apiJson("PATCH", `${base()}/lights/state/batch`, {
+          updates: fromPy(updates),
+        }),
+      ),
   };
 }
 
