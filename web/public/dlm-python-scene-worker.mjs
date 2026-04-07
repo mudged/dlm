@@ -49,6 +49,15 @@ function buildScene() {
     get depth() {
       return dimsCache?.size?.depth ?? 0;
     },
+    get max_x() {
+      return dimsCache?.max?.x ?? 0;
+    },
+    get max_y() {
+      return dimsCache?.max?.y ?? 0;
+    },
+    get max_z() {
+      return dimsCache?.max?.z ?? 0;
+    },
     get_all_lights: () => apiJson("GET", `${base()}/lights`),
     get_lights_within_sphere: (c, radius) =>
       apiJson("POST", `${base()}/lights/query/sphere`, {

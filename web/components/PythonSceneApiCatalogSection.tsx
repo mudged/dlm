@@ -1,21 +1,23 @@
 "use client";
 
 import { Button } from "@/components/ui/Button";
-import { SCENE_API_CATALOG } from "@/lib/pythonSceneApiCatalog";
+import { PYTHON_SCENE_API_CATALOG_FULL } from "@/lib/pythonSceneApiCatalog";
 import { faSquarePlus } from "@fortawesome/free-solid-svg-icons";
 import { useMemo, useState } from "react";
 
 type Props = {
-  /** REQ-024: inserts the currently shown example into the editor. */
-  onInsertSnippet: (snippet: string) => void;
+  /** REQ-024: inserts the currently shown example into the editor. REQ-032 samples replace the whole buffer. */
+  onInsertSnippet: (snippet: string, options?: { replaceAll?: boolean }) => void;
 };
 
 export function PythonSceneApiCatalogSection({ onInsertSnippet }: Props) {
-  const firstId = SCENE_API_CATALOG[0]?.id ?? "";
+  const firstId = PYTHON_SCENE_API_CATALOG_FULL[0]?.id ?? "";
   const [selectedId, setSelectedId] = useState(firstId);
 
   const entry = useMemo(
-    () => SCENE_API_CATALOG.find((e) => e.id === selectedId) ?? SCENE_API_CATALOG[0],
+    () =>
+      PYTHON_SCENE_API_CATALOG_FULL.find((e) => e.id === selectedId) ??
+      PYTHON_SCENE_API_CATALOG_FULL[0],
     [selectedId],
   );
 
@@ -44,7 +46,7 @@ export function PythonSceneApiCatalogSection({ onInsertSnippet }: Props) {
           onChange={(e) => setSelectedId(e.target.value)}
           className="min-h-11 max-w-xl rounded border border-slate-300 bg-white px-2 py-2 text-sm dark:border-slate-600 dark:bg-slate-900"
         >
-          {SCENE_API_CATALOG.map((e) => (
+          {PYTHON_SCENE_API_CATALOG_FULL.map((e) => (
             <option key={e.id} value={e.id}>
               {e.label} ({e.kind})
             </option>
@@ -61,9 +63,15 @@ export function PythonSceneApiCatalogSection({ onInsertSnippet }: Props) {
           <Button
             type="button"
             icon={faSquarePlus}
-            onClick={() => onInsertSnippet(entry.snippet.trimEnd())}
+            onClick={() =>
+              onInsertSnippet(entry.kind === "sample" ? entry.snippet : entry.snippet.trimEnd(), {
+                replaceAll: entry.kind === "sample",
+              })
+            }
           >
-            Put this example in your code
+            {entry.kind === "sample"
+              ? "Replace code with this full sample"
+              : "Put this example in your code"}
           </Button>
         </div>
       ) : null}

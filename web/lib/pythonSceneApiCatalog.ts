@@ -2,11 +2,16 @@
  * Scene command list for the Python routine UI — keep in sync with
  * `public/dlm-python-scene-worker.mjs` and CodeMirror completions.
  */
+import {
+  PYTHON_SAMPLE_GROWING_SPHERE_SOURCE,
+  PYTHON_SAMPLE_SWEEPING_CUBOID_SOURCE,
+} from "@/lib/pythonRoutineSamples";
+
 export type SceneApiCatalogEntry = {
   /** Stable id for anchors / keys */
   id: string;
   label: string;
-  kind: "property" | "method";
+  kind: "property" | "method" | "sample";
   description: string;
   /** Copy-paste example; may use top-level await */
   snippet: string;
@@ -55,6 +60,31 @@ h = scene.height`,
     description: "How deep the room is in metres (front to back).",
     snippet: `# Front-to-back size of the room (metres)
 d = scene.depth`,
+  },
+  {
+    id: "scene-max-x",
+    label: "scene.max_x",
+    kind: "property",
+    description:
+      "Far corner of the room along +X (metres). With max_y and max_z it bounds where lights can sit.",
+    snippet: `# How far lights reach along +X (metres)
+mx = scene.max_x`,
+  },
+  {
+    id: "scene-max-y",
+    label: "scene.max_y",
+    kind: "property",
+    description: "Far corner along +Y — ceiling direction in the default 3D view (metres).",
+    snippet: `# How high lights can go (metres, +Y up)
+my = scene.max_y`,
+  },
+  {
+    id: "scene-max-z",
+    label: "scene.max_z",
+    kind: "property",
+    description: "Far corner along +Z (depth into the screen in the default view, metres).",
+    snippet: `# How far lights reach along +Z (metres)
+mz = scene.max_z`,
   },
   {
     id: "random-hex-colour",
@@ -149,6 +179,32 @@ await scene.update_lights_batch(
     ],
 )`,
   },
+];
+
+/** REQ-032 full routine bodies — same strings as toolbar “Load sample”. */
+export const PYTHON_ROUTINE_SAMPLE_CATALOG_ENTRIES: SceneApiCatalogEntry[] = [
+  {
+    id: "sample-growing-sphere",
+    label: "Sample: growing sphere",
+    kind: "sample",
+    description:
+      "Full script: a sphere in the middle grows for 10 seconds, colours lights inside, then repeats with a new colour. Uses a small saved state dict so Stop still works.",
+    snippet: PYTHON_SAMPLE_GROWING_SPHERE_SOURCE,
+  },
+  {
+    id: "sample-sweeping-cuboid",
+    label: "Sample: sweeping cuboid",
+    kind: "sample",
+    description:
+      "Full script: a 20 cm slab covers the floor and slides to the ceiling in 10 seconds; lights inside turn on with a random colour; lights that leave turn off; then it repeats.",
+    snippet: PYTHON_SAMPLE_SWEEPING_CUBOID_SOURCE,
+  },
+];
+
+/** REQ-024 picker: API members plus REQ-032 samples (no duplicate snippet sources). */
+export const PYTHON_SCENE_API_CATALOG_FULL: SceneApiCatalogEntry[] = [
+  ...SCENE_API_CATALOG,
+  ...PYTHON_ROUTINE_SAMPLE_CATALOG_ENTRIES,
 ];
 
 /** CodeMirror completion options — labels are member names after `scene.` */
