@@ -178,15 +178,26 @@ func TestStore_LightStateListPatch(t *testing.T) {
 
 	f := false
 	blue := "#0000ff"
-	patched, err := s.PatchLightState(ctx, sum.ID, 0, LightStatePatch{
+	patched, unchanged, err := s.PatchLightState(ctx, sum.ID, 0, LightStatePatch{
 		On:    &f,
 		Color: &blue,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
+	if unchanged {
+		t.Fatal("expected first patch to write")
+	}
 	if patched.On || patched.Color != "#0000ff" {
 		t.Fatalf("patched %+v", patched)
+	}
+
+	_, noop, err := s.PatchLightState(ctx, sum.ID, 0, LightStatePatch{Color: &blue})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !noop {
+		t.Fatal("equivalent patch should skip UPDATE (REQ-031)")
 	}
 
 	one, err := s.GetLightState(ctx, sum.ID, 1)
@@ -194,7 +205,7 @@ func TestStore_LightStateListPatch(t *testing.T) {
 		t.Fatalf("light 1 should stay default off %+v err %v", one, err)
 	}
 
-	_, err = s.PatchLightState(ctx, sum.ID, 99, LightStatePatch{On: &f})
+	_, _, err = s.PatchLightState(ctx, sum.ID, 99, LightStatePatch{On: &f})
 	if err != ErrInvalidLightIndex {
 		t.Fatalf("want ErrInvalidLightIndex, got %v", err)
 	}
@@ -212,36 +223,55 @@ func TestStore_BatchPatchLightStates(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = s.BatchPatchLightStates(ctx, sum.ID, nil, LightStatePatch{On: ptrBool(false)})
+	_, _, err = s.BatchPatchLightStates(ctx, sum.ID, nil, LightStatePatch{On: ptrBool(false)})
 	if err != ErrBatchEmptyIDs {
 		t.Fatalf("empty ids: want ErrBatchEmptyIDs, got %v", err)
 	}
 
-	_, err = s.BatchPatchLightStates(ctx, sum.ID, []int{0, 0}, LightStatePatch{On: ptrBool(false)})
+	_, _, err = s.BatchPatchLightStates(ctx, sum.ID, []int{0, 0}, LightStatePatch{On: ptrBool(false)})
 	if err != ErrBatchDuplicateIDs {
 		t.Fatalf("dup ids: want ErrBatchDuplicateIDs, got %v", err)
 	}
 
-	_, err = s.BatchPatchLightStates(ctx, sum.ID, []int{0}, LightStatePatch{})
+	_, _, err = s.BatchPatchLightStates(ctx, sum.ID, []int{0}, LightStatePatch{})
 	if err == nil {
 		t.Fatal("empty patch fields: want error")
 	}
 
-	_, err = s.BatchPatchLightStates(ctx, sum.ID, []int{99}, LightStatePatch{On: ptrBool(false)})
+	_, _, err = s.BatchPatchLightStates(ctx, sum.ID, []int{99}, LightStatePatch{On: ptrBool(false)})
 	if err != ErrInvalidLightIndex {
 		t.Fatalf("out of range: want ErrInvalidLightIndex, got %v", err)
 	}
 
 	f := false
-	states, err := s.BatchPatchLightStates(ctx, sum.ID, []int{2, 0}, LightStatePatch{On: &f})
+	tOn := true
+	states, allUnchanged, err := s.BatchPatchLightStates(ctx, sum.ID, []int{2, 0}, LightStatePatch{On: &tOn})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if allUnchanged {
+		t.Fatal("batch should have written")
 	}
 	if len(states) != 2 || states[0].ID != 0 || states[1].ID != 2 {
 		t.Fatalf("want sorted ids 0,2 got %+v", states)
 	}
-	if states[0].On || states[1].On {
-		t.Fatalf("expected both off %+v", states)
+	if !states[0].On || !states[1].On {
+		t.Fatalf("expected both on %+v", states)
+	}
+
+	st2, _, err := s.BatchPatchLightStates(ctx, sum.ID, []int{0, 2}, LightStatePatch{On: &f})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(st2) != 2 || st2[0].On || st2[1].On {
+		t.Fatalf("want both off after batch %+v", st2)
+	}
+	st3, allNoop, err := s.BatchPatchLightStates(ctx, sum.ID, []int{0, 2}, LightStatePatch{On: &f})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !allNoop || len(st3) != 2 {
+		t.Fatalf("idempotent batch want unchanged_all, got %+v unchanged=%v", st3, allNoop)
 	}
 
 	one, err := s.GetLightState(ctx, sum.ID, 1)
@@ -262,14 +292,14 @@ func TestStore_ResetAllLightStates(t *testing.T) {
 	}
 	tOn := true
 	red := "#ff0000"
-	if _, err := s.PatchLightState(ctx, sum.ID, 0, LightStatePatch{On: &tOn, Color: &red}); err != nil {
+	if _, _, err := s.PatchLightState(ctx, sum.ID, 0, LightStatePatch{On: &tOn, Color: &red}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.PatchLightState(ctx, sum.ID, 1, LightStatePatch{BrightnessPct: ptrFloat(50)}); err != nil {
+	if _, _, err := s.PatchLightState(ctx, sum.ID, 1, LightStatePatch{BrightnessPct: ptrFloat(50)}); err != nil {
 		t.Fatal(err)
 	}
 
-	states, err := s.ResetAllLightStates(ctx, sum.ID)
+	states, _, err := s.ResetAllLightStates(ctx, sum.ID)
 	if err != nil || len(states) != 2 {
 		t.Fatalf("ResetAllLightStates: %v %+v", err, states)
 	}
@@ -278,8 +308,26 @@ func TestStore_ResetAllLightStates(t *testing.T) {
 			t.Fatalf("want REQ-014 default, got %+v", st)
 		}
 	}
-	if _, err := s.ResetAllLightStates(ctx, "00000000-0000-0000-0000-000000000000"); err != ErrNotFound {
+	if _, _, err := s.ResetAllLightStates(ctx, "00000000-0000-0000-0000-000000000000"); err != ErrNotFound {
 		t.Fatalf("missing model: want ErrNotFound, got %v", err)
+	}
+}
+
+func TestStore_ResetAllLightStates_noopWhenAlreadyDefault(t *testing.T) {
+	ctx := context.Background()
+	s := testDB(t)
+	sum, err := s.Create(ctx, "alreadydef", []wiremodel.Light{
+		{ID: 0, X: 0, Y: 0, Z: 0},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	states, unchangedAll, err := s.ResetAllLightStates(ctx, sum.ID)
+	if err != nil || len(states) != 1 {
+		t.Fatalf("ResetAllLightStates: %v %+v", err, states)
+	}
+	if !unchangedAll {
+		t.Fatal("fresh model should already be at REQ-014 defaults")
 	}
 }
 
