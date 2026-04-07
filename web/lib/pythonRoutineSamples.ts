@@ -1,0 +1,106 @@
+/**
+ * REQ-032: full novice sample routines — single source for catalog + toolbar.
+ * Keep in sync with `public/dlm-python-scene-worker.mjs` (`scene` API).
+ *
+ * Each run executes one short step; state lives in `_grow` / `_sweep` dicts so
+ * Stop stays responsive (no long inner loops inside one `runPythonAsync` call).
+ */
+
+export const PYTHON_SAMPLE_GROWING_SPHERE_SOURCE = `# Sample: growing sphere (REQ-032)
+# A coloured sphere sits in the middle of the room and grows for 10 seconds.
+# Lights inside the sphere turn on at full brightness with that colour.
+# When the grow finishes, a new colour is picked and the sphere starts small again.
+import math
+import time
+
+# Saved between runs — do not remove
+if "_grow" not in globals():
+    _grow = {"mode": "new"}
+
+GROW_SEC = 10.0
+
+if _grow["mode"] == "new":
+    # New colour and geometry for this cycle
+    _grow["colour"] = scene.random_hex_colour()
+    _grow["cx"] = scene.width / 2
+    _grow["cy"] = scene.height / 2
+    _grow["cz"] = scene.depth / 2
+    R = (
+        math.hypot(
+            scene.max_x - _grow["cx"],
+            scene.max_y - _grow["cy"],
+            scene.max_z - _grow["cz"],
+        )
+        + 1e-6
+    )
+    _grow["R"] = R
+    # Start small but not zero (metres)
+    _grow["r0"] = max(0.01, min(0.05, R * 0.02)) if R > 0.02 else R * 0.5
+    _grow["t0"] = time.monotonic()
+    _grow["mode"] = "grow"
+
+if _grow["mode"] == "grow":
+    elapsed = time.monotonic() - _grow["t0"]
+    if elapsed >= GROW_SEC:
+        # Done — next run will start a new colour
+        _grow["mode"] = "new"
+    else:
+        r = _grow["r0"] + (_grow["R"] - _grow["r0"]) * (elapsed / GROW_SEC)
+        await scene.set_lights_in_sphere(
+            {"x": _grow["cx"], "y": _grow["cy"], "z": _grow["cz"]},
+            r,
+            {"on": True, "color": _grow["colour"], "brightness_pct": 100},
+        )
+`;
+
+export const PYTHON_SAMPLE_SWEEPING_CUBOID_SOURCE = `# Sample: sweeping cuboid (REQ-032)
+# A thin slab (20 cm tall) covers the whole floor and slides up to the ceiling in 10 s.
+# Lights inside the slab turn on with a random colour at full brightness.
+# Lights that leave the slab are turned off. Then a new colour starts from the floor.
+import time
+
+if "_sweep" not in globals():
+    _sweep = {"mode": "new"}
+
+SWEEP_SEC = 10.0
+SLAB_H = 0.2  # 20 cm in metres
+
+if _sweep["mode"] == "new":
+    _sweep["colour"] = scene.random_hex_colour()
+    _sweep["w"] = scene.width
+    _sweep["d"] = scene.depth
+    _sweep["h"] = SLAB_H
+    # Top position for the cuboid corner so the slab fits under the ceiling
+    _sweep["y_top"] = max(0.0, scene.max_y - SLAB_H)
+    _sweep["t0"] = time.monotonic()
+    _sweep["prev"] = set()
+    _sweep["mode"] = "sweep"
+
+if _sweep["mode"] == "sweep":
+    elapsed = time.monotonic() - _sweep["t0"]
+    if elapsed >= SWEEP_SEC:
+        # Turn off everyone who was still inside the slab at the top
+        if _sweep["prev"]:
+            await scene.update_lights_batch(
+                [{"model_id": m, "light_id": lid, "on": False} for m, lid in _sweep["prev"]],
+            )
+        _sweep["prev"] = set()
+        _sweep["mode"] = "new"
+    else:
+        y0 = _sweep["y_top"] * (elapsed / SWEEP_SEC)
+        pos = {"x": 0.0, "y": y0, "z": 0.0}
+        dim = {"width": _sweep["w"], "height": _sweep["h"], "depth": _sweep["d"]}
+        inside = await scene.get_lights_within_cuboid(pos, dim)
+        current = {(L["model_id"], L["light_id"]) for L in inside}
+        await scene.set_lights_in_cuboid(
+            pos,
+            dim,
+            {"on": True, "color": _sweep["colour"], "brightness_pct": 100},
+        )
+        exited = _sweep["prev"] - current
+        if exited:
+            await scene.update_lights_batch(
+                [{"model_id": m, "light_id": lid, "on": False} for m, lid in exited],
+            )
+        _sweep["prev"] = current
+`;

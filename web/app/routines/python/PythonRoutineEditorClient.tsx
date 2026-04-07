@@ -14,6 +14,7 @@ import {
   faCirclePlay,
   faCircleStop,
   faCopy,
+  faFileImport,
   faFloppyDisk,
   faLightbulb,
   faRotate,
@@ -29,7 +30,13 @@ import {
   pythonRoutineLinter,
   pythonSceneAutocompletion,
 } from "@/lib/pythonRoutineCodemirror";
-import { PYTHON_ROUTINE_DEFAULT_SOURCE } from "@/lib/pythonSceneApiCatalog";
+import {
+  PYTHON_ROUTINE_DEFAULT_SOURCE,
+} from "@/lib/pythonSceneApiCatalog";
+import {
+  PYTHON_SAMPLE_GROWING_SPHERE_SOURCE,
+  PYTHON_SAMPLE_SWEEPING_CUBOID_SOURCE,
+} from "@/lib/pythonRoutineSamples";
 import {
   ROUTINE_TYPE_PYTHON_SCENE_SCRIPT,
   createRoutine,
@@ -170,17 +177,24 @@ export default function PythonRoutineEditorClient() {
     }
   }, [targetSceneId]);
 
-  const onInsertSnippet = useCallback((snippet: string) => {
-    const view = editorViewRef.current;
-    if (view) {
-      insertSnippetInPythonEditor(view, snippet);
-    } else {
-      setCode((prev) => {
-        const needsNl = prev.length > 0 && !prev.endsWith("\n");
-        return prev + (needsNl ? "\n" : "") + snippet;
-      });
-    }
-  }, []);
+  const onInsertSnippet = useCallback(
+    (snippet: string, options?: { replaceAll?: boolean }) => {
+      if (options?.replaceAll) {
+        setCode(snippet);
+        return;
+      }
+      const view = editorViewRef.current;
+      if (view) {
+        insertSnippetInPythonEditor(view, snippet);
+      } else {
+        setCode((prev) => {
+          const needsNl = prev.length > 0 && !prev.endsWith("\n");
+          return prev + (needsNl ? "\n" : "") + snippet;
+        });
+      }
+    },
+    [],
+  );
 
   async function onSave() {
     setBusy(true);
@@ -260,6 +274,28 @@ export default function PythonRoutineEditorClient() {
       return;
     }
     setCode(PYTHON_ROUTINE_DEFAULT_SOURCE);
+  }
+
+  function loadGrowingSphereSample() {
+    if (
+      !window.confirm(
+        "Replace your code with the full growing-sphere sample? Save first if you need a copy of what you have now.",
+      )
+    ) {
+      return;
+    }
+    setCode(PYTHON_SAMPLE_GROWING_SPHERE_SOURCE);
+  }
+
+  function loadSweepingCuboidSample() {
+    if (
+      !window.confirm(
+        "Replace your code with the full sweeping-cuboid sample? Save first if you need a copy of what you have now.",
+      )
+    ) {
+      return;
+    }
+    setCode(PYTHON_SAMPLE_SWEEPING_CUBOID_SOURCE);
   }
 
   async function onStartRun() {
@@ -419,6 +455,24 @@ export default function PythonRoutineEditorClient() {
             onClick={onResetTemplate}
           >
             Reset to starter code
+          </Button>
+          <Button
+            type="button"
+            icon={faFileImport}
+            className="bg-slate-600 hover:bg-slate-500 dark:bg-slate-700 dark:hover:bg-slate-600"
+            disabled={busy}
+            onClick={loadGrowingSphereSample}
+          >
+            Load growing sphere sample
+          </Button>
+          <Button
+            type="button"
+            icon={faFileImport}
+            className="bg-slate-600 hover:bg-slate-500 dark:bg-slate-700 dark:hover:bg-slate-600"
+            disabled={busy}
+            onClick={loadSweepingCuboidSample}
+          >
+            Load sweeping cuboid sample
           </Button>
         </div>
       </div>
