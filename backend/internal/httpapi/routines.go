@@ -91,7 +91,7 @@ func (a *apiDeps) createRoutine(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		msg := err.Error()
-		if strings.Contains(msg, "name is required") || strings.Contains(msg, "type is required") {
+		if strings.Contains(msg, "name is required") {
 			writeAPIError(w, http.StatusBadRequest, "validation_failed", msg)
 			return
 		}
@@ -273,16 +273,6 @@ func (a *apiDeps) postSceneRoutineStart(w http.ResponseWriter, r *http.Request) 
 		}
 		writeAPIError(w, http.StatusInternalServerError, "internal_error", "could not start routine")
 		return
-	}
-
-	if !already {
-		if rt, err2 := a.store.GetRoutine(r.Context(), routineID); err2 == nil && rt.Type == store.RoutineTypeRandomColourCycleAll {
-			ctx := r.Context()
-			mids, _ := a.store.ListModelIDsInScene(ctx, sceneID)
-			for _, mid := range mids {
-				a.rev.NotifyModelLightsChanged(ctx, a.store, mid)
-			}
-		}
 	}
 
 	resp := startRoutineResponse{

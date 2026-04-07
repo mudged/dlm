@@ -4,6 +4,7 @@
  */
 import {
   PYTHON_SAMPLE_GROWING_SPHERE_SOURCE,
+  PYTHON_SAMPLE_RANDOM_COLOUR_CYCLE_ALL_SOURCE,
   PYTHON_SAMPLE_SWEEPING_CUBOID_SOURCE,
 } from "@/lib/pythonRoutineSamples";
 
@@ -198,6 +199,14 @@ export const PYTHON_ROUTINE_SAMPLE_CATALOG_ENTRIES: SceneApiCatalogEntry[] = [
     description:
       "Full script: a 20 cm slab covers the floor and slides to the ceiling in 10 seconds; lights inside turn on with a random colour; lights that leave turn off; then it repeats.",
     snippet: PYTHON_SAMPLE_SWEEPING_CUBOID_SOURCE,
+  },
+  {
+    id: "sample-random-colour-cycle",
+    label: "Sample: random colour cycle (all lights)",
+    kind: "sample",
+    description:
+      "Full script: turns every light on, then about once per second gives each light a new random colour (replaces the old server-only colour cycle).",
+    snippet: PYTHON_SAMPLE_RANDOM_COLOUR_CYCLE_ALL_SOURCE,
   },
 ];
 

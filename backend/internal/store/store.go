@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 
 	"example.com/dlm/backend/internal/samples"
+	"example.com/dlm/backend/internal/seed"
 	"example.com/dlm/backend/internal/wiremodel"
 
 	_ "modernc.org/sqlite"
@@ -132,7 +133,22 @@ func (s *Store) migrate(ctx context.Context) error {
 	if err := s.ensureLightStateColumns(ctx); err != nil {
 		return err
 	}
-	return s.ensureSceneTables(ctx)
+	if err := s.ensureSceneTables(ctx); err != nil {
+		return err
+	}
+	if err := s.migrateLegacyRandomColourRoutines(ctx); err != nil {
+		return fmt.Errorf("migrate legacy routine types: %w", err)
+	}
+	return nil
+}
+
+// migrateLegacyRandomColourRoutines converts pre–REQ-032 server-tick rows into editable Python definitions.
+func (s *Store) migrateLegacyRandomColourRoutines(ctx context.Context) error {
+	third := seed.DefaultPythonRoutineRows()[2]
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE routines SET type = ?, python_source = ? WHERE type = ?
+	`, RoutineTypePythonSceneScript, third.Source, RoutineTypeRandomColourCycleAll)
+	return err
 }
 
 func (s *Store) ensureSceneTables(ctx context.Context) error {
@@ -368,6 +384,41 @@ func (s *Store) SeedDefaultSamples(ctx context.Context) error {
 	return tx.Commit()
 }
 
+func (s *Store) seedDefaultPythonRoutinesTx(ctx context.Context, tx *sql.Tx) error {
+	defs := seed.DefaultPythonRoutineRows()
+	for i := range defs {
+		row := defs[i]
+		id := uuid.NewString()
+		created := time.Now().UTC().Format(time.RFC3339Nano)
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO routines (id, name, description, type, python_source, created_at) VALUES (?, ?, ?, ?, ?, ?)
+		`, id, row.Name, row.Description, RoutineTypePythonSceneScript, row.Source, created); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// SeedDefaultPythonRoutines inserts the three REQ-032 Python samples when the routines table is empty (§3.8.1).
+func (s *Store) SeedDefaultPythonRoutines(ctx context.Context) error {
+	var n int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM routines`).Scan(&n); err != nil {
+		return err
+	}
+	if n > 0 {
+		return nil
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := s.seedDefaultPythonRoutinesTx(ctx, tx); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 // FactoryReset deletes all application data including routines, then re-seeds the three default samples (REQ-017 / architecture §3.14).
 func (s *Store) FactoryReset(ctx context.Context) error {
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -394,6 +445,9 @@ func (s *Store) FactoryReset(ctx context.Context) error {
 	}
 	if err := s.seedThreeCanonicalSamplesTx(ctx, tx); err != nil {
 		return fmt.Errorf("factory reset seed samples: %w", err)
+	}
+	if err := s.seedDefaultPythonRoutinesTx(ctx, tx); err != nil {
+		return fmt.Errorf("factory reset seed python routines: %w", err)
 	}
 	return tx.Commit()
 }

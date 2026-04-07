@@ -27,6 +27,7 @@ describe("pythonSceneApiCatalog", () => {
     expect(sample.map((s) => s.id)).toEqual([
       "sample-growing-sphere",
       "sample-sweeping-cuboid",
+      "sample-random-colour-cycle",
     ]);
     for (const e of SCENE_API_CATALOG) {
       expect(full.some((x) => x.id === e.id)).toBe(true);

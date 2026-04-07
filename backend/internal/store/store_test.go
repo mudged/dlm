@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"slices"
 	"testing"
@@ -111,6 +112,42 @@ func TestStore_SeedDefaultSamples_idempotent(t *testing.T) {
 	}
 }
 
+func TestStore_SeedDefaultPythonRoutines_idempotent(t *testing.T) {
+	ctx := context.Background()
+	s := testDB(t)
+	if err := s.SeedDefaultSamples(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SeedDefaultPythonRoutines(ctx); err != nil {
+		t.Fatal(err)
+	}
+	list, err := s.ListRoutines(ctx)
+	if err != nil || len(list) != 3 {
+		t.Fatalf("want 3 seeded routines, got %d err %v", len(list), err)
+	}
+	for _, r := range list {
+		if r.Type != RoutineTypePythonSceneScript || r.PythonSource == "" {
+			t.Fatalf("bad routine %+v", r)
+		}
+	}
+	if err := s.SeedDefaultPythonRoutines(ctx); err != nil {
+		t.Fatal(err)
+	}
+	list2, err := s.ListRoutines(ctx)
+	if err != nil || len(list2) != 3 {
+		t.Fatalf("second python seed must not duplicate, got %d", len(list2))
+	}
+}
+
+func TestStore_CreateRoutine_rejectsRandomColourType(t *testing.T) {
+	ctx := context.Background()
+	s := testDB(t)
+	_, err := s.CreateRoutine(ctx, "x", "", RoutineTypeRandomColourCycleAll, "")
+	if err == nil || !errors.Is(err, ErrRoutineUnknownType) {
+		t.Fatalf("want ErrRoutineUnknownType, got %v", err)
+	}
+}
+
 func TestStore_FactoryReset(t *testing.T) {
 	ctx := context.Background()
 	s := testDB(t)
@@ -154,6 +191,10 @@ func TestStore_FactoryReset(t *testing.T) {
 	slices.Sort(want)
 	if !slices.Equal(names, want) {
 		t.Fatalf("model names = %v want %v", names, want)
+	}
+	routines, err := s.ListRoutines(ctx)
+	if err != nil || len(routines) != 3 {
+		t.Fatalf("want 3 default python routines after reset, got %d err %v", len(routines), err)
 	}
 }
 

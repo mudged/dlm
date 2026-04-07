@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "copy-backend": "node ../scripts/copy-web-export.mjs",
-    "release:sync": "next build && npm run copy-backend",
+    "release:sync": "node ../scripts/gen-python-routine-samples-go.mjs && next build && npm run copy-backend",
     "lint": "next lint",
     "test": "vitest run"
   },

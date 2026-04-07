@@ -342,9 +342,9 @@ export function SceneDetailClient() {
           Routines
         </h2>
         <p className="text-xs text-slate-600 dark:text-slate-400">
-          Start a saved routine on this scene. The built-in colour cycle updates
-          about once per second. Python routines loop in your browser (Pyodide)
-          and call the scene API.
+          Start a saved routine on this scene. Scripts run in your browser
+          (Pyodide) and change lights through the scene API. Default samples
+          include a ~1&nbsp;s random colour cycle and two geometry demos.
         </p>
         {routineRuns.length > 0 ? (
           <div className="flex flex-col gap-3">
@@ -355,7 +355,7 @@ export function SceneDetailClient() {
                   {routineRuns[0].routine_name}
                 </span>
                 {isPythonRun ? (
-                  <span className="ml-2 text-xs text-slate-500">(Python)</span>
+                  <span className="ml-2 text-xs text-slate-500">(script)</span>
                 ) : null}
               </p>
               <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
@@ -371,7 +371,7 @@ export function SceneDetailClient() {
                       )
                     }
                   >
-                    Edit Python
+                    Edit routine
                   </Button>
                 ) : null}
                 <Button
@@ -426,9 +426,6 @@ export function SceneDetailClient() {
                 {(routines ?? []).map((r) => (
                   <option key={r.id} value={r.id}>
                     {r.name}
-                    {r.type === ROUTINE_TYPE_PYTHON_SCENE_SCRIPT
-                      ? " (Python)"
-                      : ""}
                   </option>
                 ))}
               </select>

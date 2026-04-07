@@ -1331,3 +1331,212 @@ func TestAcceptance_REQ029_architectureDocumentsThroughputAndSSE(t *testing.T) {
 		t.Fatal("router must register GET .../lights/events before GET .../lights/{lightId}/state")
 	}
 }
+
+func TestAcceptance_REQ021_sceneRoutinesPythonAndSceneAPI(t *testing.T) {
+	doc := readRequirements(t)
+	block := requirementBlock(doc, "REQ-021")
+	if block == "" {
+		t.Fatal("requirements must contain ### REQ-021 section")
+	}
+	lower := strings.ToLower(block)
+	if !strings.Contains(block, "| **Priority** | Must |") {
+		t.Fatal("REQ-021 metadata must state priority Must")
+	}
+	for _, kw := range []string{"python", "req-022", "req-020", "req-011", "req-015"} {
+		if !strings.Contains(lower, kw) {
+			t.Fatalf("REQ-021 must reference %q (scope, rules, or dependencies)", kw)
+		}
+	}
+	if !strings.Contains(lower, "start") || !strings.Contains(lower, "stop") {
+		t.Fatal("REQ-021 must require starting and stopping routine runs")
+	}
+	if !strings.Contains(lower, "scene") {
+		t.Fatal("REQ-021 must scope automation to scenes / scene API")
+	}
+	if !strings.Contains(lower, "req-032") {
+		t.Fatal("REQ-021 must reference REQ-032 for default seeded Python behaviors")
+	}
+	if !strings.Contains(lower, "non-python") && !strings.Contains(lower, "python-only") {
+		t.Fatal("REQ-021 must clarify Python-only routine definitions vs non-Python types")
+	}
+	for _, kw := range []string{"mobile", "tablet", "desktop"} {
+		if !strings.Contains(lower, kw) {
+			t.Fatalf("REQ-021 responsive notes must mention %q", kw)
+		}
+	}
+
+	root := repoRoot(t)
+
+	routerPath := filepath.Join(root, "backend", "internal", "httpapi", "router.go")
+	routerBytes, err := os.ReadFile(routerPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", routerPath, err)
+	}
+	routerSrc := string(routerBytes)
+	for _, needle := range []string{
+		`GET /routines`,
+		`POST /routines`,
+		`/scenes/{id}/routines/{routineId}/start`,
+		`/scenes/{id}/routines/runs/{runId}/stop`,
+		`/scenes/{id}/routines/runs`,
+	} {
+		if !strings.Contains(routerSrc, needle) {
+			t.Fatalf("router.go must register %q for REQ-021 routine lifecycle", needle)
+		}
+	}
+
+	mainPath := filepath.Join(root, "backend", "cmd", "server", "main.go")
+	mainBytes, err := os.ReadFile(mainPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", mainPath, err)
+	}
+	mainSrc := string(mainBytes)
+	if strings.Contains(mainSrc, "StartRoutineScheduler") {
+		t.Fatal("REQ-021 / architecture §3.16: server must not run StartRoutineScheduler (no Go routine ticker)")
+	}
+
+	storeRoutinesPath := filepath.Join(root, "backend", "internal", "store", "routines.go")
+	routinesGo, err := os.ReadFile(storeRoutinesPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", storeRoutinesPath, err)
+	}
+	routinesGoStr := string(routinesGo)
+	if strings.Contains(routinesGoStr, "TickRoutineRuns") {
+		t.Fatal("store/routines.go must not define TickRoutineRuns (automation runs in browser Pyodide only)")
+	}
+
+	sceneClientPath := filepath.Join(root, "web", "app", "scenes", "detail", "SceneDetailClient.tsx")
+	sceneBytes, err := os.ReadFile(sceneClientPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", sceneClientPath, err)
+	}
+	sceneSrc := string(sceneBytes)
+	if !strings.Contains(sceneSrc, "startSceneRoutine") || !strings.Contains(sceneSrc, "stopSceneRoutineRun") {
+		t.Fatal("SceneDetailClient must call startSceneRoutine and stopSceneRoutineRun (REQ-021 UI)")
+	}
+
+	workerPath := filepath.Join(root, "web", "public", "dlm-python-scene-worker.mjs")
+	workerBytes, err := os.ReadFile(workerPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", workerPath, err)
+	}
+	ws := string(workerBytes)
+	if !strings.Contains(ws, "/api/v1/scenes/") || !strings.Contains(ws, "runPythonAsync") {
+		t.Fatal("Pyodide worker must drive scene API via fetch to /api/v1/scenes/... (REQ-021 rule 3)")
+	}
+
+	archPath := filepath.Join(root, "docs", "architecture.md")
+	archBytes, err := os.ReadFile(archPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", archPath, err)
+	}
+	archStr := string(archBytes)
+	archLower := strings.ToLower(archStr)
+	if !strings.Contains(archLower, "pyodide") || !strings.Contains(archLower, "req-021") {
+		t.Fatal("docs/architecture.md must document Pyodide execution and REQ-021 for scene routines")
+	}
+	if !strings.Contains(archStr, "time.Ticker") {
+		t.Fatal("docs/architecture.md must explicitly address time.Ticker vs browser automation (REQ-021 / §3.16)")
+	}
+}
+
+func TestAcceptance_REQ032_threeSeededPythonSampleRoutines(t *testing.T) {
+	doc := readRequirements(t)
+	block := requirementBlock(doc, "REQ-032")
+	if block == "" {
+		t.Fatal("requirements must contain ### REQ-032 section")
+	}
+	lower := strings.ToLower(block)
+	if !strings.Contains(block, "| **Priority** | Must |") {
+		t.Fatal("REQ-032 metadata must state priority Must")
+	}
+	for _, kw := range []string{"three", "sphere", "cuboid", "random", "req-017", "req-022", "python"} {
+		if !strings.Contains(lower, kw) {
+			t.Fatalf("REQ-032 must mention %q", kw)
+		}
+	}
+	if !strings.Contains(lower, "factory") || !strings.Contains(lower, "reset") {
+		t.Fatal("REQ-032 must tie re-seeding to factory reset (REQ-017)")
+	}
+	if !strings.Contains(lower, "req-024") {
+		t.Fatal("REQ-032 must reference REQ-024 (catalog vs whole-script delivery)")
+	}
+	for _, kw := range []string{"req-011", "req-020", "req-021", "req-026", "req-030"} {
+		if !strings.Contains(lower, kw) {
+			t.Fatalf("REQ-032 dependencies or body must reference %s", kw)
+		}
+	}
+
+	root := repoRoot(t)
+
+	samplesPath := filepath.Join(root, "web", "lib", "pythonRoutineSamples.ts")
+	sb, err := os.ReadFile(samplesPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", samplesPath, err)
+	}
+	samples := string(sb)
+	for _, export := range []string{
+		"PYTHON_SAMPLE_GROWING_SPHERE_SOURCE",
+		"PYTHON_SAMPLE_SWEEPING_CUBOID_SOURCE",
+		"PYTHON_SAMPLE_RANDOM_COLOUR_CYCLE_ALL_SOURCE",
+	} {
+		if !strings.Contains(samples, "export const "+export) {
+			t.Fatalf("pythonRoutineSamples.ts must export %s (REQ-032 single source of truth)", export)
+		}
+	}
+
+	genScript := filepath.Join(root, "scripts", "gen-python-routine-samples-go.mjs")
+	if _, err := os.Stat(genScript); err != nil {
+		t.Fatalf("REQ-032 TS→Go sync: %s must exist: %v", genScript, err)
+	}
+
+	seedGenPath := filepath.Join(root, "backend", "internal", "seed", "python_routine_samples_gen.go")
+	seedBytes, err := os.ReadFile(seedGenPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", seedGenPath, err)
+	}
+	seedStr := string(seedBytes)
+	if !strings.Contains(seedStr, "DefaultPythonRoutineRows") || !strings.Contains(seedStr, "growingSphereSource") {
+		t.Fatal("generated Go seed must define DefaultPythonRoutineRows and sample bodies (REQ-032)")
+	}
+
+	storePath := filepath.Join(root, "backend", "internal", "store", "store.go")
+	storeBytes, err := os.ReadFile(storePath)
+	if err != nil {
+		t.Fatalf("read %s: %v", storePath, err)
+	}
+	storeStr := string(storeBytes)
+	if !strings.Contains(storeStr, "SeedDefaultPythonRoutines") || !strings.Contains(storeStr, "seedDefaultPythonRoutinesTx") {
+		t.Fatal("store.go must implement SeedDefaultPythonRoutines for REQ-032 fresh install + factory reset")
+	}
+
+	archPath := filepath.Join(root, "docs", "architecture.md")
+	archBytes, err := os.ReadFile(archPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", archPath, err)
+	}
+	archStr := string(archBytes)
+	if !strings.Contains(archStr, "pythonRoutineSamples.ts") || !strings.Contains(archStr, "REQ-032") {
+		t.Fatal("docs/architecture.md must name pythonRoutineSamples.ts and REQ-032 seed placement (business rule 7)")
+	}
+
+	catalogPath := filepath.Join(root, "web", "lib", "pythonSceneApiCatalog.ts")
+	catBytes, err := os.ReadFile(catalogPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", catalogPath, err)
+	}
+	catStr := string(catBytes)
+	if !strings.Contains(catStr, "sample-growing-sphere") || !strings.Contains(catStr, "sample-sweeping-cuboid") || !strings.Contains(catStr, "sample-random-colour-cycle") {
+		t.Fatal("pythonSceneApiCatalog must list all three REQ-032 sample catalog entry ids")
+	}
+
+	editorPath := filepath.Join(root, "web", "app", "routines", "python", "PythonRoutineEditorClient.tsx")
+	edBytes, err := os.ReadFile(editorPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", editorPath, err)
+	}
+	edStr := string(edBytes)
+	if !strings.Contains(edStr, "Load growing sphere sample") || !strings.Contains(edStr, "Load sweeping cuboid sample") || !strings.Contains(edStr, "Load random colour cycle sample") {
+		t.Fatal("PythonRoutineEditorClient must expose Load sample actions for all three REQ-032 scripts")
+	}
+}

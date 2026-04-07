@@ -343,4 +343,25 @@ func TestAPIv1FactoryReset_resetsToThreeSamples(t *testing.T) {
 	if len(models) != 3 {
 		t.Fatalf("after factory reset want 3 models, got %d", len(models))
 	}
+
+	res3, err := http.Get(srv.URL + "/api/v1/routines")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res3.Body.Close()
+	if res3.StatusCode != http.StatusOK {
+		t.Fatalf("routines list status = %d", res3.StatusCode)
+	}
+	var routines []store.RoutineDTO
+	if err := json.NewDecoder(res3.Body).Decode(&routines); err != nil {
+		t.Fatal(err)
+	}
+	if len(routines) != 3 {
+		t.Fatalf("after factory reset want 3 routines, got %d", len(routines))
+	}
+	for _, r := range routines {
+		if r.Type != store.RoutineTypePythonSceneScript || r.PythonSource == "" {
+			t.Fatalf("want python_scene_script with source, got %+v", r)
+		}
+	}
 }

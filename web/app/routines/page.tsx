@@ -57,13 +57,13 @@ export default function RoutinesPage() {
           Routines
         </h1>
         <p className="mt-1 max-w-xl text-sm text-slate-600 dark:text-slate-400">
-          Save named routines, then start them from a{" "}
+          Save named Python routines, then start them from a{" "}
           <Link href="/scenes" className="text-sky-700 underline dark:text-sky-300">
             scene
           </Link>{" "}
-          detail page. Create a routine and pick its type—including Python—from
-          one form. Python routines use the in-browser editor and Pyodide runner
-          (see help text on the editor page).
+          detail page. New installs include three sample scripts you can edit or
+          duplicate like any routine. The editor runs your code in the browser
+          with Pyodide (see help text on the editor page).
         </p>
         <p className="mt-4">
           <Button

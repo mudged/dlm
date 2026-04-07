@@ -2,42 +2,19 @@
 
 import { faArrowLeft, faPlus } from "@fortawesome/free-solid-svg-icons";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { PYTHON_ROUTINE_DEFAULT_SOURCE } from "@/lib/pythonSceneApiCatalog";
-import {
-  ROUTINE_TYPE_CREATE_OPTIONS,
-  ROUTINE_TYPE_PYTHON_SCENE_SCRIPT,
-  ROUTINE_TYPE_RANDOM_COLOUR_ALL,
-  createRoutine,
-  isCreatableRoutineType,
-} from "@/lib/routines";
-
-function initialTypeFromQuery(raw: string | null): string {
-  if (raw && isCreatableRoutineType(raw)) {
-    return raw;
-  }
-  return ROUTINE_TYPE_RANDOM_COLOUR_ALL;
-}
+import { ROUTINE_TYPE_PYTHON_SCENE_SCRIPT, createRoutine } from "@/lib/routines";
 
 export default function RoutineNewClient() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const typeFromUrl = useMemo(
-    () => initialTypeFromQuery(searchParams.get("type")),
-    [searchParams],
-  );
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [routineType, setRoutineType] = useState(typeFromUrl);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    setRoutineType(typeFromUrl);
-  }, [typeFromUrl]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -48,26 +25,13 @@ export default function RoutineNewClient() {
       if (!n) {
         throw new Error("Name is required.");
       }
-      if (!isCreatableRoutineType(routineType)) {
-        throw new Error("Select a valid routine type.");
-      }
-      const body =
-        routineType === ROUTINE_TYPE_PYTHON_SCENE_SCRIPT
-          ? {
-              name: n,
-              description,
-              type: routineType,
-              python_source: PYTHON_ROUTINE_DEFAULT_SOURCE,
-            }
-          : { name: n, description, type: routineType };
-      const created = await createRoutine(body);
-      if (routineType === ROUTINE_TYPE_PYTHON_SCENE_SCRIPT) {
-        router.replace(
-          `/routines/python?id=${encodeURIComponent(created.id)}`,
-        );
-      } else {
-        router.push("/routines");
-      }
+      const created = await createRoutine({
+        name: n,
+        description,
+        type: ROUTINE_TYPE_PYTHON_SCENE_SCRIPT,
+        python_source: PYTHON_ROUTINE_DEFAULT_SOURCE,
+      });
+      router.replace(`/routines/python?id=${encodeURIComponent(created.id)}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Create failed");
     } finally {
@@ -88,9 +52,9 @@ export default function RoutineNewClient() {
           New routine
         </h1>
         <p className="mt-1 max-w-xl text-sm text-slate-600 dark:text-slate-400">
-          Choose the routine type, then name it. Python routines open in the
-          in-browser editor next. Colour-cycle routines are ready to run from a
-          scene detail page.
+          Routines are Python scripts that run in your browser and change lights
+          in a room via the scene API. Name your routine, then edit the starter
+          code in the next step.
         </p>
       </header>
 
@@ -123,24 +87,6 @@ export default function RoutineNewClient() {
             rows={2}
             className="rounded border border-slate-300 bg-white px-2 py-2 text-sm dark:border-slate-600 dark:bg-slate-900"
           />
-        </label>
-        <label className="flex flex-col gap-1 text-xs">
-          <span className="text-slate-600 dark:text-slate-400" id="routine-type-label">
-            Routine type
-          </span>
-          <select
-            id="routine-type"
-            aria-labelledby="routine-type-label"
-            className="min-h-11 rounded border border-slate-300 bg-white px-2 py-2 text-sm dark:border-slate-600 dark:bg-slate-900"
-            value={routineType}
-            onChange={(e) => setRoutineType(e.target.value)}
-          >
-            {ROUTINE_TYPE_CREATE_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
         </label>
         <div className="flex flex-wrap gap-2 pt-1">
           <Button type="submit" icon={faPlus} disabled={busy || !name.trim()}>

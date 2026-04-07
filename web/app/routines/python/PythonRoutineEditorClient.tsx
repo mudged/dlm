@@ -35,6 +35,7 @@ import {
 } from "@/lib/pythonSceneApiCatalog";
 import {
   PYTHON_SAMPLE_GROWING_SPHERE_SOURCE,
+  PYTHON_SAMPLE_RANDOM_COLOUR_CYCLE_ALL_SOURCE,
   PYTHON_SAMPLE_SWEEPING_CUBOID_SOURCE,
 } from "@/lib/pythonRoutineSamples";
 import {
@@ -298,6 +299,17 @@ export default function PythonRoutineEditorClient() {
     setCode(PYTHON_SAMPLE_SWEEPING_CUBOID_SOURCE);
   }
 
+  function loadRandomColourCycleSample() {
+    if (
+      !window.confirm(
+        "Replace your code with the full random colour cycle sample? Save first if you need a copy of what you have now.",
+      )
+    ) {
+      return;
+    }
+    setCode(PYTHON_SAMPLE_RANDOM_COLOUR_CYCLE_ALL_SOURCE);
+  }
+
   async function onStartRun() {
     if (!routineId || !targetSceneId) {
       setError("Pick a room first.");
@@ -473,6 +485,15 @@ export default function PythonRoutineEditorClient() {
             onClick={loadSweepingCuboidSample}
           >
             Load sweeping cuboid sample
+          </Button>
+          <Button
+            type="button"
+            icon={faFileImport}
+            className="bg-slate-600 hover:bg-slate-500 dark:bg-slate-700 dark:hover:bg-slate-600"
+            disabled={busy}
+            onClick={loadRandomColourCycleSample}
+          >
+            Load random colour cycle sample
           </Button>
         </div>
       </div>

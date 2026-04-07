@@ -3,6 +3,9 @@ package store
 import (
 	"context"
 	"testing"
+	"time"
+
+	"github.com/google/uuid"
 )
 
 func TestRoutines_PythonCreatePatchList(t *testing.T) {
@@ -71,40 +74,15 @@ func TestRoutines_PythonPatchBlockedWhenRunning(t *testing.T) {
 func TestRoutines_PatchNonPythonNotEditable(t *testing.T) {
 	ctx := context.Background()
 	s := testDB(t)
-	r, err := s.CreateRoutine(ctx, "r", "", RoutineTypeRandomColourCycleAll, "")
-	if err != nil {
+	id := uuid.NewString()
+	created := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := s.db.ExecContext(ctx, `
+		INSERT INTO routines (id, name, description, type, python_source, created_at) VALUES (?, ?, ?, ?, ?, ?)
+	`, id, "legacy", "", RoutineTypeRandomColourCycleAll, "", created); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.PatchRoutine(ctx, r.ID, nil, nil, ptr("x")); err != ErrRoutineNotEditable {
+	if _, err := s.PatchRoutine(ctx, id, nil, nil, ptr("x")); err != ErrRoutineNotEditable {
 		t.Fatalf("got %v", err)
-	}
-}
-
-func TestRoutines_TickSkipsPython(t *testing.T) {
-	ctx := context.Background()
-	s := testDB(t)
-
-	sum, err := s.Create(ctx, "m1", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	sc, err := s.CreateScene(ctx, "s1", []string{sum.ID})
-	if err != nil {
-		t.Fatal(err)
-	}
-	r, err := s.CreateRoutine(ctx, "py", "", RoutineTypePythonSceneScript, "pass")
-	if err != nil {
-		t.Fatal(err)
-	}
-	runID, _, err := s.StartRoutineRun(ctx, sc.ID, r.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.TickRoutineRuns(ctx); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.StopRoutineRun(ctx, sc.ID, runID); err != nil {
-		t.Fatal(err)
 	}
 }
 

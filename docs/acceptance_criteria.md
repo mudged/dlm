@@ -546,20 +546,21 @@ Feature: Options factory reset with confirmation (REQ-017)
 
   Scenario: REQ-017 requires prompt and warning before any destructive factory reset
     Parent requirement: REQ-017
-    Given docs/requirements.md defines REQ-017
+    Given docs/requirements.md defines REQ-017 and REQ-032
     When the REQ-017 business rules about confirmation are read
     Then factory reset must show a blocking prompt before irreversible effects begin
     And the prompt must warn that all models scenes routines including Python routines and related data will be permanently removed
-    And only default sample models will remain after completion
+    And only default sample models and default sample Python routines will remain after completion
     And cancel or dismiss must leave data unchanged
 
   Scenario: REQ-017 requires post-reset state to match fresh samples
     Parent requirement: REQ-017
-    Given docs/requirements.md defines REQ-009 REQ-011 REQ-014 REQ-017 REQ-021 and REQ-022
+    Given docs/requirements.md defines REQ-009 REQ-011 REQ-014 REQ-017 REQ-021 REQ-022 and REQ-032
     When the REQ-017 business rules about outcomes are read
     Then after confirmed factory reset no user-created models or scenes may remain in listings
-    And no routine definitions or persisted routine run state from REQ-021 or REQ-022 may remain
+    And no routine definitions beyond the three default Python sample routines from REQ-032 may remain and no persisted routine run state from prior entities may remain
     And the model list must satisfy REQ-009 expectations for a fresh seed with three identifiable samples
+    And the routine definition list must satisfy REQ-032 expectations for exactly three default Python sample routines
     And per-light defaults for present models must align with REQ-014 and REQ-011
 
   Scenario: REQ-017 factory reset flow is usable without hover-only steps
@@ -674,16 +675,16 @@ Feature: Scene spatial API dimensions filters and bulk updates (REQ-020)
     Then the API request must be rejected with a clear actionable error
     And no partial updates may be persisted
 
-Feature: Scene routines definitions run stop and first random colour type (REQ-021)
+Feature: Scene routines Python definitions run stop and scene API (REQ-021)
 
-  Scenario: REQ-021 requires routine definitions with name description and type plus list and delete
+  Scenario: REQ-021 requires routine definitions with name description and Python kind plus list and delete
     Parent requirement: REQ-021
-    Given docs/requirements.md defines REQ-021
+    Given docs/requirements.md defines REQ-021 and REQ-022
     When the REQ-021 scope and business rules about definitions are read
-    Then the product must support creating a routine with name description and type
+    Then the product must support creating a routine with name description and routine kind consistent with Python routines
     And the product must support listing all routine definitions
     And the product must support deleting a routine definition
-    And name and type are required at create time
+    And name is required at create time
 
   Scenario: REQ-021 requires starting and stopping a routine against a scene
     Parent requirement: REQ-021
@@ -695,31 +696,31 @@ Feature: Scene routines definitions run stop and first random colour type (REQ-0
 
   Scenario: REQ-021 binds running automation to scene API for light state changes
     Parent requirement: REQ-021
-    Given docs/requirements.md defines REQ-011 REQ-020 and REQ-021
+    Given docs/requirements.md defines REQ-011 REQ-020 REQ-021 and REQ-022
     When the REQ-021 business rule about scene API usage during an active run is read
-    Then automated changes to on off hex colour or brightness for lights in that scene must use the scene API surface from REQ-020
+    Then automated changes to on off hex colour or brightness for lights in that scene must be effected through the Python scene binding and underlying REQ-020 scene API surface
     And canonical stored model coordinates must not be rewritten by routine automation
 
-  Scenario: REQ-021 allows volumetric targeting in scene space for types that need it
+  Scenario: REQ-021 allows volumetric targeting in scene space when scripts use regions
     Parent requirement: REQ-021
     Given docs/requirements.md defines REQ-020 and REQ-021
     When the REQ-021 business rules about volumetric targeting are read
-    Then routine types that limit effects must evaluate inclusion using scene-space positions
-    And they must use cuboid and or sphere geometry consistent with REQ-020
+    Then inclusion for region-scoped script logic must evaluate using scene-space positions
+    And cuboid and or sphere geometry must be consistent with REQ-020
     And invalid region geometry must be rejected per REQ-020 expectations
 
-  Scenario: REQ-021 first routine type turns on all scene lights and randomizes colours about every second
-    Parent requirement: REQ-021
-    Given docs/requirements.md defines REQ-011 REQ-015 REQ-020 and REQ-021
-    When the REQ-021 business rules for the first routine type are read
-    Then starting that type on a scene must set every light in the scene on with brightness 100 percent and valid hex colour per REQ-011
+  Scenario: REQ-032 default random colour cycle routine matches former all-lights test routine behavior
+    Parent requirement: REQ-032
+    Given docs/requirements.md defines REQ-011 REQ-015 REQ-020 REQ-021 REQ-022 and REQ-032
+    When the REQ-032 business rules for the random colour cycle all scene lights routine are read
+    Then starting that seeded Python routine on a scene must set every light in the scene on with brightness 100 percent and valid hex colour per REQ-011
     And while the run remains active at most once per elapsed SI second each light must receive a new independently uniformly random REQ-011-valid hex colour
     And the approximate one-second cadence must be documented in docs/architecture.md
 
-  Scenario: REQ-021 stopping the first type ends automation without implicit reset to defaults
-    Parent requirement: REQ-021
-    Given docs/requirements.md defines REQ-011 REQ-014 and REQ-021
-    When the REQ-021 business rules about stopping the first type are read
+  Scenario: REQ-032 stopping the random colour cycle routine ends automation without implicit reset to defaults
+    Parent requirement: REQ-032
+    Given docs/requirements.md defines REQ-011 REQ-014 REQ-021 REQ-022 and REQ-032
+    When the REQ-032 business rules for stopping the random colour cycle routine are read
     Then stopping must cease further automated updates promptly
     And lights retain the last successfully persisted state per REQ-011
     And stopping must not by itself reset lights to REQ-014 defaults
@@ -732,9 +733,10 @@ Feature: Scene routines definitions run stop and first random colour type (REQ-0
 
   Scenario: REQ-017 factory reset removes routine data per REQ-021 and REQ-022 scope
     Parent requirement: REQ-017
-    Given docs/requirements.md defines REQ-017 REQ-021 and REQ-022
+    Given docs/requirements.md defines REQ-017 REQ-021 REQ-022 and REQ-032
     When the REQ-017 scope about factory reset data removal is read
-    Then factory reset must remove persisted scene routine definitions for REQ-021 and REQ-022 and any persisted routine run state together with models scenes and related data
+    Then factory reset must remove persisted scene routine definitions and any persisted routine run state together with models scenes and related data
+    And factory reset must re-seed exactly the three default Python sample routines defined in REQ-032
 
 Feature: Python scene routines editor API docs and execution (REQ-022)
 
@@ -813,33 +815,32 @@ Feature: Python scene routines editor API docs and execution (REQ-022)
     Then the editor documentation and run and stop controls must remain usable on mobile tablet and desktop
     And essential steps must not rely on hover-only affordances
 
-Feature: Create routine type selection dropdown (REQ-023)
+Feature: Create routine Python-only path (REQ-023)
 
-  Scenario: REQ-023 requires a dropdown for routine type when creating a new routine
-    Parent requirement: REQ-023
-    Given docs/requirements.md defines REQ-023
-    When the REQ-023 scope and business rules about new routine creation are read
-    Then the user-facing flow to create a new routine definition must include a labeled routine type selector implemented as a dropdown or semantically equivalent single-choice control
-    And the user must be able to choose the type before completing creation per architecture placement in the form or wizard
-
-  Scenario: REQ-023 dropdown includes built-in REQ-021 types and Python from REQ-022
+  Scenario: REQ-023 requires new routine creation to be Python-only
     Parent requirement: REQ-023
     Given docs/requirements.md defines REQ-021 REQ-022 and REQ-023
-    When the REQ-023 business rule about dropdown options is read
-    Then every creatable routine kind must appear as an option including each built-in type under REQ-021 and the Python routine kind under REQ-022
-    And no creatable kind may be omitted from the list
+    When the REQ-023 scope and business rules about new routine creation are read
+    Then the user-facing flow to create a new routine definition must not offer a separate non-Python routine kind
+    And the flow must proceed to the Python authoring experience per REQ-022
 
-  Scenario: REQ-023 forbids a standalone primary Python-only create button when Python is in the dropdown
+  Scenario: REQ-023 forbids implying multiple distinct non-Python executable engines
+    Parent requirement: REQ-023
+    Given docs/requirements.md defines REQ-023
+    When the REQ-023 business rule 2 is read
+    Then if the UI shows a type control its options must not imply multiple distinct executable engines beyond Python
+
+  Scenario: REQ-023 forbids a redundant standalone primary Python-only create button
     Parent requirement: REQ-023
     Given docs/requirements.md defines REQ-023
     When the REQ-023 business rule 3 is read
-    Then the UI must not require a separate primary action whose sole purpose is to start creating only a Python routine when Python is already selectable in the type dropdown
+    Then the UI must not require a separate primary action whose sole purpose is to start creating only a Python routine when that is already the only outcome of the main new routine flow
 
-  Scenario: REQ-023 ties type selection to responsive non-hover-only use
+  Scenario: REQ-023 ties create flow controls to responsive non-hover-only use
     Parent requirement: REQ-023
     Given docs/requirements.md defines REQ-002 and REQ-023
     When the REQ-023 business rule 4 and responsive UX notes are read
-    Then the type control must be operable on mobile tablet and desktop without hover-only essential steps
+    Then any create control must be operable on mobile tablet and desktop without hover-only essential steps
 
 Feature: Python routine API reference below editor (REQ-024)
 
@@ -857,6 +858,13 @@ Feature: Python routine API reference below editor (REQ-024)
     Then the user must be able to choose one function method or documented attribute at a time to view expanded detail and sample usage for that item
     And every sample code snippet shown in the reference must include Python hash comments that briefly describe what the code does without being verbose
     And the product must expose a control that inserts the currently shown example into the editor at the caret when the caret is active in the editor otherwise at the end of the buffer
+
+  Scenario: REQ-024 catalog documents API items and does not replace REQ-032 default routines
+    Parent requirement: REQ-024
+    Given docs/requirements.md defines REQ-024 and REQ-032
+    When the REQ-024 business rule 7 is read
+    Then per-entry samples document individual API items
+    And the three full default Python sample routines from REQ-032 are not required to appear as whole-script REQ-024 catalog entries
 
   Scenario: REQ-024 API reference remains usable on all device classes
     Parent requirement: REQ-024
@@ -1045,30 +1053,40 @@ Feature: Redundant light-state skips (visualization, persistence, future WLED) (
     Then it describes where equivalence is evaluated what is cached invalidation rules and documented no-op persistence behavior
     And it aligns with REQ-029 observer and refresh strategy where relevant
 
-Feature: Novice Python sample routines growing sphere and sweeping cuboid (REQ-032)
+Feature: Default seeded Python sample routines (REQ-032)
 
-  Scenario: REQ-032 mandates two documented novice-oriented samples using public scene API only
+  Scenario: REQ-032 seeds three default Python routines on fresh install and factory reset
+    Parent requirement: REQ-032
+    Given docs/requirements.md defines REQ-017 REQ-021 REQ-022 and REQ-032
+    When the REQ-032 scope and business rules about automatic creation are read
+    Then exactly three Python routine definitions must be created on first start with an empty routine store
+    And exactly three Python routine definitions must exist after confirmed factory reset per REQ-017
+    And the user must be able to recognize growing sphere sweeping cuboid and random colour cycle all scene lights from names or descriptions
+    And each seeded routine must be editable and duplicable like any other Python routine per REQ-022
+    And the primary delivery must not be as whole-script entries in the REQ-024 API reference catalog
+
+  Scenario: REQ-032 mandates three novice-oriented routines using public scene API only
     Parent requirement: REQ-032
     Given docs/requirements.md defines REQ-032
     When the REQ-032 scope and business rules are read
-    Then the product must ship or document at least two complete sample Python routines for the growing sphere and sweeping cuboid behaviors
-    And each sample must use only the public Python scene API and documented helpers such as REQ-030 as named in architecture and REQ-024
-    And each sample must include frequent short hash comments aimed at novice readers consistent with REQ-024 sample comment style
+    Then the product must ship three complete default Python routines for growing sphere sweeping cuboid and random colour cycle all scene lights
+    And each routine must use only the public Python scene API and documented helpers such as REQ-030 as named in architecture and REQ-024
+    And each routine must include frequent short hash comments aimed at novice readers consistent with REQ-024 sample comment style
 
-  Scenario: Growing sphere sample centers fills scene over ten seconds and loops with new random colour
+  Scenario: Growing sphere routine centers fills scene over ten seconds and loops with new random colour
     Parent requirement: REQ-032
     Given docs/requirements.md defines REQ-011 REQ-020 REQ-022 REQ-026 REQ-030 and REQ-032
-    When the growing sphere sample behavior described in REQ-032 business rule 2 is read
+    When the growing sphere routine behavior described in REQ-032 business rule 3 is read
     Then each cycle must use a new independent random REQ-011 valid hex colour
     And the sphere must be centered at the geometric center of the scene axis aligned extent per REQ-026 and REQ-020
     And over ten SI seconds the sphere radius must increase monotonically from a small positive value until every scene light lies inside or on the closed sphere per REQ-020 inclusion semantics
     And while growing every light inside the current closed sphere must be on with brightness 100 percent and the cycle hex colour
     And after growth completes a new cycle must begin immediately with a new small sphere and new random colour while the run remains active
 
-  Scenario: Sweeping cuboid sample spans scene width and depth with twenty cm height and turns off exited lights
+  Scenario: Sweeping cuboid routine spans scene width and depth with twenty cm height and turns off exited lights
     Parent requirement: REQ-032
     Given docs/requirements.md defines REQ-011 REQ-020 REQ-022 REQ-026 REQ-030 and REQ-032
-    When the sweeping cuboid sample behavior described in REQ-032 business rule 3 is read
+    When the sweeping cuboid routine behavior described in REQ-032 business rule 4 is read
     Then each cycle must use a new independent random REQ-011 valid hex colour
     And the cuboid must have width and depth equal to scene width and depth and height exactly 0.2 meters
     And each cycle must start with the cuboid at the bottom of the scene volume and over ten SI seconds move monotonically to the top without leaving scene bounds
@@ -1076,18 +1094,18 @@ Feature: Novice Python sample routines growing sphere and sweeping cuboid (REQ-0
     And any light that was inside the cuboid on a prior update in the same cycle but is no longer inside must be set off per REQ-011
     And after reaching the top a new cycle must start at the bottom with a new random colour while the run remains active
 
-  Scenario: REQ-032 samples must not rewrite canonical model coordinates
+  Scenario: REQ-032 default routines must not rewrite canonical model coordinates
     Parent requirement: REQ-032
     Given docs/requirements.md defines REQ-005 REQ-015 REQ-020 and REQ-032
     When the REQ-032 business rule about scene API only is read
-    Then both samples must affect lights only through scene space operations
-    And canonical stored model coordinates must not be rewritten by the sample logic
+    Then all three default routines must affect lights only through scene space operations
+    And canonical stored model coordinates must not be rewritten by those routines
 
-  Scenario: Architecture documents where REQ-032 samples live
+  Scenario: Architecture documents where REQ-032 seed content is defined
     Parent requirement: REQ-032
     Given docs/requirements.md defines REQ-032 and REQ-025
     When docs/architecture.md is read after the architect pass
-    Then it names where the REQ-032 samples live and how they relate to the default new Python routine template if applicable
+    Then it names where the REQ-032 initial seed content is defined and how it relates to the default new Python routine template if applicable
 ```
 
 ---

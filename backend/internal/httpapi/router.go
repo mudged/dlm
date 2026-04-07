@@ -21,8 +21,7 @@ type apiDeps struct {
 // NewSiteHandler wires /health, /api/v1/, and optional static UI from content (Next export).
 // API routes are registered before the static file server. If content is nil, only API routes exist.
 // st must be non-nil (models API requires persistence).
-// rev may be nil; a private RevisionHub is used so in-process notifications still work. Pass a shared
-// *RevisionHub from main when the routine scheduler must bump subscribers (REQ-029).
+// rev may be nil; a private RevisionHub is used so in-process notifications still work (REQ-029 SSE).
 func NewSiteHandler(cfg *config.Config, content fs.FS, st *store.Store, rev *RevisionHub) http.Handler {
 	if st == nil {
 		panic("httpapi.NewSiteHandler: store is nil")

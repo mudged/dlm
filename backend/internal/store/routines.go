@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"crypto/rand"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -51,12 +50,12 @@ func (e *SceneRoutineConflictError) Error() string {
 
 // RoutineDTO is a persisted routine definition (REQ-021, REQ-022).
 type RoutineDTO struct {
-	ID             string    `json:"id"`
-	Name           string    `json:"name"`
-	Description    string    `json:"description"`
-	Type           string    `json:"type"`
-	PythonSource   string    `json:"python_source,omitempty"`
-	CreatedAt      time.Time `json:"created_at"`
+	ID           string    `json:"id"`
+	Name         string    `json:"name"`
+	Description  string    `json:"description"`
+	Type         string    `json:"type"`
+	PythonSource string    `json:"python_source,omitempty"`
+	CreatedAt    time.Time `json:"created_at"`
 }
 
 // RoutineRunDTO is exposed for list-runs API.
@@ -66,14 +65,6 @@ type RoutineRunDTO struct {
 	RoutineName string `json:"routine_name"`
 	RoutineType string `json:"routine_type"`
 	Status      string `json:"status"`
-}
-
-func randomHexColor() (string, error) {
-	var b [3]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", err
-	}
-	return fmt.Sprintf("#%02x%02x%02x", b[0], b[1], b[2]), nil
 }
 
 // ListRoutines returns all routine definitions, newest first.
@@ -129,8 +120,8 @@ func (s *Store) GetRoutine(ctx context.Context, id string) (*RoutineDTO, error) 
 	return &r, nil
 }
 
-// CreateRoutine inserts a new definition (name and type required; description may be "").
-// pythonSource is stored only for RoutineTypePythonSceneScript (ignored for other types).
+// CreateRoutine inserts a new definition. Empty type defaults to python_scene_script (REQ-023).
+// random_colour_cycle_all is not creatable via API (legacy only, migrated to Python).
 func (s *Store) CreateRoutine(ctx context.Context, name, description, typ, pythonSource string) (*RoutineDTO, error) {
 	name = strings.TrimSpace(name)
 	typ = strings.TrimSpace(typ)
@@ -138,17 +129,15 @@ func (s *Store) CreateRoutine(ctx context.Context, name, description, typ, pytho
 		return nil, fmt.Errorf("name is required")
 	}
 	if typ == "" {
-		return nil, fmt.Errorf("type is required")
+		typ = RoutineTypePythonSceneScript
 	}
-	var src string
-	switch typ {
-	case RoutineTypeRandomColourCycleAll:
-		src = ""
-	case RoutineTypePythonSceneScript:
-		src = pythonSource
-	default:
+	if typ == RoutineTypeRandomColourCycleAll {
+		return nil, fmt.Errorf("%w: random_colour_cycle_all is not a creatable type", ErrRoutineUnknownType)
+	}
+	if typ != RoutineTypePythonSceneScript {
 		return nil, fmt.Errorf("%w: %q", ErrRoutineUnknownType, typ)
 	}
+	src := pythonSource
 
 	id := uuid.NewString()
 	created := time.Now().UTC().Format(time.RFC3339Nano)
@@ -159,10 +148,7 @@ func (s *Store) CreateRoutine(ctx context.Context, name, description, typ, pytho
 	}
 	t, _ := time.Parse(time.RFC3339Nano, created)
 	dto := &RoutineDTO{
-		ID: id, Name: name, Description: description, Type: typ, CreatedAt: t.UTC(),
-	}
-	if typ == RoutineTypePythonSceneScript {
-		dto.PythonSource = src
+		ID: id, Name: name, Description: description, Type: typ, PythonSource: src, CreatedAt: t.UTC(),
 	}
 	return dto, nil
 }
@@ -258,11 +244,10 @@ func (s *Store) findRunningRunForSceneRoutine(ctx context.Context, tx *sql.Tx, s
 	return id, true, nil
 }
 
-// StartRoutineRun creates a running row and applies the first tick for supported types.
+// StartRoutineRun creates a running row. Light mutations for automation run only in the browser (§3.17).
 // Returns runID, alreadyRunning (true if same routine already running on scene), error.
 func (s *Store) StartRoutineRun(ctx context.Context, sceneID, routineID string) (runID string, alreadyRunning bool, err error) {
-	routine, err := s.GetRoutine(ctx, routineID)
-	if err != nil {
+	if _, err := s.GetRoutine(ctx, routineID); err != nil {
 		return "", false, err
 	}
 	ok, err := s.sceneExistsTx(ctx, nil, sceneID)
@@ -306,92 +291,10 @@ func (s *Store) StartRoutineRun(ctx context.Context, sceneID, routineID string) 
 	`, runID, routineID, sceneID, RoutineStatusRunning, started); err != nil {
 		return "", false, err
 	}
-
-	if routine.Type == RoutineTypeRandomColourCycleAll {
-		if err := s.applyRandomColourCycleAllFullTx(ctx, tx, sceneID); err != nil {
-			return "", false, err
-		}
-	}
 	if err := tx.Commit(); err != nil {
 		return "", false, err
 	}
 	return runID, false, nil
-}
-
-func (s *Store) applyRandomColourCycleAllFullTx(ctx context.Context, tx *sql.Tx, sceneID string) error {
-	on := true
-	c := "#ffffff"
-	br := 100.0
-	patch := LightStatePatch{On: &on, Color: &c, BrightnessPct: &br}
-	if _, err := s.patchSceneLightsByRegionTx(ctx, tx, sceneID, patch, func(SceneLightFlat) bool { return true }); err != nil {
-		return err
-	}
-	_, err := s.applyRandomColourCycleAllTickTx(ctx, tx, sceneID)
-	return err
-}
-
-func (s *Store) applyRandomColourCycleAllTick(ctx context.Context, sceneID string) (writes int, err error) {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return 0, err
-	}
-	defer func() { _ = tx.Rollback() }()
-	n, err := s.applyRandomColourCycleAllTickTx(ctx, tx, sceneID)
-	if err != nil {
-		return 0, err
-	}
-	if err := tx.Commit(); err != nil {
-		return 0, err
-	}
-	return n, nil
-}
-
-func (s *Store) applyRandomColourCycleAllTickTx(ctx context.Context, tx *sql.Tx, sceneID string) (writes int, err error) {
-	lights, err := s.listSceneLightsTx(ctx, tx, sceneID)
-	if err != nil {
-		return 0, err
-	}
-	updates := make([]SceneBatchLightUpdate, 0, len(lights))
-	for _, L := range lights {
-		col, err := randomHexColor()
-		if err != nil {
-			return 0, err
-		}
-		if _, err := ValidateColor(col); err != nil {
-			return 0, err
-		}
-		updOn := true
-		updBr := 100.0
-		c := col
-		updates = append(updates, SceneBatchLightUpdate{
-			ModelID: L.ModelID,
-			LightID: L.LightID,
-			Patch: LightStatePatch{
-				On:            &updOn,
-				Color:         &c,
-				BrightnessPct: &updBr,
-			},
-		})
-	}
-	if len(updates) == 0 {
-		return 0, nil
-	}
-	if err := validateSceneBatchUpdates(updates); err != nil {
-		return 0, err
-	}
-	res, err := s.patchSceneLightsBatchTx(ctx, tx, sceneID, updates)
-	if err != nil {
-		return 0, err
-	}
-	return res.UpdatedCount, nil
-}
-
-func (s *Store) stopRoutineRunByID(ctx context.Context, runID string) error {
-	now := time.Now().UTC().Format(time.RFC3339Nano)
-	_, err := s.db.ExecContext(ctx, `
-		UPDATE routine_runs SET status = ?, stopped_at = ? WHERE id = ? AND status = ?
-	`, RoutineStatusStopped, now, runID, RoutineStatusRunning)
-	return err
 }
 
 // StopRoutineRun marks a run stopped if it belongs to the scene.
@@ -440,53 +343,4 @@ func (s *Store) ListRunningRoutineRunsForScene(ctx context.Context, sceneID stri
 		out = append(out, dto)
 	}
 	return out, rows.Err()
-}
-
-// TickRoutineRuns advances every running routine by type (called from scheduler).
-// It returns the list of scene IDs whose server-side routine applied a light-state update
-// this tick (for REQ-029 SSE / revision fan-out).
-func (s *Store) TickRoutineRuns(ctx context.Context) ([]string, error) {
-	rows, err := s.db.QueryContext(ctx, `
-		SELECT rr.scene_id, r.type FROM routine_runs rr
-		INNER JOIN routines r ON r.id = rr.routine_id
-		WHERE rr.status = ?
-	`, RoutineStatusRunning)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	type pair struct {
-		sceneID string
-		typ     string
-	}
-	var runs []pair
-	for rows.Next() {
-		var p pair
-		if err := rows.Scan(&p.sceneID, &p.typ); err != nil {
-			return nil, err
-		}
-		runs = append(runs, p)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	var touched []string
-	for _, p := range runs {
-		switch p.typ {
-		case RoutineTypePythonSceneScript:
-			// Client-executed (REQ-022 / architecture §3.17); server scheduler skips.
-			continue
-		case RoutineTypeRandomColourCycleAll:
-			n, err := s.applyRandomColourCycleAllTick(ctx, p.sceneID)
-			if err != nil {
-				return nil, err
-			}
-			if n > 0 {
-				touched = append(touched, p.sceneID)
-			}
-		default:
-			return nil, fmt.Errorf("unsupported running routine type %q", p.typ)
-		}
-	}
-	return touched, nil
 }

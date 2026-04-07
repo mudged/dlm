@@ -95,7 +95,7 @@ func TestRoutinesCreateStartStopDelete(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r, err := s.CreateRoutine(ctx, "fx", "d", RoutineTypeRandomColourCycleAll, "")
+	r, err := s.CreateRoutine(ctx, "fx", "d", RoutineTypePythonSceneScript, "pass")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,9 +103,9 @@ func TestRoutinesCreateStartStopDelete(t *testing.T) {
 	if err != nil || already || runID == "" {
 		t.Fatalf("start %+v %v %v", runID, already, err)
 	}
-	d, err := s.Get(ctx, sum.ID)
-	if err != nil || !d.Lights[0].On {
-		t.Fatalf("after start want on, got %+v err %v", d.Lights[0], err)
+	runs, err := s.ListRunningRoutineRunsForScene(ctx, sc.ID)
+	if err != nil || len(runs) != 1 || runs[0].ID != runID {
+		t.Fatalf("want one running run %+v err %v", runs, err)
 	}
 	if err := s.StopRoutineRun(ctx, sc.ID, runID); err != nil {
 		t.Fatal(err)

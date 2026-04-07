@@ -41,6 +41,10 @@ func main() {
 		log.Error("seed default samples", "err", err)
 		os.Exit(1)
 	}
+	if err := st.SeedDefaultPythonRoutines(context.Background()); err != nil {
+		log.Error("seed default python routines", "err", err)
+		os.Exit(1)
+	}
 
 	ui, err := webdist.StaticFS()
 	if err != nil {
@@ -69,12 +73,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	schedCtx, schedCancel := context.WithCancel(context.Background())
-	defer schedCancel()
-	go httpapi.StartRoutineScheduler(schedCtx, log, st, revHub)
-
 	<-ctx.Done()
-	schedCancel()
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
