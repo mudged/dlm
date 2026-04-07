@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { boundingFromLights } from "@/lib/lightBounds";
@@ -20,6 +20,7 @@ import {
   VIZ_VIEWPORT_BG,
   VIZ_VIEWPORT_BG_CSS,
 } from "@/lib/vizViewport";
+import { modelLightsVizSignature } from "@/lib/lightStateSignature";
 
 type Props = {
   lights: Light[];
@@ -109,6 +110,8 @@ function ModelLightsCanvas({
   const [hover, setHover] = useState<TooltipState | null>(null);
   const pinnedRef = useRef<TooltipState | null>(null);
   pinnedRef.current = pinned;
+
+  const vizSig = useMemo(() => modelLightsVizSignature(lights), [lights]);
 
   useEffect(() => {
     setPinned(null);
@@ -485,7 +488,9 @@ function ModelLightsCanvas({
         container.removeChild(canvasEl);
       }
     };
-  }, [lights, cameraPersistenceKey, cameraResetVersion]);
+    // vizSig encodes positions + effective state; listing `lights` would rebuild every parent render (REQ-031).
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional
+  }, [vizSig, cameraPersistenceKey, cameraResetVersion]);
 
   const tip = pinned ?? hover;
 
