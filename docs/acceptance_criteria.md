@@ -1124,22 +1124,24 @@ Feature: Shape animation routines declarative authoring and run (REQ-033)
     Then the shape animation add or edit flow must include the unified region with scene selection run stop live three.js viewport reset scene lights and reset camera
     And the product must not duplicate scene picker or viewport for that workflow
 
-  Scenario: REQ-033 constrains shapes count type size colour position motion and edge behavior
+  Scenario: REQ-033 constrains shapes count type size colour brightness speed position motion and edge behavior
     Parent requirement: REQ-033
     Given docs/requirements.md defines REQ-033 REQ-020 and REQ-026
     When the REQ-033 business rules 2 through 7 are read
     Then the definition allows between 1 and 20 shapes each sphere or axis-aligned cuboid in scene space
     And size may be fixed or random uniform between user lower and upper bounds per shape
     And shape colour may be fixed REQ-011 hex or random with REQ-030 distribution intent
+    And each shape has user-set brightness percent 0 through 100 per REQ-011 for lights inside that shape
+    And motion uses a normalized direction from signed dx dy dz not all zero and scalar speed in SI meters per second where the UI may use centimeters per second with consistent conversion
+    And speed may be fixed positive or random uniform between positive lower and upper bounds on run start and each loop cycle per business rule 10
     And initial position may be explicit scene coordinates or random against a chosen scene face top bottom left right back or front with whole shape inside the scene volume
-    And motion is straight line with user signed velocity components on x y and z including zero
     And per shape edge behavior is one of Pac-Man wrap stop and disappear deflect random angle or deflect inflection angle against scene boundary
 
-  Scenario: REQ-033 assigns lights inside shapes to shape colour and others to background or off
+  Scenario: REQ-033 assigns lights inside shapes to shape colour brightness and others to background or off
     Parent requirement: REQ-033
     Given docs/requirements.md defines REQ-011 REQ-033 and REQ-020
-    When the REQ-033 business rules 1 8 and 9 are read
-    Then lights inside at least one active shape receive that shapes winning colour per deterministic overlap precedence
+    When the REQ-033 business rules 1 4 8 and 9 are read
+    Then lights inside at least one active shape receive that shapes winning colour and per-shape brightness per deterministic overlap precedence
     And lights outside all active shapes receive background colour and brightness or are set off when background mode is none
 
   Scenario: REQ-033 animation loops until stop or all shapes terminal
