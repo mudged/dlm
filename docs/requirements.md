@@ -1305,3 +1305,45 @@ As a **user** **writing** **Python** **routines**, I want **the** **`scene`** **
 - **Whether** **REQ-025** **default** **template** **should** **replace** **inline** **`random.randrange`** **with** **the** **new** **helper** **for** **pedagogical** **consistency**.
 
 ---
+
+### REQ-031 — Skip redundant light-state work for visualization responsiveness
+
+| Field | Value |
+|-------|-------|
+| **ID** | REQ-031 |
+| **Title** | Skip redundant light-state work for visualization responsiveness |
+| **Priority** | Should |
+| **Actor(s)** | End user; web client (three.js views) |
+
+**User story**
+
+As an **end** **user** **viewing** **models** **or** **scenes**, I want **the** **client** **to** **avoid** **unnecessary** **visualization** **work** **and** **redundant** **application** **of** **light** **state** **when** **nothing** **that** **affects** **the** **picture** **has** **changed**, **so** **that** **the** **3D** **view** **stays** **smoother** **and** **less** **laggy** **during** **frequent** **or** **repeated** **updates** **(**including** **high-throughput** **paths** **per** **REQ-029**)**.
+
+**Scope**
+
+- In scope: **Client-side** **detection** **that** **incoming** **or** **locally** **proposed** **per-light** **state** **(**on**/**off**, **hex** **colour**, **brightness** **per** **REQ-011**/**REQ-012**)** **is** **equivalent** **to** **what** **the** **visualization** **already** **shows** **for** **that** **light** **in** **the** **current** **view** **context**; **skipping** **full** **scene**/**mesh** **refresh** **or** **other** **expensive** **redraw** **work** **when** **the** **effective** **rendering** **state** **would** **not** **change**. **An** **in-memory** **record** **of** **last-applied** **effective** **state** **per** **light** **(**cache** **or** **equivalent** **structure**)** **is** **in** **scope** **where** **it** **improves** **performance**. **Applies** **to** **single-model** **three.js** **view** **(**REQ-010**/**REQ-012**)** **,** **scene** **composite** **view** **(**REQ-015**/**REQ-012**)** **,** **and** **the** **unified** **Python** **routine** **live** **viewport** **(**REQ-027**)** **when** **those** **surfaces** **display** **per-light** **state**.
+- Out of scope: **Requiring** **server-side** **deduplication** **of** **writes** **(**the** **API** **may** **still** **accept** **idempotent** **repeats**)**; **changing** **REQ-011** **REST** **semantics**; **hard** **frame-rate** **or** **latency** **SLOs** **(**Pi** **constraints** **remain** **per** **REQ-003**/**REQ-029**)**; **skipping** **persistence** **when** **the** **user** **explicitly** **submits** **a** **write** **(**this** **requirement** **targets** **visualization** **and** **client** **data** **application** **paths**, **not** **whether** **the** **server** **stores** **duplicate** **values**)**.
+
+**Business rules**
+
+1. **Before** **applying** **incoming** **light** **state** **to** **the** **three.js** **visualization** **(**including** **after** **poll**, **push**, **or** **successful** **local** **mutation** **that** **would** **normally** **trigger** **a** **refresh**)** **,** **the** **client** **MUST** **determine** **whether** **the** **effective** **rendering** **relevant** **fields** **(**on**/**off**, **colour**, **brightness** **per** **REQ-012**)** **for** **each** **affected** **light** **differ** **from** **the** **last** **state** **already** **applied** **in** **that** **view** **context**. **When** **they** **are** **equivalent** **(**after** **any** **canonical** **normalization** **documented** **in** **`docs/architecture.md`** **for** **colour** **strings** **or** **numeric** **forms**)** **,** **the** **client** **MUST** **not** **perform** **a** **full** **visualization** **rebuild** **or** **other** **redraw** **work** **that** **exists** **solely** **to** **reflect** **that** **same** **state** **again**.
+2. **The** **product** **SHOULD** **maintain** **an** **in-memory** **cache** **(**or** **equivalent**)** **of** **last-applied** **effective** **per-light** **state** **for** **the** **active** **model** **or** **scene** **view**, **updated** **when** **state** **is** **actually** **applied** **to** **the** **renderer**, **and** **cleared** **or** **resynchronized** **when** **the** **user** **navigates** **to** **a** **different** **model**/**scene**, **or** **when** **architecture-defined** **events** **indicate** **external** **changes** **that** **invalidate** **the** **cache** **(**for** **example** **another** **browser** **tab** **or** **integrator** **if** **documented**)**.
+3. **When** **per-light** **state** **does** **change**, **timeliness** **and** **correctness** **MUST** **remain** **consistent** **with** **REQ-012** **(**no** **indefinite** **staleness** **after** **successful** **writes** **the** **client** **knows** **about**)** **and** **REQ-010**/**REQ-015**/**REQ-027** **drawing** **rules** **unchanged**.
+4. **`docs/architecture.md`** **MUST** **describe** **where** **equivalence** **is** **evaluated** **(**which** **layer** **or** **module**)** **,** **what** **is** **cached**, **and** **invalidation** **rules**, **in** **line** **with** **REQ-029** **observer**/**refresh** **strategy** **where** **relevant**.
+
+**Responsive / UX notes** *(when UI is involved)*
+
+- Mobile: **Same** **responsiveness** **goal** **as** **desktop**; **no** **extra** **jank** **from** **redundant** **refreshes** **on** **touch** **devices**.
+- Tablet: **Same** **as** **mobile**.
+- Desktop: **Pointer** **and** **keyboard** **flows** **unchanged**; **benefit** **is** **smoother** **visual** **updates** **under** **load**.
+
+**Dependencies**
+
+- REQ-010, REQ-011, REQ-012, REQ-015, REQ-027, REQ-029
+
+**Open questions**
+
+- **Whether** **cache** **is** **per** **browser** **tab** **only** **or** **coordinated** **across** **tabs** **(**if** **ever** **required**)**.
+- **Granularity** **for** **bulk** **or** **region** **updates** **(**REQ-020**)** **:** **per-light** **short-circuit** **vs** **batch-level** **heuristics**.
+
+---

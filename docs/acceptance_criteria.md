@@ -999,6 +999,36 @@ Feature: Python scene API random hex colour helper (REQ-030)
     When the REQ-030 business rules about documentation and tooling are read
     Then the REQ-024 API catalog must list the callable with a commented sample per REQ-024
     And CodeMirror completions and the scene worker must stay aligned with the chosen Python name and async or sync semantics
+
+Feature: Redundant light-state skips for visualization (REQ-031)
+
+  Scenario: REQ-031 requires skipping unnecessary visualization work when state is unchanged
+    Parent requirement: REQ-031
+    Given docs/requirements.md defines REQ-031
+    When the REQ-031 business rules are read
+    Then the client must compare incoming or locally applied per-light state to the last applied effective rendering state
+    And when on off hex colour and brightness are equivalent after documented normalization the client must not perform a full visualization rebuild solely to reflect that same state again
+
+  Scenario: REQ-031 encourages in-memory last-applied state with invalidation
+    Parent requirement: REQ-031
+    Given docs/requirements.md defines REQ-031
+    When the REQ-031 scope and business rules about caching are read
+    Then the product should maintain in-memory last-applied per-light state for the active model or scene view
+    And that record must be cleared or resynchronized on navigation or architecture-defined invalidation events
+
+  Scenario: REQ-031 preserves REQ-012 when state actually changes
+    Parent requirement: REQ-031
+    Given docs/requirements.md defines REQ-012 and REQ-031
+    When per-light state differs from the last applied effective state
+    Then the visualization must update without indefinite staleness after successful writes the client knows about
+    And REQ-010 REQ-015 and REQ-027 drawing rules remain in force
+
+  Scenario: REQ-031 requires architecture documentation of equivalence and cache rules
+    Parent requirement: REQ-031
+    Given docs/requirements.md defines REQ-029 and REQ-031
+    When docs/architecture.md is read after the architect pass
+    Then it describes where equivalence is evaluated what is cached and invalidation rules
+    And it aligns with REQ-029 observer and refresh strategy where relevant
 ```
 
 ---
