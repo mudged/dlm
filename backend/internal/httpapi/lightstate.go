@@ -33,7 +33,7 @@ func (a *apiDeps) postResetLightStates(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 4096)
 	_, _ = io.Copy(io.Discard, r.Body)
 
-	states, err := a.store.ResetAllLightStates(r.Context(), modelID)
+	states, unchangedAll, err := a.store.ResetAllLightStates(r.Context(), modelID)
 	if errors.Is(err, store.ErrNotFound) {
 		writeAPIError(w, http.StatusNotFound, "not_found", "model not found")
 		return
@@ -45,8 +45,14 @@ func (a *apiDeps) postResetLightStates(w http.ResponseWriter, r *http.Request) {
 	if states == nil {
 		states = []store.LightStateDTO{}
 	}
-	a.rev.NotifyModelLightsChanged(r.Context(), a.store, modelID)
-	writeJSON(w, http.StatusOK, map[string]any{"states": states})
+	if !unchangedAll {
+		a.rev.NotifyModelLightsChanged(r.Context(), a.store, modelID)
+	}
+	resp := map[string]any{"states": states}
+	if unchangedAll {
+		resp["unchanged_all"] = true
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func (a *apiDeps) listLightStates(w http.ResponseWriter, r *http.Request) {
@@ -129,7 +135,7 @@ func (a *apiDeps) patchLightState(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	st, err := a.store.PatchLightState(r.Context(), modelID, lightID, patch)
+	st, unchanged, err := a.store.PatchLightState(r.Context(), modelID, lightID, patch)
 	if errors.Is(err, store.ErrNotFound) {
 		writeAPIError(w, http.StatusNotFound, "not_found", "model not found")
 		return
@@ -147,8 +153,19 @@ func (a *apiDeps) patchLightState(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusInternalServerError, "internal_error", "could not update light state")
 		return
 	}
-	a.rev.NotifyModelLightsChanged(r.Context(), a.store, modelID)
-	writeJSON(w, http.StatusOK, st)
+	if !unchanged {
+		a.rev.NotifyModelLightsChanged(r.Context(), a.store, modelID)
+	}
+	out := map[string]any{
+		"id":             st.ID,
+		"on":             st.On,
+		"color":          st.Color,
+		"brightness_pct": st.BrightnessPct,
+	}
+	if unchanged {
+		out["unchanged"] = true
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 func parseLightPathID(s string) (int, bool) {
@@ -201,7 +218,7 @@ func (a *apiDeps) patchLightStatesBatch(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	states, err := a.store.BatchPatchLightStates(r.Context(), modelID, body.Ids, patch)
+	states, unchangedAll, err := a.store.BatchPatchLightStates(r.Context(), modelID, body.Ids, patch)
 	if errors.Is(err, store.ErrNotFound) {
 		writeAPIError(w, http.StatusNotFound, "not_found", "model not found")
 		return
@@ -230,6 +247,12 @@ func (a *apiDeps) patchLightStatesBatch(w http.ResponseWriter, r *http.Request) 
 	if states == nil {
 		states = []store.LightStateDTO{}
 	}
-	a.rev.NotifyModelLightsChanged(r.Context(), a.store, modelID)
-	writeJSON(w, http.StatusOK, map[string]any{"states": states})
+	if !unchangedAll {
+		a.rev.NotifyModelLightsChanged(r.Context(), a.store, modelID)
+	}
+	resp := map[string]any{"states": states}
+	if unchangedAll {
+		resp["unchanged_all"] = true
+	}
+	writeJSON(w, http.StatusOK, resp)
 }

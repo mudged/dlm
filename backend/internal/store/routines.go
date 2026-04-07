@@ -326,34 +326,39 @@ func (s *Store) applyRandomColourCycleAllFullTx(ctx context.Context, tx *sql.Tx,
 	if _, err := s.patchSceneLightsByRegionTx(ctx, tx, sceneID, patch, func(SceneLightFlat) bool { return true }); err != nil {
 		return err
 	}
-	return s.applyRandomColourCycleAllTickTx(ctx, tx, sceneID)
+	_, err := s.applyRandomColourCycleAllTickTx(ctx, tx, sceneID)
+	return err
 }
 
-func (s *Store) applyRandomColourCycleAllTick(ctx context.Context, sceneID string) error {
+func (s *Store) applyRandomColourCycleAllTick(ctx context.Context, sceneID string) (writes int, err error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if err := s.applyRandomColourCycleAllTickTx(ctx, tx, sceneID); err != nil {
-		return err
+	n, err := s.applyRandomColourCycleAllTickTx(ctx, tx, sceneID)
+	if err != nil {
+		return 0, err
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return n, nil
 }
 
-func (s *Store) applyRandomColourCycleAllTickTx(ctx context.Context, tx *sql.Tx, sceneID string) error {
+func (s *Store) applyRandomColourCycleAllTickTx(ctx context.Context, tx *sql.Tx, sceneID string) (writes int, err error) {
 	lights, err := s.listSceneLightsTx(ctx, tx, sceneID)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	updates := make([]SceneBatchLightUpdate, 0, len(lights))
 	for _, L := range lights {
 		col, err := randomHexColor()
 		if err != nil {
-			return err
+			return 0, err
 		}
 		if _, err := ValidateColor(col); err != nil {
-			return err
+			return 0, err
 		}
 		updOn := true
 		updBr := 100.0
@@ -369,13 +374,16 @@ func (s *Store) applyRandomColourCycleAllTickTx(ctx context.Context, tx *sql.Tx,
 		})
 	}
 	if len(updates) == 0 {
-		return nil
+		return 0, nil
 	}
 	if err := validateSceneBatchUpdates(updates); err != nil {
-		return err
+		return 0, err
 	}
-	_, err = s.patchSceneLightsBatchTx(ctx, tx, sceneID, updates)
-	return err
+	res, err := s.patchSceneLightsBatchTx(ctx, tx, sceneID, updates)
+	if err != nil {
+		return 0, err
+	}
+	return res.UpdatedCount, nil
 }
 
 func (s *Store) stopRoutineRunByID(ctx context.Context, runID string) error {
@@ -469,10 +477,13 @@ func (s *Store) TickRoutineRuns(ctx context.Context) ([]string, error) {
 			// Client-executed (REQ-022 / architecture §3.17); server scheduler skips.
 			continue
 		case RoutineTypeRandomColourCycleAll:
-			if err := s.applyRandomColourCycleAllTick(ctx, p.sceneID); err != nil {
+			n, err := s.applyRandomColourCycleAllTick(ctx, p.sceneID)
+			if err != nil {
 				return nil, err
 			}
-			touched = append(touched, p.sceneID)
+			if n > 0 {
+				touched = append(touched, p.sceneID)
+			}
 		default:
 			return nil, fmt.Errorf("unsupported running routine type %q", p.typ)
 		}

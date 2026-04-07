@@ -160,6 +160,8 @@ type ScenePatchedState struct {
 type SceneBulkPatchResult struct {
 	UpdatedCount int                 `json:"updated_count"`
 	States       []ScenePatchedState `json:"states"`
+	// UnchangedAll is true when every matched light was already equivalent to the merged state (REQ-031).
+	UnchangedAll bool `json:"unchanged_all,omitempty"`
 }
 
 // SceneBatchLightUpdate is one per-light patch inside PATCH …/lights/state/batch (REQ-020 / REQ-021).
@@ -1066,10 +1068,17 @@ func (s *Store) patchSceneLightsByRegionTx(ctx context.Context, tx *sql.Tx, scen
 	}
 
 	updated := make([]ScenePatchedState, 0)
+	writeCount := 0
+	allEquiv := true
+	matchedAny := false
 	for _, L := range all {
 		if !include(L) {
 			continue
 		}
+		matchedAny = true
+		prevOn := L.On
+		prevColor := strings.ToLower(strings.TrimSpace(L.Color))
+		prevBr := L.BrightnessPct
 		on := L.On
 		color := L.Color
 		brightness := L.BrightnessPct
@@ -1082,10 +1091,15 @@ func (s *Store) patchSceneLightsByRegionTx(ctx context.Context, tx *sql.Tx, scen
 		if brightnessNorm != nil {
 			brightness = *brightnessNorm
 		}
-		if _, err := tx.ExecContext(ctx, `
-			UPDATE lights SET "on" = ?, color = ?, brightness_pct = ? WHERE model_id = ? AND idx = ?
-		`, boolToInt(on), color, brightness, L.ModelID, L.LightID); err != nil {
-			return nil, err
+		rowUnchanged := EquivLightStateTriple(prevOn, prevColor, prevBr, on, color, brightness)
+		if !rowUnchanged {
+			allEquiv = false
+			if _, err := tx.ExecContext(ctx, `
+				UPDATE lights SET "on" = ?, color = ?, brightness_pct = ? WHERE model_id = ? AND idx = ?
+			`, boolToInt(on), color, brightness, L.ModelID, L.LightID); err != nil {
+				return nil, err
+			}
+			writeCount++
 		}
 		updated = append(updated, ScenePatchedState{
 			ModelID:       L.ModelID,
@@ -1099,10 +1113,14 @@ func (s *Store) patchSceneLightsByRegionTx(ctx context.Context, tx *sql.Tx, scen
 		})
 	}
 
-	return &SceneBulkPatchResult{
-		UpdatedCount: len(updated),
+	res := &SceneBulkPatchResult{
+		UpdatedCount: writeCount,
 		States:       updated,
-	}, nil
+	}
+	if matchedAny && allEquiv {
+		res.UnchangedAll = true
+	}
+	return res, nil
 }
 
 // PatchSceneLightsCuboid bulk-updates lights inside a cuboid (inclusive boundaries).
@@ -1189,6 +1207,8 @@ func (s *Store) patchSceneLightsBatchTx(ctx context.Context, tx *sql.Tx, sceneID
 	}
 
 	updated := make([]ScenePatchedState, 0, len(updates))
+	writeCount := 0
+	allUnchanged := true
 	for _, u := range updates {
 		k := u.ModelID + "\x00" + strconv.Itoa(u.LightID)
 		flat, ok := member[k]
@@ -1208,7 +1228,10 @@ func (s *Store) patchSceneLightsBatchTx(ctx context.Context, tx *sql.Tx, sceneID
 			}
 			return nil, err
 		}
-		on := onInt != 0
+		prevOn := onInt != 0
+		on := prevOn
+		prevColor := strings.ToLower(strings.TrimSpace(color))
+		prevBr := brightness
 		if u.Patch.On != nil {
 			on = *u.Patch.On
 		}
@@ -1226,10 +1249,17 @@ func (s *Store) patchSceneLightsBatchTx(ctx context.Context, tx *sql.Tx, sceneID
 			brightness = *u.Patch.BrightnessPct
 		}
 
-		if _, err := tx.ExecContext(ctx, `
-			UPDATE lights SET "on" = ?, color = ?, brightness_pct = ? WHERE model_id = ? AND idx = ?
-		`, boolToInt(on), color, brightness, u.ModelID, u.LightID); err != nil {
-			return nil, err
+		rowUnchanged := EquivLightStateTriple(prevOn, prevColor, prevBr, on, color, brightness)
+		if rowUnchanged {
+			// no UPDATE
+		} else {
+			allUnchanged = false
+			if _, err := tx.ExecContext(ctx, `
+				UPDATE lights SET "on" = ?, color = ?, brightness_pct = ? WHERE model_id = ? AND idx = ?
+			`, boolToInt(on), color, brightness, u.ModelID, u.LightID); err != nil {
+				return nil, err
+			}
+			writeCount++
 		}
 		updated = append(updated, ScenePatchedState{
 			ModelID:       u.ModelID,
@@ -1243,5 +1273,9 @@ func (s *Store) patchSceneLightsBatchTx(ctx context.Context, tx *sql.Tx, sceneID
 		})
 	}
 
-	return &SceneBulkPatchResult{UpdatedCount: len(updated), States: updated}, nil
+	return &SceneBulkPatchResult{
+		UpdatedCount: writeCount,
+		States:       updated,
+		UnchangedAll: allUnchanged,
+	}, nil
 }

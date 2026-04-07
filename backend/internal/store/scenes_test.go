@@ -46,6 +46,16 @@ func TestPatchSceneLightsSceneAndBatch(t *testing.T) {
 	if d.Lights[1].Color != "#112233" {
 		t.Fatalf("light1 color %q", d.Lights[1].Color)
 	}
+
+	res2, err := s.PatchSceneLightsScene(ctx, sc.ID, LightStatePatch{
+		On: ptrBool(true),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res2.UpdatedCount != 0 || !res2.UnchangedAll || len(res2.States) != 2 {
+		t.Fatalf("idempotent scene patch want 0 writes unchanged_all, got %+v", res2)
+	}
 }
 
 func TestPatchSceneLightsBatchRejectsForeignLight(t *testing.T) {

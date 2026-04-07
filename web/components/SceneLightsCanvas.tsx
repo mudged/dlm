@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { boundingFromLights } from "@/lib/lightBounds";
@@ -21,6 +21,7 @@ import {
   VIZ_VIEWPORT_BG,
   VIZ_VIEWPORT_BG_CSS,
 } from "@/lib/vizViewport";
+import { sceneItemsVizSignature } from "@/lib/lightStateSignature";
 
 type Props = {
   items: SceneItem[];
@@ -165,6 +166,7 @@ export default function SceneLightsCanvas({
   pinnedRef.current = pinned;
 
   const flatKey = items.map((i) => i.model_id).join("|");
+  const vizSig = useMemo(() => sceneItemsVizSignature(items), [items]);
 
   useEffect(() => {
     setPinned(null);
@@ -553,7 +555,8 @@ export default function SceneLightsCanvas({
         container.removeChild(canvasEl);
       }
     };
-  }, [items, cameraPersistenceKey, flatKey, cameraResetVersion]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- vizSig covers scene geometry+state (REQ-031)
+  }, [vizSig, cameraPersistenceKey, flatKey, cameraResetVersion]);
 
   const tip = pinned ?? hover;
   const totalLights = items.reduce((a, it) => a + it.lights.length, 0);

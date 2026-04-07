@@ -113,6 +113,49 @@ func TestModelLightsEvents_streamAfterPatch(t *testing.T) {
 	cancel()
 }
 
+func TestModelLightsEvents_noBumpWhenPatchUnchanged(t *testing.T) {
+	st := testStore(t)
+	cfg := &config.Config{
+		HTTPListen:   ":8080",
+		ReadTimeout:  60 * time.Second,
+		WriteTimeout: 60 * time.Second,
+		DBPath:       filepath.Join(t.TempDir(), "unused.db"),
+	}
+	srv := httptest.NewServer(NewSiteHandler(cfg, nil, st, nil))
+	t.Cleanup(srv.Close)
+
+	csv := "id,x,y,z\n0,0,0,0\n"
+	res := postModel(t, srv, "sse-noop", csv)
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusCreated {
+		t.Fatalf("create status %d", res.StatusCode)
+	}
+	var sum store.Summary
+	if err := json.NewDecoder(res.Body).Decode(&sum); err != nil {
+		t.Fatal(err)
+	}
+	modelID := sum.ID
+
+	patchBody := `{"on":false,"color":"#ffffff","brightness_pct":100}`
+	preq, _ := http.NewRequest(http.MethodPatch, srv.URL+"/api/v1/models/"+modelID+"/lights/0/state", strings.NewReader(patchBody))
+	preq.Header.Set("Content-Type", "application/json")
+	pres, err := http.DefaultClient.Do(preq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pres.Body.Close()
+	var patchOut map[string]any
+	if err := json.NewDecoder(pres.Body).Decode(&patchOut); err != nil {
+		t.Fatal(err)
+	}
+	if pres.StatusCode != http.StatusOK {
+		t.Fatalf("patch status %d", pres.StatusCode)
+	}
+	if u, ok := patchOut["unchanged"].(bool); !ok || !u {
+		t.Fatalf("expected unchanged true in body, got %+v", patchOut)
+	}
+}
+
 func TestSceneLightsEvents_streamAfterScenePatch(t *testing.T) {
 	st := testStore(t)
 	cfg := &config.Config{

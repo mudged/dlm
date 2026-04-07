@@ -665,19 +665,20 @@ func (s *Store) GetLightState(ctx context.Context, modelID string, lightID int) 
 }
 
 // PatchLightState applies a partial update and returns the merged state (REQ-011).
-func (s *Store) PatchLightState(ctx context.Context, modelID string, lightID int, patch LightStatePatch) (*LightStateDTO, error) {
+// The bool is true when no SQLite UPDATE was needed (REQ-031 equivalence).
+func (s *Store) PatchLightState(ctx context.Context, modelID string, lightID int, patch LightStatePatch) (*LightStateDTO, bool, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	defer func() { _ = tx.Rollback() }()
 
 	var n int
 	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM models WHERE id = ?`, modelID).Scan(&n); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if n == 0 {
-		return nil, ErrNotFound
+		return nil, false, ErrNotFound
 	}
 
 	row := tx.QueryRowContext(ctx, `
@@ -688,11 +689,14 @@ func (s *Store) PatchLightState(ctx context.Context, modelID string, lightID int
 	var brightness float64
 	if err := row.Scan(&onInt, &color, &brightness); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ErrInvalidLightIndex
+			return nil, false, ErrInvalidLightIndex
 		}
-		return nil, err
+		return nil, false, err
 	}
-	on := onInt != 0
+	prevOn := onInt != 0
+	on := prevOn
+	prevColor := strings.ToLower(strings.TrimSpace(color))
+	prevBr := brightness
 
 	if patch.On != nil {
 		on = *patch.On
@@ -700,71 +704,76 @@ func (s *Store) PatchLightState(ctx context.Context, modelID string, lightID int
 	if patch.Color != nil {
 		c, err := ValidateColor(*patch.Color)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		color = c
 	}
 	if patch.BrightnessPct != nil {
 		if err := ValidateBrightnessPct(*patch.BrightnessPct); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		brightness = *patch.BrightnessPct
 	}
 
-	if _, err := tx.ExecContext(ctx, `
-		UPDATE lights SET "on" = ?, color = ?, brightness_pct = ? WHERE model_id = ? AND idx = ?
-	`, boolToInt(on), color, brightness, modelID, lightID); err != nil {
-		return nil, err
+	unchanged := EquivLightStateTriple(prevOn, prevColor, prevBr, on, color, brightness)
+	if !unchanged {
+		if _, err := tx.ExecContext(ctx, `
+			UPDATE lights SET "on" = ?, color = ?, brightness_pct = ? WHERE model_id = ? AND idx = ?
+		`, boolToInt(on), color, brightness, modelID, lightID); err != nil {
+			return nil, false, err
+		}
 	}
 	if err := tx.Commit(); err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	return &LightStateDTO{ID: lightID, On: on, Color: color, BrightnessPct: brightness}, nil
+	return &LightStateDTO{ID: lightID, On: on, Color: color, BrightnessPct: brightness}, unchanged, nil
 }
 
 // BatchPatchLightStates applies the same partial update to many lights in one transaction (REQ-013 / architecture §3.10).
 // ids may be in any order; returned states are sorted by id ascending. Duplicate ids yield ErrBatchDuplicateIDs.
-func (s *Store) BatchPatchLightStates(ctx context.Context, modelID string, ids []int, patch LightStatePatch) ([]LightStateDTO, error) {
+// unchangedAll is true when every id was already equivalent to the merged state (REQ-031).
+func (s *Store) BatchPatchLightStates(ctx context.Context, modelID string, ids []int, patch LightStatePatch) (states []LightStateDTO, unchangedAll bool, err error) {
 	if len(ids) == 0 {
-		return nil, ErrBatchEmptyIDs
+		return nil, false, ErrBatchEmptyIDs
 	}
 	if patch.On == nil && patch.Color == nil && patch.BrightnessPct == nil {
-		return nil, fmt.Errorf("batch patch requires at least one of on, color, brightness_pct")
+		return nil, false, fmt.Errorf("batch patch requires at least one of on, color, brightness_pct")
 	}
 	seen := make(map[int]struct{}, len(ids))
 	for _, id := range ids {
 		if _, dup := seen[id]; dup {
-			return nil, ErrBatchDuplicateIDs
+			return nil, false, ErrBatchDuplicateIDs
 		}
 		seen[id] = struct{}{}
 	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	defer func() { _ = tx.Rollback() }()
 
 	var modelCount int
 	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM models WHERE id = ?`, modelID).Scan(&modelCount); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if modelCount == 0 {
-		return nil, ErrNotFound
+		return nil, false, ErrNotFound
 	}
 
 	var lightCount int
 	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM lights WHERE model_id = ?`, modelID).Scan(&lightCount); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	sorted := slices.Clone(ids)
 	slices.Sort(sorted)
 
 	out := make([]LightStateDTO, 0, len(sorted))
+	allUnchanged := true
 	for _, lightID := range sorted {
 		if lightID < 0 || lightID >= lightCount {
-			return nil, ErrInvalidLightIndex
+			return nil, false, ErrInvalidLightIndex
 		}
 
 		row := tx.QueryRowContext(ctx, `
@@ -775,11 +784,14 @@ func (s *Store) BatchPatchLightStates(ctx context.Context, modelID string, ids [
 		var brightness float64
 		if err := row.Scan(&onInt, &color, &brightness); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				return nil, ErrInvalidLightIndex
+				return nil, false, ErrInvalidLightIndex
 			}
-			return nil, err
+			return nil, false, err
 		}
-		on := onInt != 0
+		prevOn := onInt != 0
+		on := prevOn
+		prevColor := strings.ToLower(strings.TrimSpace(color))
+		prevBr := brightness
 
 		if patch.On != nil {
 			on = *patch.On
@@ -787,21 +799,25 @@ func (s *Store) BatchPatchLightStates(ctx context.Context, modelID string, ids [
 		if patch.Color != nil {
 			c, err := ValidateColor(*patch.Color)
 			if err != nil {
-				return nil, err
+				return nil, false, err
 			}
 			color = c
 		}
 		if patch.BrightnessPct != nil {
 			if err := ValidateBrightnessPct(*patch.BrightnessPct); err != nil {
-				return nil, err
+				return nil, false, err
 			}
 			brightness = *patch.BrightnessPct
 		}
 
-		if _, err := tx.ExecContext(ctx, `
-			UPDATE lights SET "on" = ?, color = ?, brightness_pct = ? WHERE model_id = ? AND idx = ?
-		`, boolToInt(on), color, brightness, modelID, lightID); err != nil {
-			return nil, err
+		rowUnchanged := EquivLightStateTriple(prevOn, prevColor, prevBr, on, color, brightness)
+		if !rowUnchanged {
+			allUnchanged = false
+			if _, err := tx.ExecContext(ctx, `
+				UPDATE lights SET "on" = ?, color = ?, brightness_pct = ? WHERE model_id = ? AND idx = ?
+			`, boolToInt(on), color, brightness, modelID, lightID); err != nil {
+				return nil, false, err
+			}
 		}
 		out = append(out, LightStateDTO{
 			ID:            lightID,
@@ -812,38 +828,66 @@ func (s *Store) BatchPatchLightStates(ctx context.Context, modelID string, ids [
 	}
 
 	if err := tx.Commit(); err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	return out, nil
+	return out, allUnchanged, nil
 }
 
 // ResetAllLightStates sets every light in the model to REQ-014 defaults (off, #ffffff, 100% brightness).
-func (s *Store) ResetAllLightStates(ctx context.Context, modelID string) ([]LightStateDTO, error) {
+// unchangedAll is true when every light was already at defaults (REQ-031).
+func (s *Store) ResetAllLightStates(ctx context.Context, modelID string) ([]LightStateDTO, bool, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	defer func() { _ = tx.Rollback() }()
 
 	var n int
 	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM models WHERE id = ?`, modelID).Scan(&n); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if n == 0 {
-		return nil, ErrNotFound
+		return nil, false, ErrNotFound
 	}
 
-	if _, err := tx.ExecContext(ctx, `
-		UPDATE lights SET "on" = 0, color = ?, brightness_pct = ? WHERE model_id = ?
-	`, DefaultLightColor, DefaultLightBrightnessPct, modelID); err != nil {
-		return nil, err
+	rowsChk, err := tx.QueryContext(ctx, `
+		SELECT idx, "on", color, brightness_pct FROM lights WHERE model_id = ? ORDER BY idx ASC
+	`, modelID)
+	if err != nil {
+		return nil, false, err
+	}
+	allDefault := true
+	for rowsChk.Next() {
+		var idx int
+		var onInt int
+		var col string
+		var br float64
+		if err := rowsChk.Scan(&idx, &onInt, &col, &br); err != nil {
+			_ = rowsChk.Close()
+			return nil, false, err
+		}
+		if !EquivLightStateTriple(onInt != 0, strings.ToLower(strings.TrimSpace(col)), br, DefaultLightOn, DefaultLightColor, DefaultLightBrightnessPct) {
+			allDefault = false
+			break
+		}
+	}
+	if err := rowsChk.Close(); err != nil {
+		return nil, false, err
+	}
+
+	if !allDefault {
+		if _, err := tx.ExecContext(ctx, `
+			UPDATE lights SET "on" = 0, color = ?, brightness_pct = ? WHERE model_id = ?
+		`, DefaultLightColor, DefaultLightBrightnessPct, modelID); err != nil {
+			return nil, false, err
+		}
 	}
 
 	rows, err := tx.QueryContext(ctx, `
 		SELECT idx, "on", color, brightness_pct FROM lights WHERE model_id = ? ORDER BY idx ASC
 	`, modelID)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	defer rows.Close()
 
@@ -852,16 +896,16 @@ func (s *Store) ResetAllLightStates(ctx context.Context, modelID string) ([]Ligh
 		var st LightStateDTO
 		var onInt int
 		if err := rows.Scan(&st.ID, &onInt, &st.Color, &st.BrightnessPct); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		st.On = onInt != 0
 		out = append(out, st)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if err := tx.Commit(); err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	return out, nil
+	return out, allDefault, nil
 }
