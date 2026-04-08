@@ -6,6 +6,7 @@ import {
   buildBatchUpdatesFromSim,
   initShapeAnimationSim,
   makeRng,
+  sceneDimensionsFromApiResponse,
   tickShapeAnimationSim,
   type BatchLightUpdate,
   type SceneDimensions,
@@ -62,7 +63,7 @@ export function ShapeAnimationRoutineHost(props: {
       let dims: SceneDimensions;
       try {
         const d = await fetchSceneDimensions(sceneId);
-        dims = { max: d.max };
+        dims = sceneDimensionsFromApiResponse(d);
       } catch (e) {
         onError?.(e instanceof Error ? e.message : "Could not load scene size");
         return;

@@ -953,13 +953,35 @@ func (s *Store) RemoveSceneModel(ctx context.Context, sceneID, modelID string) e
 }
 
 // GetSceneDimensions returns scene-space dimensions used for region queries.
+// Extents are the axis-aligned bounding box of all lights in scene space (sx,sy,sz),
+// expanded by sceneBoundsMarginM on each axis so the volume matches the lit region
+// (not only [0..max], which was wrong for offset / multi-model scenes — REQ-033 motion).
 func (s *Store) GetSceneDimensions(ctx context.Context, sceneID string) (*SceneDimensions, error) {
 	lights, err := s.listSceneLightsTx(ctx, nil, sceneID)
 	if err != nil {
 		return nil, err
 	}
-	var mx, my, mz float64
-	for _, L := range lights {
+	if len(lights) == 0 {
+		m := sceneBoundsMarginM
+		return &SceneDimensions{
+			Origin:  ScenePoint{X: 0, Y: 0, Z: 0},
+			Size:    SceneDimensionsSize{Width: m, Height: m, Depth: m},
+			Max:     ScenePoint{X: m, Y: m, Z: m},
+			MarginM: sceneBoundsMarginM,
+		}, nil
+	}
+	mnX, mnY, mnZ := lights[0].Sx, lights[0].Sy, lights[0].Sz
+	mx, my, mz := mnX, mnY, mnZ
+	for _, L := range lights[1:] {
+		if L.Sx < mnX {
+			mnX = L.Sx
+		}
+		if L.Sy < mnY {
+			mnY = L.Sy
+		}
+		if L.Sz < mnZ {
+			mnZ = L.Sz
+		}
 		if L.Sx > mx {
 			mx = L.Sx
 		}
@@ -970,12 +992,28 @@ func (s *Store) GetSceneDimensions(ctx context.Context, sceneID string) (*SceneD
 			mz = L.Sz
 		}
 	}
+	minX := mnX - sceneBoundsMarginM
+	minY := mnY - sceneBoundsMarginM
+	minZ := mnZ - sceneBoundsMarginM
+	if minX < 0 {
+		minX = 0
+	}
+	if minY < 0 {
+		minY = 0
+	}
+	if minZ < 0 {
+		minZ = 0
+	}
 	maxX := mx + sceneBoundsMarginM
 	maxY := my + sceneBoundsMarginM
 	maxZ := mz + sceneBoundsMarginM
 	return &SceneDimensions{
-		Origin:  ScenePoint{X: 0, Y: 0, Z: 0},
-		Size:    SceneDimensionsSize{Width: maxX, Height: maxY, Depth: maxZ},
+		Origin: ScenePoint{X: minX, Y: minY, Z: minZ},
+		Size: SceneDimensionsSize{
+			Width:  maxX - minX,
+			Height: maxY - minY,
+			Depth:  maxZ - minZ,
+		},
 		Max:     ScenePoint{X: maxX, Y: maxY, Z: maxZ},
 		MarginM: sceneBoundsMarginM,
 	}, nil

@@ -26,8 +26,10 @@ import {
 import {
   ghostOverlaysFromSim,
   ghostShapesFromDefinition,
+  sceneDimensionsFromApiResponse,
   type BatchLightUpdate,
   type GhostShapeOverlay,
+  type SceneDimensions,
   type ShapeAnimationSim,
 } from "@/lib/shapeAnimationEngine";
 import { mergeSceneLightBatchIntoItems } from "@/lib/scenesMerge";
@@ -73,9 +75,7 @@ export default function ShapeRoutineEditorClient() {
   const [scenesList, setScenesList] = useState<SceneSummary[] | null>(null);
   const [targetSceneId, setTargetSceneId] = useState("");
   const [targetScene, setTargetScene] = useState<SceneDetail | null>(null);
-  const [sceneDims, setSceneDims] = useState<{ max: { x: number; y: number; z: number } } | null>(
-    null,
-  );
+  const [sceneDims, setSceneDims] = useState<SceneDimensions | null>(null);
   const [activeRun, setActiveRun] = useState<{
     run_id: string;
     scene_id: string;
@@ -175,7 +175,7 @@ export default function ShapeRoutineEditorClient() {
       try {
         const d = await fetchSceneDimensions(targetSceneId);
         if (!cancelled) {
-          setSceneDims({ max: d.max });
+          setSceneDims(sceneDimensionsFromApiResponse(d));
         }
       } catch {
         if (!cancelled) {

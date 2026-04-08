@@ -3,9 +3,26 @@
  * Call initShapeAnimationSim once per run/cycle, then tickShapeAnimation each frame.
  */
 
+/** Scene AABB for motion and placement (from GET …/dimensions: origin = min, max = max). */
 export type SceneDimensions = {
+  min: { x: number; y: number; z: number };
   max: { x: number; y: number; z: number };
 };
+
+/** Build sim bounds from API response (backward compatible if origin missing). */
+export function sceneDimensionsFromApiResponse(d: {
+  origin?: { x: number; y: number; z: number };
+  max: { x: number; y: number; z: number };
+}): SceneDimensions {
+  return {
+    min: {
+      x: d.origin?.x ?? 0,
+      y: d.origin?.y ?? 0,
+      z: d.origin?.z ?? 0,
+    },
+    max: { x: d.max.x, y: d.max.y, z: d.max.z },
+  };
+}
 
 export type SceneLightFlat = {
   scene_id: string;
@@ -131,9 +148,12 @@ function initShapesFromDefinition(
     background = { mode: "lights_off", color: "#000000", brightness_pct: 0 };
   }
 
-  const Mx = dims.max.x;
-  const My = dims.max.y;
-  const Mz = dims.max.z;
+  const minX = dims.min.x;
+  const minY = dims.min.y;
+  const minZ = dims.min.z;
+  const maxX = dims.max.x;
+  const maxY = dims.max.y;
+  const maxZ = dims.max.z;
 
   const shapesIn = o.shapes as unknown[];
   const shapes: SimShape[] = [];
@@ -206,55 +226,55 @@ function initShapesFromDefinition(
       const face = String(pl.face);
       if (kind === "sphere") {
         if (face === "left") {
-          px = radius + 1e-6;
-          py = randomUniform(rng, radius, My - radius);
-          pz = randomUniform(rng, radius, Mz - radius);
+          px = minX + radius + 1e-6;
+          py = randomUniform(rng, minY + radius, maxY - radius);
+          pz = randomUniform(rng, minZ + radius, maxZ - radius);
         } else if (face === "right") {
-          px = Mx - radius - 1e-6;
-          py = randomUniform(rng, radius, My - radius);
-          pz = randomUniform(rng, radius, Mz - radius);
+          px = maxX - radius - 1e-6;
+          py = randomUniform(rng, minY + radius, maxY - radius);
+          pz = randomUniform(rng, minZ + radius, maxZ - radius);
         } else if (face === "bottom") {
-          py = radius + 1e-6;
-          px = randomUniform(rng, radius, Mx - radius);
-          pz = randomUniform(rng, radius, Mz - radius);
+          py = minY + radius + 1e-6;
+          px = randomUniform(rng, minX + radius, maxX - radius);
+          pz = randomUniform(rng, minZ + radius, maxZ - radius);
         } else if (face === "top") {
-          py = My - radius - 1e-6;
-          px = randomUniform(rng, radius, Mx - radius);
-          pz = randomUniform(rng, radius, Mz - radius);
+          py = maxY - radius - 1e-6;
+          px = randomUniform(rng, minX + radius, maxX - radius);
+          pz = randomUniform(rng, minZ + radius, maxZ - radius);
         } else if (face === "back") {
-          pz = radius + 1e-6;
-          px = randomUniform(rng, radius, Mx - radius);
-          py = randomUniform(rng, radius, My - radius);
+          pz = minZ + radius + 1e-6;
+          px = randomUniform(rng, minX + radius, maxX - radius);
+          py = randomUniform(rng, minY + radius, maxY - radius);
         } else {
-          pz = Mz - radius - 1e-6;
-          px = randomUniform(rng, radius, Mx - radius);
-          py = randomUniform(rng, radius, My - radius);
+          pz = maxZ - radius - 1e-6;
+          px = randomUniform(rng, minX + radius, maxX - radius);
+          py = randomUniform(rng, minY + radius, maxY - radius);
         }
       } else {
         if (face === "left") {
-          px = 0;
-          py = randomUniform(rng, 0, Math.max(0, My - h));
-          pz = randomUniform(rng, 0, Math.max(0, Mz - d));
+          px = minX;
+          py = randomUniform(rng, minY, Math.max(minY, maxY - h));
+          pz = randomUniform(rng, minZ, Math.max(minZ, maxZ - d));
         } else if (face === "right") {
-          px = Math.max(0, Mx - w);
-          py = randomUniform(rng, 0, Math.max(0, My - h));
-          pz = randomUniform(rng, 0, Math.max(0, Mz - d));
+          px = Math.max(minX, maxX - w);
+          py = randomUniform(rng, minY, Math.max(minY, maxY - h));
+          pz = randomUniform(rng, minZ, Math.max(minZ, maxZ - d));
         } else if (face === "bottom") {
-          py = 0;
-          px = randomUniform(rng, 0, Math.max(0, Mx - w));
-          pz = randomUniform(rng, 0, Math.max(0, Mz - d));
+          py = minY;
+          px = randomUniform(rng, minX, Math.max(minX, maxX - w));
+          pz = randomUniform(rng, minZ, Math.max(minZ, maxZ - d));
         } else if (face === "top") {
-          py = Math.max(0, My - h);
-          px = randomUniform(rng, 0, Math.max(0, Mx - w));
-          pz = randomUniform(rng, 0, Math.max(0, Mz - d));
+          py = Math.max(minY, maxY - h);
+          px = randomUniform(rng, minX, Math.max(minX, maxX - w));
+          pz = randomUniform(rng, minZ, Math.max(minZ, maxZ - d));
         } else if (face === "back") {
-          pz = 0;
-          px = randomUniform(rng, 0, Math.max(0, Mx - w));
-          py = randomUniform(rng, 0, Math.max(0, My - h));
+          pz = minZ;
+          px = randomUniform(rng, minX, Math.max(minX, maxX - w));
+          py = randomUniform(rng, minY, Math.max(minY, maxY - h));
         } else {
-          pz = Math.max(0, Mz - d);
-          px = randomUniform(rng, 0, Math.max(0, Mx - w));
-          py = randomUniform(rng, 0, Math.max(0, My - h));
+          pz = Math.max(minZ, maxZ - d);
+          px = randomUniform(rng, minX, Math.max(minX, maxX - w));
+          py = randomUniform(rng, minY, Math.max(minY, maxY - h));
         }
       }
     }
@@ -292,7 +312,16 @@ export function initShapeAnimationSim(
   return initShapesFromDefinition(def, rng, dims);
 }
 
-function integrateShape(s: SimShape, maxX: number, maxY: number, maxZ: number, rng: RNG): void {
+function integrateShape(
+  s: SimShape,
+  minX: number,
+  minY: number,
+  minZ: number,
+  maxX: number,
+  maxY: number,
+  maxZ: number,
+  rng: RNG,
+): void {
   if (!s.active) {
     return;
   }
@@ -303,9 +332,9 @@ function integrateShape(s: SimShape, maxX: number, maxY: number, maxZ: number, r
   const vy0 = s.vy;
   const vz0 = s.vz;
 
-  const minX = 0;
-  const minY = 0;
-  const minZ = 0;
+  const spanX = Math.max(maxX - minX, 1e-9);
+  const spanY = Math.max(maxY - minY, 1e-9);
+  const spanZ = Math.max(maxZ - minZ, 1e-9);
 
   let hitX = false;
   let hitY = false;
@@ -338,19 +367,19 @@ function integrateShape(s: SimShape, maxX: number, maxY: number, maxZ: number, r
   if (s.edge === "wrap") {
     if (s.kind === "sphere") {
       const r = s.radius;
-      while (px - r < minX) px += maxX;
-      while (px + r > maxX) px -= maxX;
-      while (py - r < minY) py += maxY;
-      while (py + r > maxY) py -= maxY;
-      while (pz - r < minZ) pz += maxZ;
-      while (pz + r > maxZ) pz -= maxZ;
+      while (px - r < minX) px += spanX;
+      while (px + r > maxX) px -= spanX;
+      while (py - r < minY) py += spanY;
+      while (py + r > maxY) py -= spanY;
+      while (pz - r < minZ) pz += spanZ;
+      while (pz + r > maxZ) pz -= spanZ;
     } else {
-      while (px < minX) px += maxX;
-      while (px + s.w > maxX) px -= maxX;
-      while (py < minY) py += maxY;
-      while (py + s.h > maxY) py -= maxY;
-      while (pz < minZ) pz += maxZ;
-      while (pz + s.d > maxZ) pz -= maxZ;
+      while (px < minX) px += spanX;
+      while (px + s.w > maxX) px -= spanX;
+      while (py < minY) py += spanY;
+      while (py + s.h > maxY) py -= spanY;
+      while (pz < minZ) pz += spanZ;
+      while (pz + s.d > maxZ) pz -= spanZ;
     }
     s.px = px;
     s.py = py;
@@ -398,9 +427,9 @@ export function tickShapeAnimationSim(
   dims: SceneDimensions,
   rng: RNG,
 ): { allShapesStopped: boolean } {
-  const { max } = dims;
+  const { min, max } = dims;
   for (const s of sim.shapes) {
-    integrateShape(s, max.x, max.y, max.z, rng);
+    integrateShape(s, min.x, min.y, min.z, max.x, max.y, max.z, rng);
   }
   const allStopped = sim.shapes.every((s) => !s.active);
   return { allShapesStopped: allStopped };

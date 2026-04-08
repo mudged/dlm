@@ -466,12 +466,13 @@ This section extends **REQ-015** scene composition with explicit API contracts f
 
 **Dimensions endpoint (resolves REQ-020 dimensions shape):**
 
-- **`GET /api/v1/scenes/{id}/dimensions`** returns:
-  - `origin`: always `{ "x": 0, "y": 0, "z": 0 }` (scene non-negative octant anchor).
-  - `size`: `{ "width", "height", "depth" }` derived from §3.12 visual/query AABB (`max + 1m margin`).
-  - `max`: `{ "x", "y", "z" }` same upper corner as §3.12 (`Mmax + 1` per axis).
+- **`GET /api/v1/scenes/{id}/dimensions`** returns the **axis-aligned bounding box** of **all** lights in **scene space** (**`sx/sy/sz`**), expanded by **`margin_m`** on **each** side (**REQ-033** motion and region queries share this box):
+  - `origin`: **`{ "x", "y", "z" }`** = **lower** corner (**`max(0, min(sx) − margin_m)`** per axis — **clamp** so **origin** **never** **goes** **negative**).
+  - `max`: **`{ "x", "y", "z" }`** = **upper** corner (**`max(sx) + margin_m`** per axis over all lights).
+  - `size`: **`{ "width", "height", "depth" }`** = **`max − origin`** per axis (**true** **extent** **of** **the** **lit** **volume** **plus** **padding**).
   - `margin_m`: numeric margin value (`1` in current architecture baseline).
-- This shape keeps axis-aligned dimensions unambiguous while explicitly disclosing origin metadata.
+  - **Empty** **scene** **(no** **lights**)**:** **`origin`** **`(0,0,0)`**, **`max`** **`(margin_m, margin_m, margin_m)`**, **`size`** **matches**.
+- **REQ-015** **still** **requires** **lights** **`sx,sy,sz ≥ 0`**; **`origin.x`** **is** **usually** **`0`** **for** **single-model** **scenes** **but** **may** **be** **`> 0`** **when** **multiple** **models** **leave** **a** **gap** **along** **+X** **(**shape** **animation** **must** **use** **`origin`..`max`**, **not** **assume** **`0`..`max`** **alone** **)**.
 **Axis mapping for `size` (REQ-026, REQ-015 “right” convention):** **`width`** **=** **extent** **along** **scene** **+X** **(the** **default** **“right”** **axis** **when** **adding** **models** **after** **create)**; **`height`** **=** **extent** **along** **+Y** **(vertical** **up** **in** **the** **default** **three.js** **view** **—** **must** **match** **`SceneLightsCanvas`** **/** **`ModelLightsCanvas`** **orientation)**; **`depth`** **=** **extent** **along** **+Z** **(depth** **into** **the** **screen** **in** **the** **same** **default** **camera** **framing)**. **Python** **`scene.width`**, **`scene.height`**, **`scene.depth`** **MUST** **read** **these** **same** **three** **numbers** **from** **one** **`GET …/dimensions`** **response** **(cached** **in** **the** **worker** **for** **the** **iteration** **if** **needed)**.
 
 **Read endpoints (scene coordinates only):**
@@ -644,7 +645,7 @@ This section extends **REQ-015** scene composition with explicit API contracts f
 
 **Resolved** **values** **(**random** **size**/**speed**/**colour**/**placement**)** **are** **re-drawn** **on** **each** **run** **start** **and** **each** **loop** **cycle** **(**REQ-033** **rules** **3**, **6**, **10**)** **unless** **tests** **require** **a** **documented** **deterministic** **seed** **(**optional** **`seed`** **field** **in** **v2** **—** **not** **required** **for** **MVP**)**.
 
-**Simulation tick:** **Default** **`Δt = 1/60` s** **(**~**60** **Hz** **client** **loop** **for** **smooth** **motion** **—** **tunable**)**. **Integrate** **`position += velocity * Δt`**. **Boundary** **(**closed** **scene** **AABB** **from** **`GET …/dimensions`:** **`0 ≤ x ≤ max.x`**, **same** **for** **`y`,`z`**, **using** **`sx/sy/sz`** **semantics** **for** **shape** **centers**/**corners** **—** **implementor** **documents** **sphere** **vs** **cuboid** **collision** **test** **against** **that** **box**)** **:**
+**Simulation tick:** **Default** **`Δt = 1/60` s** **(**~**60** **Hz** **client** **loop** **for** **smooth** **motion** **—** **tunable**)**. **Integrate** **`position += velocity * Δt`**. **Boundary** **(**closed** **scene** **AABB** **from** **`GET …/dimensions`:** **`origin.x ≤ x ≤ max.x`**, **same** **for** **`y`,`z`**, **using** **`sx/sy/sz`** **semantics** **for** **shape** **centers**/**corners** **—** **implementor** **documents** **sphere** **vs** **cuboid** **collision** **test** **against** **that** **box**)** **:**
 
 - **`wrap`:** **When** **the** **shape** **would** **exit**, **translate** **its** **reference** **point** **(**center** **or** **min** **corner**)** **by** **whole** **scene** **extents** **so** **the** **volume** **re-enters** **from** **the** **opposite** **face** **(**Pac-Man**)**.
 - **`stop`:** **Remove** **shape** **from** **active** **set** **for** **the** **run**.

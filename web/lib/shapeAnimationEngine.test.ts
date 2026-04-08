@@ -4,6 +4,7 @@ import {
   ghostShapesFromDefinition,
   initShapeAnimationSim,
   makeRng,
+  sceneDimensionsFromApiResponse,
   tickShapeAnimationSim,
 } from "./shapeAnimationEngine";
 import { SHAPE_ANIMATION_DEFAULT_DEFINITION } from "./shapeAnimationDefault";
@@ -11,7 +12,10 @@ import { SHAPE_ANIMATION_DEFAULT_DEFINITION } from "./shapeAnimationDefault";
 describe("shapeAnimationEngine", () => {
   it("assigns inside sphere and background outside", () => {
     const def = JSON.stringify(SHAPE_ANIMATION_DEFAULT_DEFINITION);
-    const dims = { max: { x: 4, y: 4, z: 4 } };
+    const dims = sceneDimensionsFromApiResponse({
+      origin: { x: 0, y: 0, z: 0 },
+      max: { x: 4, y: 4, z: 4 },
+    });
     const rng = makeRng(42);
     const sim = initShapeAnimationSim(def, dims, rng);
     const lights = [
@@ -42,16 +46,51 @@ describe("shapeAnimationEngine", () => {
 
   it("ghostShapesFromDefinition returns overlays for default definition", () => {
     const def = JSON.stringify(SHAPE_ANIMATION_DEFAULT_DEFINITION);
-    const dims = { max: { x: 4, y: 4, z: 4 } };
+    const dims = sceneDimensionsFromApiResponse({
+      origin: { x: 0, y: 0, z: 0 },
+      max: { x: 4, y: 4, z: 4 },
+    });
     const ghosts = ghostShapesFromDefinition(def, dims);
     expect(ghosts.length).toBe(1);
     expect(ghosts[0]!.kind).toBe("sphere");
     expect(ghosts[0]!.radius).toBeGreaterThan(0);
   });
 
+  it("uses non-zero origin for axis-aligned scene bounds (random_face right)", () => {
+    const def = JSON.stringify({
+      version: 1,
+      background: { mode: "lights_off" },
+      shapes: [
+        {
+          kind: "sphere",
+          size: { mode: "fixed", radius_m: 0.2 },
+          color: { mode: "fixed", color: "#ffffff" },
+          brightness_pct: 100,
+          placement: { mode: "random_face", face: "right" },
+          motion: {
+            direction: { dx: 1, dy: 0, dz: 0 },
+            speed: { mode: "fixed", m_s: 0.1 },
+          },
+          edge_behavior: "wrap",
+        },
+      ],
+    });
+    const dims = sceneDimensionsFromApiResponse({
+      origin: { x: 9, y: 0, z: 0 },
+      max: { x: 13, y: 3, z: 3 },
+    });
+    const rng = makeRng(1);
+    const sim = initShapeAnimationSim(def, dims, rng);
+    expect(sim.shapes[0]!.px).toBeGreaterThan(12);
+    expect(sim.shapes[0]!.px).toBeLessThanOrEqual(13);
+  });
+
   it("tick advances without throwing", () => {
     const def = JSON.stringify(SHAPE_ANIMATION_DEFAULT_DEFINITION);
-    const dims = { max: { x: 4, y: 4, z: 4 } };
+    const dims = sceneDimensionsFromApiResponse({
+      origin: { x: 0, y: 0, z: 0 },
+      max: { x: 4, y: 4, z: 4 },
+    });
     const rng = makeRng(1);
     const sim = initShapeAnimationSim(def, dims, rng);
     for (let i = 0; i < 5; i++) {
