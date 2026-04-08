@@ -1165,21 +1165,31 @@ Feature: Shape animation routines declarative authoring and run (REQ-033)
 
 Feature: Faint scene boundary cuboid in three.js views (REQ-034)
 
-  Scenario: REQ-034 defines axis-aligned boundary from light extremes plus 30 cm pad
+  Scenario: REQ-034 defines axis-aligned boundary from light extremes plus symmetric margin
     Parent requirement: REQ-034
     Given docs/requirements.md defines REQ-034 REQ-010 and REQ-015
     When the REQ-034 business rules about geometry are read
     Then the tight boundary must be the axis-aligned min and max of every light position in the viewport coordinate space
-    And the drawn cuboid must expand that tight box by 0.3 meters on each side along every axis
     And models need not be regular cuboids because only light positions define the tight box
+    And the model view must expand the tight box by exactly 0.3 meters on each axis in both directions
+    And the scene view must expand the tight box by the scene persisted margin m on each axis in both directions
+
+  Scenario: REQ-015 stores scene boundary margin m defaulting to 30 cm and allows edit
+    Parent requirement: REQ-034
+    Given docs/requirements.md defines REQ-015 and REQ-034
+    When REQ-015 business rules 12 and 13 are read
+    Then each scene must persist one non-negative finite margin m in SI meters for the visualization boundary
+    And new scenes must default m to 0.3 meters
+    And legacy scenes without m must behave as m equals 0.3 after migration or read fallback
+    And the scene management UI must expose a control to view and change m without hover-only essential apply steps
 
   Scenario: REQ-034 applies to model view and scene view including embedded scene canvases
     Parent requirement: REQ-034
     Given docs/requirements.md defines REQ-034 REQ-010 REQ-015 REQ-027 and REQ-033
     When the REQ-034 scope is read
     Then the model three.js view must show the boundary per REQ-034 in model local coordinates
-    And the scene three.js view must show the boundary in derived scene space sx sy sz
-    And embedded scene previews that reuse the same canvas pattern must show the boundary
+    And the scene three.js view must show the boundary in derived scene space sx sy sz using that scene current m
+    And embedded scene previews that reuse the same canvas pattern must show the boundary using the same scene m
 
   Scenario: REQ-034 visual prominence matches faint inter-light wire guidance
     Parent requirement: REQ-034
