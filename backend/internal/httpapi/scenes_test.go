@@ -237,13 +237,13 @@ func TestScenes_spatialEndpointsDimensionsAndQueries(t *testing.T) {
 	if err := json.NewDecoder(dr.Body).Decode(&dims); err != nil {
 		t.Fatal(err)
 	}
-	if dims.Origin.X != 0 || dims.Origin.Y != 0 || dims.Origin.Z != 0 {
+	if dims.Origin.X != 9 || dims.Origin.Y != 0 || dims.Origin.Z != 0 {
 		t.Fatalf("origin = %+v", dims.Origin)
 	}
 	if dims.Max.X != 13 || dims.Max.Y != 3 || dims.Max.Z != 3 {
 		t.Fatalf("max = %+v", dims.Max)
 	}
-	if dims.Size.Width != 13 || dims.Size.Height != 3 || dims.Size.Depth != 3 {
+	if dims.Size.Width != 4 || dims.Size.Height != 3 || dims.Size.Depth != 3 {
 		t.Fatalf("size = %+v", dims.Size)
 	}
 	if dims.MarginM != 1 {

@@ -95,7 +95,7 @@ func TestRoutinesCreateStartStopDelete(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r, err := s.CreateRoutine(ctx, "fx", "d", RoutineTypePythonSceneScript, "pass")
+	r, err := s.CreateRoutine(ctx, "fx", "d", RoutineTypePythonSceneScript, "pass", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -249,13 +249,14 @@ func TestScenes_SpatialQueriesAndDimensions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if dims.Origin.X != 0 || dims.Origin.Y != 0 || dims.Origin.Z != 0 {
+	// AABB of lights (10..12, 0..2, 0..2) minus margin on min side (sx min 10 → 9); Y/Z min stay 0.
+	if dims.Origin.X != 9 || dims.Origin.Y != 0 || dims.Origin.Z != 0 {
 		t.Fatalf("origin = %+v", dims.Origin)
 	}
 	if dims.Max.X != 13 || dims.Max.Y != 3 || dims.Max.Z != 3 {
 		t.Fatalf("max = %+v", dims.Max)
 	}
-	if dims.Size.Width != 13 || dims.Size.Height != 3 || dims.Size.Depth != 3 {
+	if dims.Size.Width != 4 || dims.Size.Height != 3 || dims.Size.Depth != 3 {
 		t.Fatalf("size = %+v", dims.Size)
 	}
 	if dims.MarginM != 1 {

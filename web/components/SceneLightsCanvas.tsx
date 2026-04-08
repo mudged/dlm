@@ -1,5 +1,6 @@
 "use client";
 
+import type { MutableRefObject } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
@@ -22,12 +23,18 @@ import {
   VIZ_VIEWPORT_BG_CSS,
 } from "@/lib/vizViewport";
 import { sceneItemsVizSignature } from "@/lib/lightStateSignature";
+import type { GhostShapeOverlay } from "@/lib/shapeAnimationEngine";
 
 type Props = {
   items: SceneItem[];
   cameraPersistenceKey?: string;
   /** Increment to re-apply default framing (REQ-016). */
   cameraResetVersion?: number;
+  /**
+   * When set, each animation frame reads `current` for semi-transparent shape overlays
+   * (shape routine editor / preview only).
+   */
+  shapeGhostsSourceRef?: MutableRefObject<GhostShapeOverlay[] | null>;
 };
 
 type FlatPick = {
@@ -151,10 +158,28 @@ type SavedOrbit = {
   target: THREE.Vector3;
 };
 
+const GHOST_OPACITY = 0.32;
+const GHOST_LERP_PER_S = 22;
+
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
+
+function hexToThreeColor(hex: string): THREE.Color {
+  const c = new THREE.Color();
+  try {
+    c.set(normalizeLightHex(hex));
+  } catch {
+    c.set(0x888888);
+  }
+  return c;
+}
+
 export default function SceneLightsCanvas({
   items,
   cameraPersistenceKey,
   cameraResetVersion = 0,
+  shapeGhostsSourceRef,
 }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasHostRef = useRef<HTMLDivElement>(null);
@@ -495,8 +520,144 @@ export default function SceneLightsCanvas({
 
     container.appendChild(canvasEl);
 
+    const ghostGroup = new THREE.Group();
+    scene.add(ghostGroup);
+    type GhostInterp = {
+      cx: number;
+      cy: number;
+      cz: number;
+      radius: number;
+      w: number;
+      h: number;
+      d: number;
+      kind: "sphere" | "cuboid";
+    };
+    const ghostInterp: GhostInterp[] = [];
+    const ghostMeshes: THREE.Mesh[] = [];
+    let lastGhostFrame = performance.now();
+
+    function popGhostMesh() {
+      const mesh = ghostMeshes.pop();
+      ghostInterp.pop();
+      if (!mesh) {
+        return;
+      }
+      ghostGroup.remove(mesh);
+      mesh.geometry.dispose();
+      (mesh.material as THREE.Material).dispose();
+    }
+
+    function pushGhostMesh(g: GhostShapeOverlay) {
+      const col = hexToThreeColor(g.color);
+      const mat = new THREE.MeshBasicMaterial({
+        color: col,
+        transparent: true,
+        opacity: GHOST_OPACITY,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      });
+      const tcx = g.kind === "sphere" ? g.px : g.px + g.w / 2;
+      const tcy = g.kind === "sphere" ? g.py : g.py + g.h / 2;
+      const tcz = g.kind === "sphere" ? g.pz : g.pz + g.d / 2;
+      const tr = Math.max(g.radius, 1e-6);
+      const tw = Math.max(g.w, 1e-6);
+      const th = Math.max(g.h, 1e-6);
+      const td = Math.max(g.d, 1e-6);
+      let mesh: THREE.Mesh;
+      if (g.kind === "sphere") {
+        const geo = new THREE.SphereGeometry(1, 24, 18);
+        mesh = new THREE.Mesh(geo, mat);
+        mesh.userData = { kind: "sphere" as const };
+        mesh.scale.setScalar(tr);
+      } else {
+        const geo = new THREE.BoxGeometry(1, 1, 1);
+        mesh = new THREE.Mesh(geo, mat);
+        mesh.userData = { kind: "cuboid" as const };
+        mesh.scale.set(tw, th, td);
+      }
+      mesh.position.set(tcx, tcy, tcz);
+      mesh.renderOrder = 2;
+      ghostGroup.add(mesh);
+      ghostMeshes.push(mesh);
+      ghostInterp.push({
+        cx: tcx,
+        cy: tcy,
+        cz: tcz,
+        radius: tr,
+        w: tw,
+        h: th,
+        d: td,
+        kind: g.kind,
+      });
+    }
+
+    function syncShapeGhosts() {
+      if (!shapeGhostsSourceRef) {
+        while (ghostMeshes.length > 0) {
+          popGhostMesh();
+        }
+        return;
+      }
+      const list = shapeGhostsSourceRef.current ?? [];
+
+      while (ghostMeshes.length > list.length) {
+        popGhostMesh();
+      }
+
+      for (let i = 0; i < list.length; i++) {
+        const g = list[i]!;
+        const ex = ghostMeshes[i];
+        const kindOk =
+          ex && (ex.userData as { kind?: string }).kind === g.kind;
+        if (!kindOk) {
+          while (ghostMeshes.length > i) {
+            popGhostMesh();
+          }
+          for (let j = i; j < list.length; j++) {
+            pushGhostMesh(list[j]!);
+          }
+          break;
+        }
+      }
+
+      const now = performance.now();
+      const dt = Math.min(0.08, Math.max(0, (now - lastGhostFrame) / 1000));
+      lastGhostFrame = now;
+      const k = 1 - Math.exp(-GHOST_LERP_PER_S * dt);
+
+      for (let i = 0; i < list.length; i++) {
+        const g = list[i]!;
+        const tcx = g.kind === "sphere" ? g.px : g.px + g.w / 2;
+        const tcy = g.kind === "sphere" ? g.py : g.py + g.h / 2;
+        const tcz = g.kind === "sphere" ? g.pz : g.pz + g.d / 2;
+        const tr = Math.max(g.radius, 1e-6);
+        const tw = Math.max(g.w, 1e-6);
+        const th = Math.max(g.h, 1e-6);
+        const td = Math.max(g.d, 1e-6);
+
+        const interp = ghostInterp[i]!;
+        interp.cx = lerp(interp.cx, tcx, k);
+        interp.cy = lerp(interp.cy, tcy, k);
+        interp.cz = lerp(interp.cz, tcz, k);
+        interp.radius = lerp(interp.radius, tr, k);
+        interp.w = lerp(interp.w, tw, k);
+        interp.h = lerp(interp.h, th, k);
+        interp.d = lerp(interp.d, td, k);
+
+        const m = ghostMeshes[i]!;
+        m.position.set(interp.cx, interp.cy, interp.cz);
+        (m.material as THREE.MeshBasicMaterial).color.copy(hexToThreeColor(g.color));
+        if (g.kind === "sphere") {
+          m.scale.setScalar(interp.radius);
+        } else {
+          m.scale.set(interp.w, interp.h, interp.d);
+        }
+      }
+    }
+
     let raf = 0;
     const tick = () => {
+      syncShapeGhosts();
       controls.update();
       renderer.render(scene, camera);
       raf = requestAnimationFrame(tick);
@@ -550,13 +711,17 @@ export default function SceneLightsCanvas({
         (lineSegments.material as THREE.Material).dispose();
       }
       disposeGrid();
+      while (ghostMeshes.length > 0) {
+        popGhostMesh();
+      }
+      scene.remove(ghostGroup);
       renderer.dispose();
       if (canvasEl.parentNode === container) {
         container.removeChild(canvasEl);
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- vizSig covers scene geometry+state (REQ-031)
-  }, [vizSig, cameraPersistenceKey, flatKey, cameraResetVersion]);
+  }, [vizSig, cameraPersistenceKey, flatKey, cameraResetVersion, shapeGhostsSourceRef]);
 
   const tip = pinned ?? hover;
   const totalLights = items.reduce((a, it) => a + it.lights.length, 0);

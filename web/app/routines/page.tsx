@@ -11,6 +11,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import {
   ROUTINE_TYPE_PYTHON_SCENE_SCRIPT,
+  ROUTINE_TYPE_SHAPE_ANIMATION,
   deleteRoutine,
   fetchRoutines,
   type RoutineDefinition,
@@ -57,13 +58,13 @@ export default function RoutinesPage() {
           Routines
         </h1>
         <p className="mt-1 max-w-xl text-sm text-slate-600 dark:text-slate-400">
-          Save named Python routines, then start them from a{" "}
+          Save Python scripts or shape animation definitions, then start them from a{" "}
           <Link href="/scenes" className="text-sky-700 underline dark:text-sky-300">
             scene
           </Link>{" "}
-          detail page. New installs include three sample scripts you can edit or
-          duplicate like any routine. The editor runs your code in the browser
-          with Pyodide (see help text on the editor page).
+          detail page. New installs include three sample Python routines. Python
+          runs with Pyodide; shape animations run in the browser and update lights
+          through the scene API.
         </p>
         <p className="mt-4">
           <Button
@@ -123,6 +124,21 @@ export default function RoutinesPage() {
                       }
                     >
                       Edit Python
+                    </Button>
+                  ) : null}
+                  {r.type === ROUTINE_TYPE_SHAPE_ANIMATION ? (
+                    <Button
+                      type="button"
+                      icon={faPenToSquare}
+                      className="min-h-11"
+                      disabled={busy}
+                      onClick={() =>
+                        router.push(
+                          `/routines/shape?id=${encodeURIComponent(r.id)}`,
+                        )
+                      }
+                    >
+                      Edit shapes
                     </Button>
                   ) : null}
                   <Button

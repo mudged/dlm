@@ -1,45 +1,40 @@
 "use client";
 
-// Python routine editor — CodeMirror, API reference below editor, unified run + 3D view (§4.13).
-
-import type { EditorView } from "@codemirror/view";
-import { python } from "@codemirror/lang-python";
-import { lintGutter } from "@codemirror/lint";
-import dynamic from "next/dynamic";
-import { PythonCodeMirrorEditor } from "@/components/PythonCodeMirrorEditor";
-import { PythonRoutineHost } from "@/components/PythonRoutineHost";
-import { PythonSceneApiCatalogSection } from "@/components/PythonSceneApiCatalogSection";
 import {
   faArrowsRotate,
   faCirclePlay,
   faCircleStop,
   faCopy,
-  faFileImport,
   faFloppyDisk,
   faLightbulb,
-  faRotate,
   faTrash,
 } from "@fortawesome/free-solid-svg-icons";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
-import { formatPythonSource } from "@/lib/pythonEditorWorker";
-import { insertSnippetInPythonEditor } from "@/lib/insertPythonEditorSnippet";
+import { ShapeAnimationRoutineHost } from "@/components/ShapeAnimationRoutineHost";
+import { ShapeRoutineDefinitionForm } from "@/components/ShapeRoutineDefinitionForm";
 import {
-  pythonRoutineLinter,
-  pythonSceneAutocompletion,
-} from "@/lib/pythonRoutineCodemirror";
+  definitionJsonStringFromForm,
+  definitionObjectFromForm,
+  shapeFormStateFromDefault,
+  shapeFormStateFromUnknown,
+  type ShapeAnimationFormState,
+} from "@/lib/shapeAnimationDefinitionForm";
 import {
-  PYTHON_ROUTINE_DEFAULT_SOURCE,
-} from "@/lib/pythonSceneApiCatalog";
+  ghostOverlaysFromSim,
+  ghostShapesFromDefinition,
+  sceneDimensionsFromApiResponse,
+  type BatchLightUpdate,
+  type GhostShapeOverlay,
+  type SceneDimensions,
+  type ShapeAnimationSim,
+} from "@/lib/shapeAnimationEngine";
+import { mergeSceneLightBatchIntoItems } from "@/lib/scenesMerge";
 import {
-  PYTHON_SAMPLE_GROWING_SPHERE_SOURCE,
-  PYTHON_SAMPLE_RANDOM_COLOUR_CYCLE_ALL_SOURCE,
-  PYTHON_SAMPLE_SWEEPING_CUBOID_SOURCE,
-} from "@/lib/pythonRoutineSamples";
-import {
-  ROUTINE_TYPE_PYTHON_SCENE_SCRIPT,
+  ROUTINE_TYPE_SHAPE_ANIMATION,
   createRoutine,
   deleteRoutine,
   fetchRoutine,
@@ -50,6 +45,7 @@ import {
 } from "@/lib/routines";
 import {
   fetchScene,
+  fetchSceneDimensions,
   fetchScenes,
   patchSceneLightsStateScene,
   type SceneDetail,
@@ -60,54 +56,69 @@ const SceneLightsCanvas = dynamic(() => import("@/components/SceneLightsCanvas")
   ssr: false,
 });
 
-export default function PythonRoutineEditorClient() {
+export default function ShapeRoutineEditorClient() {
   const router = useRouter();
   const search = useSearchParams();
   const idParam = search.get("id");
   const sceneFromQuery = search.get("scene");
 
-  const editorViewRef = useRef<EditorView | null>(null);
-
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [code, setCode] = useState(PYTHON_ROUTINE_DEFAULT_SOURCE);
+  const [formState, setFormState] = useState<ShapeAnimationFormState>(() =>
+    shapeFormStateFromDefault(),
+  );
   const [routineId, setRoutineId] = useState<string | null>(idParam);
   const [loaded, setLoaded] = useState(() => Boolean(idParam));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const [scenesList, setScenesList] = useState<SceneSummary[] | null>(null);
-  /** REQ-027: one scene for both Start/Stop and the 3D picture */
   const [targetSceneId, setTargetSceneId] = useState("");
   const [targetScene, setTargetScene] = useState<SceneDetail | null>(null);
+  const [sceneDims, setSceneDims] = useState<SceneDimensions | null>(null);
   const [activeRun, setActiveRun] = useState<{
     run_id: string;
     scene_id: string;
   } | null>(null);
   const [cameraResetVersion, setCameraResetVersion] = useState(0);
 
-  const extensions = useMemo(
-    () => [
-      python(),
-      lintGutter(),
-      pythonRoutineLinter(),
-      pythonSceneAutocompletion(),
-    ],
-    [],
-  );
+  const ghostRef = useRef<GhostShapeOverlay[]>([]);
+
+  const definitionJsonString = useMemo(() => {
+    try {
+      return definitionJsonStringFromForm(formState);
+    } catch {
+      return "";
+    }
+  }, [formState]);
+
+  const readonlyJsonText = useMemo(() => {
+    try {
+      return JSON.stringify(definitionObjectFromForm(formState), null, 2);
+    } catch {
+      return "// Fix form validation errors to see JSON";
+    }
+  }, [formState]);
 
   const load = useCallback(async (rid: string) => {
     setError(null);
     setLoaded(false);
     try {
       const r: RoutineDefinition = await fetchRoutine(rid);
-      if (r.type !== ROUTINE_TYPE_PYTHON_SCENE_SCRIPT) {
-        throw new Error("This routine is not a Python scene script.");
+      if (r.type !== ROUTINE_TYPE_SHAPE_ANIMATION) {
+        throw new Error("This routine is not a shape animation.");
       }
       setRoutineId(r.id);
       setName(r.name);
       setDescription(r.description);
-      setCode(r.python_source?.trim() ? r.python_source : PYTHON_ROUTINE_DEFAULT_SOURCE);
+      if (r.definition_json != null) {
+        try {
+          setFormState(shapeFormStateFromUnknown(r.definition_json));
+        } catch {
+          setFormState(shapeFormStateFromDefault());
+          setError("Could not parse saved definition; loaded defaults. Re-save to fix.");
+        }
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Load failed");
     } finally {
@@ -117,7 +128,7 @@ export default function PythonRoutineEditorClient() {
 
   useEffect(() => {
     if (!idParam) {
-      router.replace("/routines/new?kind=python");
+      router.replace("/routines/new?type=shape");
       return;
     }
     void load(idParam);
@@ -146,6 +157,7 @@ export default function PythonRoutineEditorClient() {
   useEffect(() => {
     if (!targetSceneId) {
       setTargetScene(null);
+      setSceneDims(null);
       return;
     }
     let cancelled = false;
@@ -158,6 +170,16 @@ export default function PythonRoutineEditorClient() {
       } catch {
         if (!cancelled) {
           setTargetScene(null);
+        }
+      }
+      try {
+        const d = await fetchSceneDimensions(targetSceneId);
+        if (!cancelled) {
+          setSceneDims(sceneDimensionsFromApiResponse(d));
+        }
+      } catch {
+        if (!cancelled) {
+          setSceneDims(null);
         }
       }
     })();
@@ -178,24 +200,38 @@ export default function PythonRoutineEditorClient() {
     }
   }, [targetSceneId]);
 
-  const onInsertSnippet = useCallback(
-    (snippet: string, options?: { replaceAll?: boolean }) => {
-      if (options?.replaceAll) {
-        setCode(snippet);
-        return;
+  const showShapeHost = activeRun && activeRun.scene_id === targetSceneId;
+  const definitionJsonForHost = definitionJsonString;
+
+  useEffect(() => {
+    if (showShapeHost && activeRun) {
+      return;
+    }
+    if (!sceneDims || !definitionJsonString) {
+      ghostRef.current = [];
+      return;
+    }
+    ghostRef.current = ghostShapesFromDefinition(definitionJsonString, sceneDims);
+  }, [showShapeHost, activeRun, sceneDims, definitionJsonString]);
+
+  const onSimTick = useCallback((sim: ShapeAnimationSim) => {
+    ghostRef.current = ghostOverlaysFromSim(sim);
+  }, []);
+
+  const onLightsPreview = useCallback((updates: BatchLightUpdate[]) => {
+    if (updates.length === 0) {
+      return;
+    }
+    setTargetScene((prev) => {
+      if (!prev) {
+        return prev;
       }
-      const view = editorViewRef.current;
-      if (view) {
-        insertSnippetInPythonEditor(view, snippet);
-      } else {
-        setCode((prev) => {
-          const needsNl = prev.length > 0 && !prev.endsWith("\n");
-          return prev + (needsNl ? "\n" : "") + snippet;
-        });
-      }
-    },
-    [],
-  );
+      return {
+        ...prev,
+        items: mergeSceneLightBatchIntoItems(prev.items, updates),
+      };
+    });
+  }, []);
 
   async function onSave() {
     setBusy(true);
@@ -205,19 +241,14 @@ export default function PythonRoutineEditorClient() {
       if (!n) {
         throw new Error("Please enter a name.");
       }
-      const formatted = await formatPythonSource(code);
-      let sourceToSave = code;
-      if (formatted.ok) {
-        sourceToSave = formatted.text;
-        setCode(formatted.text);
-      }
+      const parsed = definitionObjectFromForm(formState);
       if (!routineId) {
-        throw new Error("Routine id missing; create routines from Routines → New routine.");
+        throw new Error("Routine id missing.");
       }
       await patchRoutine(routineId, {
         name: n,
         description,
-        python_source: sourceToSave,
+        definition_json: parsed,
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Save failed");
@@ -233,13 +264,14 @@ export default function PythonRoutineEditorClient() {
     setBusy(true);
     setError(null);
     try {
+      const parsed = definitionObjectFromForm(formState);
       const dup = await createRoutine({
         name: `${name.trim() || "routine"} (copy)`,
         description,
-        type: ROUTINE_TYPE_PYTHON_SCENE_SCRIPT,
-        python_source: code,
+        type: ROUTINE_TYPE_SHAPE_ANIMATION,
+        definition_json: parsed,
       });
-      router.push(`/routines/python?id=${encodeURIComponent(dup.id)}`);
+      router.push(`/routines/shape?id=${encodeURIComponent(dup.id)}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Duplicate failed");
     } finally {
@@ -266,53 +298,13 @@ export default function PythonRoutineEditorClient() {
     }
   }
 
-  function onResetTemplate() {
-    if (
-      !window.confirm(
-        "Replace your code with the starter demo (colours in a sphere)? Your current text will be lost unless you saved.",
-      )
-    ) {
-      return;
-    }
-    setCode(PYTHON_ROUTINE_DEFAULT_SOURCE);
-  }
-
-  function loadGrowingSphereSample() {
-    if (
-      !window.confirm(
-        "Replace your code with the full growing-sphere sample? Save first if you need a copy of what you have now.",
-      )
-    ) {
-      return;
-    }
-    setCode(PYTHON_SAMPLE_GROWING_SPHERE_SOURCE);
-  }
-
-  function loadSweepingCuboidSample() {
-    if (
-      !window.confirm(
-        "Replace your code with the full sweeping-cuboid sample? Save first if you need a copy of what you have now.",
-      )
-    ) {
-      return;
-    }
-    setCode(PYTHON_SAMPLE_SWEEPING_CUBOID_SOURCE);
-  }
-
-  function loadRandomColourCycleSample() {
-    if (
-      !window.confirm(
-        "Replace your code with the full random colour cycle sample? Save first if you need a copy of what you have now.",
-      )
-    ) {
-      return;
-    }
-    setCode(PYTHON_SAMPLE_RANDOM_COLOUR_CYCLE_ALL_SOURCE);
-  }
-
   async function onStartRun() {
     if (!routineId || !targetSceneId) {
-      setError("Pick a room first.");
+      setError("Pick a scene first.");
+      return;
+    }
+    if (!definitionJsonForHost) {
+      setError("Fix the form: definition is invalid.");
       return;
     }
     setBusy(true);
@@ -358,26 +350,11 @@ export default function PythonRoutineEditorClient() {
       });
       await refreshTargetScene();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Reset room lights failed");
+      setError(e instanceof Error ? e.message : "Reset scene lights failed");
     } finally {
       setBusy(false);
     }
   }
-
-  const workerSource = activeRun ? code : "";
-  const showWorker =
-    activeRun &&
-    activeRun.scene_id === targetSceneId &&
-    Boolean(workerSource.trim());
-
-  const onWorkerIteration = useCallback(
-    (sid: string) => {
-      if (sid === targetSceneId) {
-        void refreshTargetScene();
-      }
-    },
-    [targetSceneId, refreshTargetScene],
-  );
 
   if (!loaded) {
     return (
@@ -392,13 +369,13 @@ export default function PythonRoutineEditorClient() {
       <header className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
-            Python room routine
+            Shape animation routine
           </h1>
           <p className="mt-1 max-w-2xl text-sm text-slate-600 dark:text-slate-400">
-            Write short Python here. It runs in your browser and can change lights in a room
-            you pick. Under the code is a list of every command — open one, then press the
-            button to copy the example into your script. Below that you start the script and
-            see the same room in 3D.
+            Configure background and shapes with the form below. The JSON is read-only and
+            matches what the server stores. Run from here or from a scene page; animation
+            updates lights via the scene API. Ghost shapes in the 3D view are only shown on
+            this editor page.
           </p>
         </div>
         <Link
@@ -454,104 +431,51 @@ export default function PythonRoutineEditorClient() {
             type="button"
             icon={faTrash}
             className="bg-red-900 hover:bg-red-800 dark:bg-red-950"
-            disabled={busy || !routineId}
+            disabled={busy}
             onClick={() => void onDelete()}
           >
             Delete
           </Button>
-          <Button
-            type="button"
-            icon={faRotate}
-            className="bg-slate-600 hover:bg-slate-500 dark:bg-slate-700 dark:hover:bg-slate-600"
-            disabled={busy}
-            onClick={onResetTemplate}
-          >
-            Reset to starter code
-          </Button>
-          <Button
-            type="button"
-            icon={faFileImport}
-            className="bg-slate-600 hover:bg-slate-500 dark:bg-slate-700 dark:hover:bg-slate-600"
-            disabled={busy}
-            onClick={loadGrowingSphereSample}
-          >
-            Load growing sphere sample
-          </Button>
-          <Button
-            type="button"
-            icon={faFileImport}
-            className="bg-slate-600 hover:bg-slate-500 dark:bg-slate-700 dark:hover:bg-slate-600"
-            disabled={busy}
-            onClick={loadSweepingCuboidSample}
-          >
-            Load sweeping cuboid sample
-          </Button>
-          <Button
-            type="button"
-            icon={faFileImport}
-            className="bg-slate-600 hover:bg-slate-500 dark:bg-slate-700 dark:hover:bg-slate-600"
-            disabled={busy}
-            onClick={loadRandomColourCycleSample}
-          >
-            Load random colour cycle sample
-          </Button>
         </div>
       </div>
 
-      <section
-        className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900/40"
-        aria-labelledby="python-code-heading"
-      >
-        <h2
-          id="python-code-heading"
-          className="text-sm font-semibold text-slate-800 dark:text-slate-200"
-        >
-          Your code
+      <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900/40">
+        <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+          Definition
         </h2>
         <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
-          The editor checks Python as you type and can suggest words after{" "}
-          <code className="rounded bg-slate-100 px-1 dark:bg-slate-800">scene.</code> Save runs
-          the formatter when it is available. You can use{" "}
-          <code className="rounded bg-slate-100 px-1 dark:bg-slate-800">await</code> at the top
-          level for scene commands.
+          Edit fields below. Values are validated on save (same rules as the API).
         </p>
-        <div className="mt-3">
-          <PythonCodeMirrorEditor
-            value={code}
-            onChange={setCode}
-            extensions={extensions}
-            editorViewRef={editorViewRef}
-          />
+        <div className="mt-4">
+          <ShapeRoutineDefinitionForm state={formState} onChange={setFormState} disabled={busy} />
         </div>
       </section>
 
-      <PythonSceneApiCatalogSection onInsertSnippet={onInsertSnippet} />
-
-      <section
-        className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900/40"
-        aria-labelledby="run-watch-heading"
-      >
-        <h2
-          id="run-watch-heading"
-          className="text-sm font-semibold text-slate-800 dark:text-slate-200"
-        >
-          Run your script and watch the room
+      <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900/40">
+        <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+          Definition JSON (read-only)
         </h2>
-        <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
-          Choose one room for both the run and the 3D picture. Start tells the server you are
-          running and plays your script in a loop here. Stop ends the loop. The picture updates
-          when your script changes lights. Reset room lights sets every light back to off,
-          white, and full brightness — it does not press Stop for you.
-        </p>
+        <pre
+          className="mt-3 max-h-64 overflow-auto rounded border border-slate-200 bg-slate-50 p-3 font-mono text-[11px] leading-relaxed text-slate-800 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-200"
+          aria-readonly="true"
+        >
+          {readonlyJsonText}
+        </pre>
+      </section>
+
+      <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900/40">
+        <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+          Run and watch the scene
+        </h2>
         <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
           <label className="flex min-w-[200px] flex-1 flex-col gap-1 text-xs">
-            <span className="text-slate-600 dark:text-slate-400">Room</span>
+            <span className="text-slate-600 dark:text-slate-400">Scene</span>
             <select
               value={targetSceneId}
               onChange={(e) => setTargetSceneId(e.target.value)}
               className="min-h-11 rounded border border-slate-300 bg-white px-2 py-2 text-sm dark:border-slate-600 dark:bg-slate-900"
             >
-              <option value="">Select a room…</option>
+              <option value="">Select a scene…</option>
               {(scenesList ?? []).map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name}
@@ -563,7 +487,7 @@ export default function PythonRoutineEditorClient() {
             <Button
               type="button"
               icon={faCirclePlay}
-              disabled={busy || !routineId || !targetSceneId}
+              disabled={busy || !routineId || !targetSceneId || !definitionJsonForHost}
               onClick={() => void onStartRun()}
             >
               Start
@@ -585,7 +509,7 @@ export default function PythonRoutineEditorClient() {
             disabled={busy || !targetSceneId}
             onClick={() => void onResetSceneLights()}
           >
-            Reset room lights
+            Reset scene lights
           </Button>
           <Button
             type="button"
@@ -597,13 +521,20 @@ export default function PythonRoutineEditorClient() {
             Reset camera
           </Button>
         </div>
-        {showWorker ? (
-          <div className="mt-3">
-            <PythonRoutineHost
+        {showShapeHost && activeRun && definitionJsonForHost ? (
+          <div className="mt-3" key={activeRun.run_id}>
+            <ShapeAnimationRoutineHost
               sceneId={activeRun.scene_id}
-              source={workerSource}
-              onWorkerMessage={(msg) => setError(msg)}
-              onIterationComplete={onWorkerIteration}
+              runId={activeRun.run_id}
+              definitionJson={definitionJsonForHost}
+              onSceneRefresh={() => void refreshTargetScene()}
+              onLightsPreview={onLightsPreview}
+              onError={(m) => setError(m)}
+              onStopped={() => {
+                setActiveRun(null);
+                void refreshTargetScene();
+              }}
+              onSimTick={onSimTick}
             />
           </div>
         ) : null}
@@ -611,15 +542,21 @@ export default function PythonRoutineEditorClient() {
           <div className="mt-4 min-h-[280px] w-full sm:min-h-[320px]">
             <SceneLightsCanvas
               items={targetScene.items}
-              cameraPersistenceKey={`python-unified-${targetScene.id}`}
+              cameraPersistenceKey={`shape-unified-${targetScene.id}`}
               cameraResetVersion={cameraResetVersion}
+              shapeGhostsSourceRef={ghostRef}
             />
           </div>
         ) : targetSceneId ? (
-          <p className="mt-3 text-xs text-slate-500">Could not load this room or it is empty.</p>
+          <p className="mt-3 text-xs text-slate-500">
+            Could not load this scene or it has no lights.
+          </p>
         ) : (
-          <p className="mt-3 text-xs text-slate-500">Pick a room to see the 3D view.</p>
+          <p className="mt-3 text-xs text-slate-500">Pick a scene to see the 3D view.</p>
         )}
+        <p className="mt-2 text-[0.65rem] text-slate-500 dark:text-slate-400">
+          Semi-transparent shapes in the viewport preview volume placement (editor only).
+        </p>
       </section>
     </div>
   );

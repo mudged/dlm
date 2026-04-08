@@ -1402,7 +1402,7 @@ func TestAcceptance_REQ021_sceneRoutinesPythonAndSceneAPI(t *testing.T) {
 	}
 	routinesGoStr := string(routinesGo)
 	if strings.Contains(routinesGoStr, "TickRoutineRuns") {
-		t.Fatal("store/routines.go must not define TickRoutineRuns (automation runs in browser Pyodide only)")
+		t.Fatal("store/routines.go must not define TickRoutineRuns (automation runs in the browser: Pyodide and/or shape animation engine)")
 	}
 
 	sceneClientPath := filepath.Join(root, "web", "app", "scenes", "detail", "SceneDetailClient.tsx")
@@ -1538,5 +1538,193 @@ func TestAcceptance_REQ032_threeSeededPythonSampleRoutines(t *testing.T) {
 	edStr := string(edBytes)
 	if !strings.Contains(edStr, "Load growing sphere sample") || !strings.Contains(edStr, "Load sweeping cuboid sample") || !strings.Contains(edStr, "Load random colour cycle sample") {
 		t.Fatal("PythonRoutineEditorClient must expose Load sample actions for all three REQ-032 scripts")
+	}
+}
+
+func TestAcceptance_REQ033_shapeAnimationRoutines(t *testing.T) {
+	doc := readRequirements(t)
+	block := requirementBlock(doc, "REQ-033")
+	if block == "" {
+		t.Fatal("requirements must contain ### REQ-033 section")
+	}
+	lower := strings.ToLower(block)
+	if !strings.Contains(block, "| **Priority** | Must |") {
+		t.Fatal("REQ-033 metadata must state priority Must")
+	}
+	for _, kw := range []string{
+		"req-021", "req-020", "req-027", "req-011", "req-023", "req-026",
+		"sphere", "cuboid", "brightness",
+	} {
+		if !strings.Contains(lower, kw) {
+			t.Fatalf("REQ-033 must reference or require %q", kw)
+		}
+	}
+	if !strings.Contains(lower, "m/s") && !strings.Contains(lower, "meter") {
+		t.Fatal("REQ-033 must document SI speed (m/s or meters per second)")
+	}
+	if !strings.Contains(lower, "docs/architecture.md") {
+		t.Fatal("REQ-033 rule 12 must require docs/architecture.md for persistence and simulation")
+	}
+	if !strings.Contains(lower, "shape") && !strings.Contains(lower, "animation") {
+		t.Fatal("REQ-033 must name shape animation in scope or rules")
+	}
+	for _, kw := range []string{"mobile", "tablet", "desktop"} {
+		if !strings.Contains(lower, kw) {
+			t.Fatalf("REQ-033 responsive notes must mention %q", kw)
+		}
+	}
+	if !strings.Contains(lower, "hover-only") && !strings.Contains(lower, "hover only") {
+		t.Fatal("REQ-033 must forbid hover-only essential steps where UX notes apply")
+	}
+
+	root := repoRoot(t)
+
+	validatePath := filepath.Join(root, "backend", "internal", "store", "shape_animation_def.go")
+	vb, err := os.ReadFile(validatePath)
+	if err != nil {
+		t.Fatalf("read %s: %v", validatePath, err)
+	}
+	vstr := string(vb)
+	if !strings.Contains(vstr, "ValidateShapeAnimationDefinitionJSON") {
+		t.Fatal("shape_animation_def.go must export ValidateShapeAnimationDefinitionJSON (REQ-033 server validation)")
+	}
+
+	storePath := filepath.Join(root, "backend", "internal", "store", "store.go")
+	sb, err := os.ReadFile(storePath)
+	if err != nil {
+		t.Fatalf("read %s: %v", storePath, err)
+	}
+	storeStr := string(sb)
+	if !strings.Contains(storeStr, "ensureDefinitionJSONColumn") || !strings.Contains(storeStr, "definition_json") {
+		t.Fatal("store.go must migrate routines.definition_json for REQ-033")
+	}
+
+	routinesPath := filepath.Join(root, "backend", "internal", "store", "routines.go")
+	rb, err := os.ReadFile(routinesPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", routinesPath, err)
+	}
+	routinesStr := string(rb)
+	if !strings.Contains(routinesStr, `RoutineTypeShapeAnimation`) || !strings.Contains(routinesStr, `"shape_animation"`) {
+		t.Fatal("routines.go must define RoutineTypeShapeAnimation / shape_animation (REQ-033)")
+	}
+
+	httpRoutinesPath := filepath.Join(root, "backend", "internal", "httpapi", "routines.go")
+	hb, err := os.ReadFile(httpRoutinesPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", httpRoutinesPath, err)
+	}
+	hr := string(hb)
+	if !strings.Contains(hr, "definition_json") || !strings.Contains(hr, "DefinitionJSON") {
+		t.Fatal("httpapi/routines.go must accept definition_json on create/patch for shape_animation (REQ-033)")
+	}
+
+	enginePath := filepath.Join(root, "web", "lib", "shapeAnimationEngine.ts")
+	eb, err := os.ReadFile(enginePath)
+	if err != nil {
+		t.Fatalf("read %s: %v", enginePath, err)
+	}
+	es := string(eb)
+	for _, needle := range []string{"initShapeAnimationSim", "tickShapeAnimationSim", "buildBatchUpdatesFromSim"} {
+		if !strings.Contains(es, needle) {
+			t.Fatalf("shapeAnimationEngine.ts must define %s (REQ-033 client simulation)", needle)
+		}
+	}
+
+	hostPath := filepath.Join(root, "web", "components", "ShapeAnimationRoutineHost.tsx")
+	hostBytes, err := os.ReadFile(hostPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", hostPath, err)
+	}
+	hostSrc := string(hostBytes)
+	if !strings.Contains(hostSrc, "patchSceneLightsStateBatch") {
+		t.Fatal("ShapeAnimationRoutineHost must call patchSceneLightsStateBatch for scene light writes (REQ-033)")
+	}
+
+	scenesLibPath := filepath.Join(root, "web", "lib", "scenes.ts")
+	scb, err := os.ReadFile(scenesLibPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", scenesLibPath, err)
+	}
+	scenesLib := string(scb)
+	if !strings.Contains(scenesLib, "patchSceneLightsStateBatch") || !strings.Contains(scenesLib, "fetchSceneDimensions") {
+		t.Fatal("scenes.ts must expose patchSceneLightsStateBatch and fetchSceneDimensions for REQ-033")
+	}
+
+	defPath := filepath.Join(root, "web", "lib", "shapeAnimationDefault.ts")
+	db, err := os.ReadFile(defPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", defPath, err)
+	}
+	if !strings.Contains(string(db), "SHAPE_ANIMATION_DEFAULT_DEFINITION") {
+		t.Fatal("shapeAnimationDefault.ts must export SHAPE_ANIMATION_DEFAULT_DEFINITION (REQ-033 create default)")
+	}
+
+	newRoutinePath := filepath.Join(root, "web", "app", "routines", "new", "RoutineNewClient.tsx")
+	nb, err := os.ReadFile(newRoutinePath)
+	if err != nil {
+		t.Fatalf("read %s: %v", newRoutinePath, err)
+	}
+	newRoutineSrc := string(nb)
+	if !strings.Contains(newRoutineSrc, "ROUTINE_TYPE_SHAPE_ANIMATION") || !strings.Contains(newRoutineSrc, "SHAPE_ANIMATION_DEFAULT_DEFINITION") {
+		t.Fatal("RoutineNewClient must offer shape_animation create path with default definition (REQ-023 + REQ-033)")
+	}
+	if !strings.Contains(newRoutineSrc, ">Type<") || !strings.Contains(newRoutineSrc, "<select") {
+		t.Fatal("RoutineNewClient must use a Type dropdown for routine kind (REQ-023)")
+	}
+
+	formLib := filepath.Join(root, "web", "lib", "shapeAnimationDefinitionForm.ts")
+	fb, err := os.ReadFile(formLib)
+	if err != nil {
+		t.Fatalf("read %s: %v", formLib, err)
+	}
+	if !strings.Contains(string(fb), "definitionObjectFromForm") {
+		t.Fatal("shapeAnimationDefinitionForm.ts must build definition objects for save (REQ-033)")
+	}
+
+	shapeEditorPath := filepath.Join(root, "web", "app", "routines", "shape", "ShapeRoutineEditorClient.tsx")
+	seb, err := os.ReadFile(shapeEditorPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", shapeEditorPath, err)
+	}
+	shapeEd := string(seb)
+	if !strings.Contains(shapeEd, "SceneLightsCanvas") || !strings.Contains(shapeEd, "ShapeAnimationRoutineHost") {
+		t.Fatal("ShapeRoutineEditorClient must embed SceneLightsCanvas and ShapeAnimationRoutineHost (REQ-033 + REQ-027 viewport)")
+	}
+	if !strings.Contains(shapeEd, "ShapeRoutineDefinitionForm") || !strings.Contains(shapeEd, "shapeGhostsSourceRef") {
+		t.Fatal("ShapeRoutineEditorClient must use form authoring and editor-only shape ghost overlays (REQ-033)")
+	}
+
+	canvasPath := filepath.Join(root, "web", "components", "SceneLightsCanvas.tsx")
+	cb, err := os.ReadFile(canvasPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", canvasPath, err)
+	}
+	if !strings.Contains(string(cb), "shapeGhostsSourceRef") || !strings.Contains(string(cb), "GhostShapeOverlay") {
+		t.Fatal("SceneLightsCanvas must support optional shape ghost overlays for the shape editor (REQ-033)")
+	}
+
+	sceneDetailPath := filepath.Join(root, "web", "app", "scenes", "detail", "SceneDetailClient.tsx")
+	sdb, err := os.ReadFile(sceneDetailPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", sceneDetailPath, err)
+	}
+	sceneDetail := string(sdb)
+	if !strings.Contains(sceneDetail, "ShapeAnimationRoutineHost") || !strings.Contains(sceneDetail, "ROUTINE_TYPE_SHAPE_ANIMATION") {
+		t.Fatal("SceneDetailClient must host ShapeAnimationRoutineHost when routine_type is shape_animation (REQ-021 + REQ-033)")
+	}
+
+	archPath := filepath.Join(root, "docs", "architecture.md")
+	ab, err := os.ReadFile(archPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", archPath, err)
+	}
+	arch := string(ab)
+	archLower := strings.ToLower(arch)
+	if !strings.Contains(archLower, "req-033") || !strings.Contains(archLower, "3.17.2") {
+		t.Fatal("docs/architecture.md must document REQ-033 and §3.17.2 shape animation")
+	}
+	if !strings.Contains(archLower, "definition_json") {
+		t.Fatal("docs/architecture.md must document definition_json for shape routines (REQ-033)")
 	}
 }

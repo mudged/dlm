@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -15,6 +16,7 @@ import (
 const (
 	RoutineTypeRandomColourCycleAll = "random_colour_cycle_all"
 	RoutineTypePythonSceneScript    = "python_scene_script"
+	RoutineTypeShapeAnimation       = "shape_animation"
 )
 
 // RoutineStatusRunning / RoutineStatusStopped are persisted in routine_runs.status.
@@ -32,8 +34,8 @@ var ErrRoutineRunActive = errors.New("routine has an active run")
 // ErrRoutineUnknownType is returned for unsupported routine type strings.
 var ErrRoutineUnknownType = errors.New("unknown routine type")
 
-// ErrRoutineNotEditable is returned when PATCH is used on a non-Python routine.
-var ErrRoutineNotEditable = errors.New("routine type does not support update")
+// ErrRoutineNotEditable is returned when PATCH uses fields incompatible with the routine type.
+var ErrRoutineNotEditable = errors.New("routine type does not support this update")
 
 // ErrRoutineRunNotFound is returned when stop targets a missing or non-running run for the scene.
 var ErrRoutineRunNotFound = errors.New("routine run not found for this scene")
@@ -50,12 +52,13 @@ func (e *SceneRoutineConflictError) Error() string {
 
 // RoutineDTO is a persisted routine definition (REQ-021, REQ-022).
 type RoutineDTO struct {
-	ID           string    `json:"id"`
-	Name         string    `json:"name"`
-	Description  string    `json:"description"`
-	Type         string    `json:"type"`
-	PythonSource string    `json:"python_source,omitempty"`
-	CreatedAt    time.Time `json:"created_at"`
+	ID              string          `json:"id"`
+	Name            string          `json:"name"`
+	Description     string          `json:"description"`
+	Type            string          `json:"type"`
+	PythonSource    string          `json:"python_source,omitempty"`
+	DefinitionJSON  json.RawMessage `json:"definition_json,omitempty"`
+	CreatedAt       time.Time       `json:"created_at"`
 }
 
 // RoutineRunDTO is exposed for list-runs API.
@@ -67,10 +70,33 @@ type RoutineRunDTO struct {
 	Status      string `json:"status"`
 }
 
+func scanRoutineDTO(scanner interface {
+	Scan(dest ...any) error
+}) (RoutineDTO, error) {
+	var r RoutineDTO
+	var created string
+	var def sql.NullString
+	if err := scanner.Scan(&r.ID, &r.Name, &r.Description, &r.Type, &r.PythonSource, &def, &created); err != nil {
+		return r, err
+	}
+	if def.Valid && strings.TrimSpace(def.String) != "" {
+		r.DefinitionJSON = json.RawMessage(def.String)
+	}
+	t, err := time.Parse(time.RFC3339Nano, created)
+	if err != nil {
+		t, err = time.Parse(time.RFC3339, created)
+		if err != nil {
+			return r, fmt.Errorf("parse routine created_at: %w", err)
+		}
+	}
+	r.CreatedAt = t.UTC()
+	return r, nil
+}
+
 // ListRoutines returns all routine definitions, newest first.
 func (s *Store) ListRoutines(ctx context.Context) ([]RoutineDTO, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, name, description, type, python_source, created_at FROM routines ORDER BY created_at DESC
+		SELECT id, name, description, type, python_source, definition_json, created_at FROM routines ORDER BY created_at DESC
 	`)
 	if err != nil {
 		return nil, err
@@ -78,19 +104,10 @@ func (s *Store) ListRoutines(ctx context.Context) ([]RoutineDTO, error) {
 	defer rows.Close()
 	var out []RoutineDTO
 	for rows.Next() {
-		var r RoutineDTO
-		var created string
-		if err := rows.Scan(&r.ID, &r.Name, &r.Description, &r.Type, &r.PythonSource, &created); err != nil {
+		r, err := scanRoutineDTO(rows)
+		if err != nil {
 			return nil, err
 		}
-		t, err := time.Parse(time.RFC3339Nano, created)
-		if err != nil {
-			t, err = time.Parse(time.RFC3339, created)
-			if err != nil {
-				return nil, fmt.Errorf("parse routine created_at: %w", err)
-			}
-		}
-		r.CreatedAt = t.UTC()
 		out = append(out, r)
 	}
 	return out, rows.Err()
@@ -99,30 +116,22 @@ func (s *Store) ListRoutines(ctx context.Context) ([]RoutineDTO, error) {
 // GetRoutine loads one routine by id.
 func (s *Store) GetRoutine(ctx context.Context, id string) (*RoutineDTO, error) {
 	row := s.db.QueryRowContext(ctx, `
-		SELECT id, name, description, type, python_source, created_at FROM routines WHERE id = ?
+		SELECT id, name, description, type, python_source, definition_json, created_at FROM routines WHERE id = ?
 	`, id)
-	var r RoutineDTO
-	var created string
-	if err := row.Scan(&r.ID, &r.Name, &r.Description, &r.Type, &r.PythonSource, &created); err != nil {
+	r, err := scanRoutineDTO(row)
+	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrRoutineNotFound
 		}
 		return nil, err
 	}
-	t, err := time.Parse(time.RFC3339Nano, created)
-	if err != nil {
-		t, err = time.Parse(time.RFC3339, created)
-		if err != nil {
-			return nil, fmt.Errorf("parse routine created_at: %w", err)
-		}
-	}
-	r.CreatedAt = t.UTC()
 	return &r, nil
 }
 
 // CreateRoutine inserts a new definition. Empty type defaults to python_scene_script (REQ-023).
-// random_colour_cycle_all is not creatable via API (legacy only, migrated to Python).
-func (s *Store) CreateRoutine(ctx context.Context, name, description, typ, pythonSource string) (*RoutineDTO, error) {
+// For shape_animation, definitionJSON must validate; pythonSource is stored as "".
+// For python_scene_script, definitionJSON should be "" (stored as NULL).
+func (s *Store) CreateRoutine(ctx context.Context, name, description, typ, pythonSource, definitionJSON string) (*RoutineDTO, error) {
 	name = strings.TrimSpace(name)
 	typ = strings.TrimSpace(typ)
 	if name == "" {
@@ -134,35 +143,52 @@ func (s *Store) CreateRoutine(ctx context.Context, name, description, typ, pytho
 	if typ == RoutineTypeRandomColourCycleAll {
 		return nil, fmt.Errorf("%w: random_colour_cycle_all is not a creatable type", ErrRoutineUnknownType)
 	}
-	if typ != RoutineTypePythonSceneScript {
+	if typ != RoutineTypePythonSceneScript && typ != RoutineTypeShapeAnimation {
 		return nil, fmt.Errorf("%w: %q", ErrRoutineUnknownType, typ)
 	}
+
+	var defArg any
+	switch typ {
+	case RoutineTypePythonSceneScript:
+		defArg = nil
+	case RoutineTypeShapeAnimation:
+		if err := ValidateShapeAnimationDefinitionJSON(definitionJSON); err != nil {
+			return nil, err
+		}
+		defArg = strings.TrimSpace(definitionJSON)
+	}
+
 	src := pythonSource
+	if typ == RoutineTypeShapeAnimation {
+		src = ""
+	}
 
 	id := uuid.NewString()
 	created := time.Now().UTC().Format(time.RFC3339Nano)
 	if _, err := s.db.ExecContext(ctx, `
-		INSERT INTO routines (id, name, description, type, python_source, created_at) VALUES (?, ?, ?, ?, ?, ?)
-	`, id, name, description, typ, src, created); err != nil {
+		INSERT INTO routines (id, name, description, type, python_source, definition_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)
+	`, id, name, description, typ, src, defArg, created); err != nil {
 		return nil, err
 	}
-	t, _ := time.Parse(time.RFC3339Nano, created)
-	dto := &RoutineDTO{
-		ID: id, Name: name, Description: description, Type: typ, PythonSource: src, CreatedAt: t.UTC(),
-	}
-	return dto, nil
+	return s.GetRoutine(ctx, id)
 }
 
-// PatchRoutine updates a python_scene_script definition (at least one of name, description, python_source must be in the request).
-func (s *Store) PatchRoutine(ctx context.Context, id string, name, description, pythonSource *string) (*RoutineDTO, error) {
-	if name == nil && description == nil && pythonSource == nil {
+// PatchRoutine updates fields by routine kind. python_source only for python_scene_script; definition_json only for shape_animation.
+func (s *Store) PatchRoutine(ctx context.Context, id string, name, description, pythonSource, definitionJSON *string) (*RoutineDTO, error) {
+	if name == nil && description == nil && pythonSource == nil && definitionJSON == nil {
 		return nil, fmt.Errorf("at least one field is required")
 	}
 	r, err := s.GetRoutine(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	if r.Type != RoutineTypePythonSceneScript {
+	if r.Type != RoutineTypePythonSceneScript && r.Type != RoutineTypeShapeAnimation {
+		return nil, ErrRoutineNotEditable
+	}
+	if r.Type == RoutineTypePythonSceneScript && definitionJSON != nil {
+		return nil, ErrRoutineNotEditable
+	}
+	if r.Type == RoutineTypeShapeAnimation && pythonSource != nil {
 		return nil, ErrRoutineNotEditable
 	}
 	var n int
@@ -177,6 +203,10 @@ func (s *Store) PatchRoutine(ctx context.Context, id string, name, description, 
 	newName := r.Name
 	newDesc := r.Description
 	newSrc := r.PythonSource
+	var newDef sql.NullString
+	if len(r.DefinitionJSON) > 0 {
+		newDef = sql.NullString{String: string(r.DefinitionJSON), Valid: true}
+	}
 	if name != nil {
 		t := strings.TrimSpace(*name)
 		if t == "" {
@@ -190,10 +220,32 @@ func (s *Store) PatchRoutine(ctx context.Context, id string, name, description, 
 	if pythonSource != nil {
 		newSrc = *pythonSource
 	}
-	if _, err := s.db.ExecContext(ctx, `
-		UPDATE routines SET name = ?, description = ?, python_source = ? WHERE id = ?
-	`, newName, newDesc, newSrc, id); err != nil {
-		return nil, err
+	if definitionJSON != nil {
+		trimmed := strings.TrimSpace(*definitionJSON)
+		if err := ValidateShapeAnimationDefinitionJSON(trimmed); err != nil {
+			return nil, err
+		}
+		newDef = sql.NullString{String: trimmed, Valid: true}
+	}
+
+	var execErr error
+	if r.Type == RoutineTypePythonSceneScript {
+		_, execErr = s.db.ExecContext(ctx, `
+			UPDATE routines SET name = ?, description = ?, python_source = ? WHERE id = ?
+		`, newName, newDesc, newSrc, id)
+	} else {
+		var defArg any
+		if newDef.Valid {
+			defArg = newDef.String
+		} else {
+			defArg = nil
+		}
+		_, execErr = s.db.ExecContext(ctx, `
+			UPDATE routines SET name = ?, description = ?, definition_json = ? WHERE id = ?
+		`, newName, newDesc, defArg, id)
+	}
+	if execErr != nil {
+		return nil, execErr
 	}
 	return s.GetRoutine(ctx, id)
 }
