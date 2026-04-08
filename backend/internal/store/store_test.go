@@ -7,6 +7,7 @@ import (
 	"slices"
 	"testing"
 
+	"example.com/dlm/backend/internal/lightstate"
 	"example.com/dlm/backend/internal/samples"
 	"example.com/dlm/backend/internal/wiremodel"
 )
@@ -20,6 +21,12 @@ func testDB(t *testing.T) *Store {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = s.Close() })
+	ls := lightstate.New()
+	s.SetLightState(ls)
+	ctx := context.Background()
+	if err := s.LoadLightStateFromDB(ctx); err != nil {
+		t.Fatal(err)
+	}
 	return s
 }
 
@@ -93,6 +100,9 @@ func TestStore_SeedDefaultSamples_idempotent(t *testing.T) {
 	if err := s.SeedDefaultSamples(ctx); err != nil {
 		t.Fatal(err)
 	}
+	if err := s.LoadLightStateFromDB(ctx); err != nil {
+		t.Fatal(err)
+	}
 	list, err := s.List(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -116,6 +126,9 @@ func TestStore_SeedDefaultPythonRoutines_idempotent(t *testing.T) {
 	ctx := context.Background()
 	s := testDB(t)
 	if err := s.SeedDefaultSamples(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.LoadLightStateFromDB(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.SeedDefaultPythonRoutines(ctx); err != nil {
@@ -152,6 +165,9 @@ func TestStore_FactoryReset(t *testing.T) {
 	ctx := context.Background()
 	s := testDB(t)
 	if err := s.SeedDefaultSamples(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.LoadLightStateFromDB(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.Create(ctx, "extra-user-model", []wiremodel.Light{{ID: 0, X: 0, Y: 0, Z: 0}}); err != nil {

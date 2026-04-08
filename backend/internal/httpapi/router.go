@@ -9,20 +9,23 @@ import (
 	"strings"
 
 	"example.com/dlm/backend/internal/config"
+	"example.com/dlm/backend/internal/devices"
 	"example.com/dlm/backend/internal/store"
 )
 
 // apiDeps holds API handlers' shared dependencies.
 type apiDeps struct {
-	store *store.Store
-	rev   *RevisionHub
+	store  *store.Store
+	rev    *RevisionHub
+	pusher devicePusher
 }
 
 // NewSiteHandler wires /health, /api/v1/, and optional static UI from content (Next export).
 // API routes are registered before the static file server. If content is nil, only API routes exist.
 // st must be non-nil (models API requires persistence).
 // rev may be nil; a private RevisionHub is used so in-process notifications still work (REQ-029 SSE).
-func NewSiteHandler(cfg *config.Config, content fs.FS, st *store.Store, rev *RevisionHub) http.Handler {
+// pusher may be nil; when set, logical light changes are pushed to assigned WLED devices (REQ-035–REQ-039).
+func NewSiteHandler(cfg *config.Config, content fs.FS, st *store.Store, rev *RevisionHub, pusher *devices.Pusher) http.Handler {
 	if st == nil {
 		panic("httpapi.NewSiteHandler: store is nil")
 	}
@@ -35,8 +38,16 @@ func NewSiteHandler(cfg *config.Config, content fs.FS, st *store.Store, rev *Rev
 	mux.HandleFunc("GET /health", healthHandler)
 
 	api := http.NewServeMux()
-	deps := &apiDeps{store: st, rev: rev}
+	deps := &apiDeps{store: st, rev: rev, pusher: pusher}
 	api.HandleFunc("POST /system/factory-reset", deps.postFactoryReset)
+	api.HandleFunc("GET /devices", deps.listDevices)
+	api.HandleFunc("POST /devices", deps.postDevice)
+	api.HandleFunc("POST /devices/discover", deps.postDevicesDiscover)
+	api.HandleFunc("GET /devices/{id}", deps.getDevice)
+	api.HandleFunc("PATCH /devices/{id}", deps.patchDevice)
+	api.HandleFunc("DELETE /devices/{id}", deps.deleteDevice)
+	api.HandleFunc("POST /devices/{id}/assign", deps.postDeviceAssign)
+	api.HandleFunc("POST /devices/{id}/unassign", deps.postDeviceUnassign)
 	api.HandleFunc("GET /status", statusHandler)
 	api.HandleFunc("GET /routines", deps.listRoutines)
 	api.HandleFunc("POST /routines", deps.createRoutine)

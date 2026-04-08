@@ -34,6 +34,7 @@ On first start with an **empty** database, the server inserts three models — *
 
 - **Go 1.22+** (module `go` directive); the devcontainer uses **`mcr.microsoft.com/devcontainers/go:1-bookworm`** (current **Go 1.x** on rebuild).
 - **Node.js** — **Active LTS** in the devcontainer (`features/node` with **`version: "lts"`**); only needed to build `web/` (not on the Pi at runtime).
+- **Python 3** (optional) — install on the **host** (e.g. Raspberry Pi) and ensure `python3` is on `PATH` if you run **Python scene routines**; see `docs/architecture.md` §3.17 and §6.2. Other features do not require it.
 
 ## Production-style run (manual two steps)
 

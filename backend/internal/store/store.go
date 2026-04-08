@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"example.com/dlm/backend/internal/lightstate"
 	"example.com/dlm/backend/internal/samples"
 	"example.com/dlm/backend/internal/seed"
 	"example.com/dlm/backend/internal/wiremodel"
@@ -87,6 +88,46 @@ type Detail struct {
 // Store persists models in SQLite.
 type Store struct {
 	db *sql.DB
+	// LS holds authoritative per-light operational state (REQ-039). Required for API paths once attached.
+	LS *lightstate.Store
+}
+
+// SetLightState attaches the in-memory light state store (call before LoadLightStateFromDB).
+func (s *Store) SetLightState(ls *lightstate.Store) {
+	s.LS = ls
+}
+
+// LoadLightStateFromDB rebuilds LS from models and light counts (defaults per light). Call after migrations/seed.
+func (s *Store) LoadLightStateFromDB(ctx context.Context) error {
+	if s.LS == nil {
+		return errors.New("store: SetLightState before LoadLightStateFromDB")
+	}
+	s.LS.Clear()
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT m.id, COUNT(l.idx) FROM models m
+		LEFT JOIN lights l ON l.model_id = m.id
+		GROUP BY m.id
+	`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		var n int
+		if err := rows.Scan(&id, &n); err != nil {
+			return err
+		}
+		s.LS.EnsureModel(id, n)
+	}
+	return rows.Err()
+}
+
+func (s *Store) requireLS() *lightstate.Store {
+	if s.LS == nil {
+		panic("store: LightState not attached — call SetLightState from main or tests")
+	}
+	return s.LS
 }
 
 // Open opens or creates a SQLite database at path (file URL fragment enables foreign keys).
@@ -138,6 +179,9 @@ func (s *Store) migrate(ctx context.Context) error {
 	}
 	if err := s.migrateLegacyRandomColourRoutines(ctx); err != nil {
 		return fmt.Errorf("migrate legacy routine types: %w", err)
+	}
+	if err := s.ensureDeviceTable(ctx); err != nil {
+		return err
 	}
 	return nil
 }
@@ -371,8 +415,8 @@ func (s *Store) seedThreeCanonicalSamplesTx(ctx context.Context, tx *sql.Tx) err
 		}
 		for _, L := range m.lights {
 			if _, err := tx.ExecContext(ctx,
-				`INSERT INTO lights (model_id, idx, x, y, z, "on", color, brightness_pct) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-				id, L.ID, L.X, L.Y, L.Z, boolToInt(DefaultLightOn), DefaultLightColor, DefaultLightBrightnessPct,
+				`INSERT INTO lights (model_id, idx, x, y, z) VALUES (?, ?, ?, ?, ?)`,
+				id, L.ID, L.X, L.Y, L.Z,
 			); err != nil {
 				return err
 			}
@@ -450,6 +494,9 @@ func (s *Store) FactoryReset(ctx context.Context) error {
 	if _, err := tx.ExecContext(ctx, `DELETE FROM routines`); err != nil {
 		return fmt.Errorf("factory reset delete routines: %w", err)
 	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM devices`); err != nil {
+		return fmt.Errorf("factory reset delete devices: %w", err)
+	}
 	// scene_models rows CASCADE when scenes are removed (FK on scene_id).
 	if _, err := tx.ExecContext(ctx, `DELETE FROM scenes`); err != nil {
 		return fmt.Errorf("factory reset delete scenes: %w", err)
@@ -466,7 +513,13 @@ func (s *Store) FactoryReset(ctx context.Context) error {
 	if err := s.seedDefaultPythonRoutinesTx(ctx, tx); err != nil {
 		return fmt.Errorf("factory reset seed python routines: %w", err)
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	if s.LS != nil {
+		return s.LoadLightStateFromDB(ctx)
+	}
+	return nil
 }
 
 // Close releases the database handle.
@@ -532,20 +585,26 @@ func (s *Store) Get(ctx context.Context, id string) (*Detail, error) {
 	d.CreatedAt = t.UTC()
 
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT idx, x, y, z, "on", color, brightness_pct FROM lights WHERE model_id = ? ORDER BY idx ASC
+		SELECT idx, x, y, z FROM lights WHERE model_id = ? ORDER BY idx ASC
 	`, id)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
+	ls := s.requireLS()
 	for rows.Next() {
 		var L LightDTO
-		var onInt int
-		if err := rows.Scan(&L.ID, &L.X, &L.Y, &L.Z, &onInt, &L.Color, &L.BrightnessPct); err != nil {
+		if err := rows.Scan(&L.ID, &L.X, &L.Y, &L.Z); err != nil {
 			return nil, err
 		}
-		L.On = onInt != 0
+		st, err := ls.Get(id, L.ID)
+		if err != nil {
+			return nil, err
+		}
+		L.On = st.On
+		L.Color = st.Color
+		L.BrightnessPct = st.BrightnessPct
 		d.Lights = append(d.Lights, L)
 	}
 	if err := rows.Err(); err != nil {
@@ -594,8 +653,8 @@ func (s *Store) Create(ctx context.Context, name string, lights []wiremodel.Ligh
 
 	for _, L := range lights {
 		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO lights (model_id, idx, x, y, z, "on", color, brightness_pct) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-			id, L.ID, L.X, L.Y, L.Z, boolToInt(DefaultLightOn), DefaultLightColor, DefaultLightBrightnessPct,
+			`INSERT INTO lights (model_id, idx, x, y, z) VALUES (?, ?, ?, ?, ?)`,
+			id, L.ID, L.X, L.Y, L.Z,
 		); err != nil {
 			return nil, err
 		}
@@ -603,6 +662,10 @@ func (s *Store) Create(ctx context.Context, name string, lights []wiremodel.Ligh
 
 	if err := tx.Commit(); err != nil {
 		return nil, err
+	}
+
+	if s.LS != nil {
+		s.LS.EnsureModel(id, len(lights))
 	}
 
 	t, _ := time.Parse(time.RFC3339Nano, created)
@@ -634,6 +697,9 @@ func (s *Store) Delete(ctx context.Context, id string) error {
 	if n == 0 {
 		return ErrNotFound
 	}
+	if s.LS != nil {
+		s.LS.RemoveModel(id)
+	}
 	return nil
 }
 
@@ -643,13 +709,6 @@ func isUniqueConstraint(err error) bool {
 	}
 	s := strings.ToLower(err.Error())
 	return strings.Contains(s, "unique constraint") || strings.Contains(s, "constraint failed")
-}
-
-func boolToInt(b bool) int {
-	if b {
-		return 1
-	}
-	return 0
 }
 
 // ValidateColor returns a normalized lowercase hex color or an error.
@@ -690,25 +749,15 @@ func (s *Store) ListLightStates(ctx context.Context, modelID string) ([]LightSta
 	if !ok {
 		return nil, ErrNotFound
 	}
-	rows, err := s.db.QueryContext(ctx, `
-		SELECT idx, "on", color, brightness_pct FROM lights WHERE model_id = ? ORDER BY idx ASC
-	`, modelID)
+	list, err := s.requireLS().List(modelID)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	var out []LightStateDTO
-	for rows.Next() {
-		var st LightStateDTO
-		var onInt int
-		if err := rows.Scan(&st.ID, &onInt, &st.Color, &st.BrightnessPct); err != nil {
-			return nil, err
-		}
-		st.On = onInt != 0
-		out = append(out, st)
+	out := make([]LightStateDTO, len(list))
+	for i := range list {
+		out[i] = LightStateDTO{ID: list[i].ID, On: list[i].On, Color: list[i].Color, BrightnessPct: list[i].BrightnessPct}
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
 // GetLightState returns one light's state (REQ-011).
@@ -720,84 +769,35 @@ func (s *Store) GetLightState(ctx context.Context, modelID string, lightID int) 
 	if !ok {
 		return nil, ErrNotFound
 	}
-	row := s.db.QueryRowContext(ctx, `
-		SELECT idx, "on", color, brightness_pct FROM lights WHERE model_id = ? AND idx = ?
-	`, modelID, lightID)
-	var st LightStateDTO
-	var onInt int
-	if err := row.Scan(&st.ID, &onInt, &st.Color, &st.BrightnessPct); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+	st, err := s.requireLS().Get(modelID, lightID)
+	if err != nil {
+		if errors.Is(err, lightstate.ErrInvalidLightIndex) {
 			return nil, ErrInvalidLightIndex
 		}
 		return nil, err
 	}
-	st.On = onInt != 0
-	return &st, nil
+	return &LightStateDTO{ID: st.ID, On: st.On, Color: st.Color, BrightnessPct: st.BrightnessPct}, nil
 }
 
 // PatchLightState applies a partial update and returns the merged state (REQ-011).
-// The bool is true when no SQLite UPDATE was needed (REQ-031 equivalence).
+// The bool is true when no effective change (REQ-031 equivalence).
 func (s *Store) PatchLightState(ctx context.Context, modelID string, lightID int, patch LightStatePatch) (*LightStateDTO, bool, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
+	ok, err := s.modelExists(ctx, modelID)
 	if err != nil {
 		return nil, false, err
 	}
-	defer func() { _ = tx.Rollback() }()
-
-	var n int
-	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM models WHERE id = ?`, modelID).Scan(&n); err != nil {
-		return nil, false, err
-	}
-	if n == 0 {
+	if !ok {
 		return nil, false, ErrNotFound
 	}
-
-	row := tx.QueryRowContext(ctx, `
-		SELECT "on", color, brightness_pct FROM lights WHERE model_id = ? AND idx = ?
-	`, modelID, lightID)
-	var onInt int
-	var color string
-	var brightness float64
-	if err := row.Scan(&onInt, &color, &brightness); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+	lp := lightstate.Patch{On: patch.On, Color: patch.Color, BrightnessPct: patch.BrightnessPct}
+	st, unchanged, err := s.requireLS().Patch(modelID, lightID, lp)
+	if err != nil {
+		if errors.Is(err, lightstate.ErrInvalidLightIndex) {
 			return nil, false, ErrInvalidLightIndex
 		}
 		return nil, false, err
 	}
-	prevOn := onInt != 0
-	on := prevOn
-	prevColor := strings.ToLower(strings.TrimSpace(color))
-	prevBr := brightness
-
-	if patch.On != nil {
-		on = *patch.On
-	}
-	if patch.Color != nil {
-		c, err := ValidateColor(*patch.Color)
-		if err != nil {
-			return nil, false, err
-		}
-		color = c
-	}
-	if patch.BrightnessPct != nil {
-		if err := ValidateBrightnessPct(*patch.BrightnessPct); err != nil {
-			return nil, false, err
-		}
-		brightness = *patch.BrightnessPct
-	}
-
-	unchanged := EquivLightStateTriple(prevOn, prevColor, prevBr, on, color, brightness)
-	if !unchanged {
-		if _, err := tx.ExecContext(ctx, `
-			UPDATE lights SET "on" = ?, color = ?, brightness_pct = ? WHERE model_id = ? AND idx = ?
-		`, boolToInt(on), color, brightness, modelID, lightID); err != nil {
-			return nil, false, err
-		}
-	}
-	if err := tx.Commit(); err != nil {
-		return nil, false, err
-	}
-	return &LightStateDTO{ID: lightID, On: on, Color: color, BrightnessPct: brightness}, unchanged, nil
+	return &LightStateDTO{ID: st.ID, On: st.On, Color: st.Color, BrightnessPct: st.BrightnessPct}, unchanged, nil
 }
 
 // BatchPatchLightStates applies the same partial update to many lights in one transaction (REQ-013 / architecture §3.10).
@@ -818,88 +818,38 @@ func (s *Store) BatchPatchLightStates(ctx context.Context, modelID string, ids [
 		seen[id] = struct{}{}
 	}
 
-	tx, err := s.db.BeginTx(ctx, nil)
+	ok, err := s.modelExists(ctx, modelID)
 	if err != nil {
 		return nil, false, err
 	}
-	defer func() { _ = tx.Rollback() }()
-
-	var modelCount int
-	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM models WHERE id = ?`, modelID).Scan(&modelCount); err != nil {
-		return nil, false, err
-	}
-	if modelCount == 0 {
+	if !ok {
 		return nil, false, ErrNotFound
 	}
 
 	var lightCount int
-	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM lights WHERE model_id = ?`, modelID).Scan(&lightCount); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM lights WHERE model_id = ?`, modelID).Scan(&lightCount); err != nil {
 		return nil, false, err
 	}
 
 	sorted := slices.Clone(ids)
 	slices.Sort(sorted)
-
-	out := make([]LightStateDTO, 0, len(sorted))
-	allUnchanged := true
 	for _, lightID := range sorted {
 		if lightID < 0 || lightID >= lightCount {
 			return nil, false, ErrInvalidLightIndex
 		}
-
-		row := tx.QueryRowContext(ctx, `
-			SELECT "on", color, brightness_pct FROM lights WHERE model_id = ? AND idx = ?
-		`, modelID, lightID)
-		var onInt int
-		var color string
-		var brightness float64
-		if err := row.Scan(&onInt, &color, &brightness); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				return nil, false, ErrInvalidLightIndex
-			}
-			return nil, false, err
-		}
-		prevOn := onInt != 0
-		on := prevOn
-		prevColor := strings.ToLower(strings.TrimSpace(color))
-		prevBr := brightness
-
-		if patch.On != nil {
-			on = *patch.On
-		}
-		if patch.Color != nil {
-			c, err := ValidateColor(*patch.Color)
-			if err != nil {
-				return nil, false, err
-			}
-			color = c
-		}
-		if patch.BrightnessPct != nil {
-			if err := ValidateBrightnessPct(*patch.BrightnessPct); err != nil {
-				return nil, false, err
-			}
-			brightness = *patch.BrightnessPct
-		}
-
-		rowUnchanged := EquivLightStateTriple(prevOn, prevColor, prevBr, on, color, brightness)
-		if !rowUnchanged {
-			allUnchanged = false
-			if _, err := tx.ExecContext(ctx, `
-				UPDATE lights SET "on" = ?, color = ?, brightness_pct = ? WHERE model_id = ? AND idx = ?
-			`, boolToInt(on), color, brightness, modelID, lightID); err != nil {
-				return nil, false, err
-			}
-		}
-		out = append(out, LightStateDTO{
-			ID:            lightID,
-			On:            on,
-			Color:         color,
-			BrightnessPct: brightness,
-		})
 	}
 
-	if err := tx.Commit(); err != nil {
+	lp := lightstate.Patch{On: patch.On, Color: patch.Color, BrightnessPct: patch.BrightnessPct}
+	list, allUnchanged, err := s.requireLS().BatchPatch(modelID, ids, lp)
+	if err != nil {
+		if errors.Is(err, lightstate.ErrInvalidLightIndex) {
+			return nil, false, ErrInvalidLightIndex
+		}
 		return nil, false, err
+	}
+	out := make([]LightStateDTO, len(list))
+	for i := range list {
+		out[i] = LightStateDTO{ID: list[i].ID, On: list[i].On, Color: list[i].Color, BrightnessPct: list[i].BrightnessPct}
 	}
 	return out, allUnchanged, nil
 }
@@ -907,76 +857,20 @@ func (s *Store) BatchPatchLightStates(ctx context.Context, modelID string, ids [
 // ResetAllLightStates sets every light in the model to REQ-014 defaults (off, #ffffff, 100% brightness).
 // unchangedAll is true when every light was already at defaults (REQ-031).
 func (s *Store) ResetAllLightStates(ctx context.Context, modelID string) ([]LightStateDTO, bool, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
+	ok, err := s.modelExists(ctx, modelID)
 	if err != nil {
 		return nil, false, err
 	}
-	defer func() { _ = tx.Rollback() }()
-
-	var n int
-	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM models WHERE id = ?`, modelID).Scan(&n); err != nil {
-		return nil, false, err
-	}
-	if n == 0 {
+	if !ok {
 		return nil, false, ErrNotFound
 	}
-
-	rowsChk, err := tx.QueryContext(ctx, `
-		SELECT idx, "on", color, brightness_pct FROM lights WHERE model_id = ? ORDER BY idx ASC
-	`, modelID)
+	list, allDefault, err := s.requireLS().ResetAll(modelID)
 	if err != nil {
 		return nil, false, err
 	}
-	allDefault := true
-	for rowsChk.Next() {
-		var idx int
-		var onInt int
-		var col string
-		var br float64
-		if err := rowsChk.Scan(&idx, &onInt, &col, &br); err != nil {
-			_ = rowsChk.Close()
-			return nil, false, err
-		}
-		if !EquivLightStateTriple(onInt != 0, strings.ToLower(strings.TrimSpace(col)), br, DefaultLightOn, DefaultLightColor, DefaultLightBrightnessPct) {
-			allDefault = false
-			break
-		}
-	}
-	if err := rowsChk.Close(); err != nil {
-		return nil, false, err
-	}
-
-	if !allDefault {
-		if _, err := tx.ExecContext(ctx, `
-			UPDATE lights SET "on" = 0, color = ?, brightness_pct = ? WHERE model_id = ?
-		`, DefaultLightColor, DefaultLightBrightnessPct, modelID); err != nil {
-			return nil, false, err
-		}
-	}
-
-	rows, err := tx.QueryContext(ctx, `
-		SELECT idx, "on", color, brightness_pct FROM lights WHERE model_id = ? ORDER BY idx ASC
-	`, modelID)
-	if err != nil {
-		return nil, false, err
-	}
-	defer rows.Close()
-
-	var out []LightStateDTO
-	for rows.Next() {
-		var st LightStateDTO
-		var onInt int
-		if err := rows.Scan(&st.ID, &onInt, &st.Color, &st.BrightnessPct); err != nil {
-			return nil, false, err
-		}
-		st.On = onInt != 0
-		out = append(out, st)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, false, err
-	}
-	if err := tx.Commit(); err != nil {
-		return nil, false, err
+	out := make([]LightStateDTO, len(list))
+	for i := range list {
+		out[i] = LightStateDTO{ID: list[i].ID, On: list[i].On, Color: list[i].Color, BrightnessPct: list[i].BrightnessPct}
 	}
 	return out, allDefault, nil
 }

@@ -39,7 +39,7 @@ func TestModelLightsEvents_streamAfterPatch(t *testing.T) {
 		WriteTimeout: 60 * time.Second,
 		DBPath:       filepath.Join(t.TempDir(), "unused.db"),
 	}
-	srv := httptest.NewServer(NewSiteHandler(cfg, nil, st, nil))
+	srv := httptest.NewServer(NewSiteHandler(cfg, nil, st, nil, nil))
 	t.Cleanup(srv.Close)
 
 	csv := "id,x,y,z\n0,0,0,0\n"
@@ -121,7 +121,7 @@ func TestModelLightsEvents_noBumpWhenPatchUnchanged(t *testing.T) {
 		WriteTimeout: 60 * time.Second,
 		DBPath:       filepath.Join(t.TempDir(), "unused.db"),
 	}
-	srv := httptest.NewServer(NewSiteHandler(cfg, nil, st, nil))
+	srv := httptest.NewServer(NewSiteHandler(cfg, nil, st, nil, nil))
 	t.Cleanup(srv.Close)
 
 	csv := "id,x,y,z\n0,0,0,0\n"
@@ -164,7 +164,7 @@ func TestSceneLightsEvents_streamAfterScenePatch(t *testing.T) {
 		WriteTimeout: 60 * time.Second,
 		DBPath:       filepath.Join(t.TempDir(), "unused.db"),
 	}
-	srv := httptest.NewServer(NewSiteHandler(cfg, nil, st, nil))
+	srv := httptest.NewServer(NewSiteHandler(cfg, nil, st, nil, nil))
 	t.Cleanup(srv.Close)
 
 	csv := "id,x,y,z\n0,0,0,0\n"

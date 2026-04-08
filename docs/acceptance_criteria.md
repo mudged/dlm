@@ -316,11 +316,13 @@ Feature: Per-light state REST API (REQ-011)
     And invalid hex values must be rejected with a clear error
     And brightness must be a percent with 0 minimum and 100 maximum for the on appearance
 
-  Scenario: REQ-011 requires persisted state after successful writes
+  Scenario: REQ-011 requires authoritative in-memory state after successful writes
     Parent requirement: REQ-011
-    Given docs/requirements.md defines REQ-011
+    Given docs/requirements.md defines REQ-011 and REQ-039
     When the REQ-011 business rules are read
-    Then successful writes must persist with the model for reloads and other clients
+    Then successful writes must update authoritative in-memory per-light state on the server
+    And per-light operational state must not be stored in durable application storage for reload after restart
+    And other API clients and connected visualization clients must be able to observe the updated state without a process restart
 
   Scenario: REQ-011 binds default state to REQ-014 and cross-surface consistency
     Parent requirement: REQ-011
@@ -351,7 +353,7 @@ Feature: Visualization reflects light state (REQ-012)
     Given docs/requirements.md defines REQ-012
     When the REQ-012 business rules about updates are read
     Then the 3D view must update when light state changes via REQ-011 while viewing the model
-    And sphere appearance must match the latest persisted state without indefinite staleness after a successful write
+    And sphere appearance must match the latest authoritative server state per REQ-039 without indefinite staleness after a successful write
 
   Scenario: REQ-012 preserves REQ-010 segments and hover coordinates behavior
     Parent requirement: REQ-012
@@ -359,11 +361,11 @@ Feature: Visualization reflects light state (REQ-012)
     When REQ-012 business rules are read
     Then REQ-010 segments and hover or touch id and coordinates behavior remain in force
 
-  Scenario: REQ-012 applies defaults for lights without stored state
+  Scenario: REQ-012 applies defaults for lights without established authoritative state
     Parent requirement: REQ-012
-    Given docs/requirements.md defines REQ-011 REQ-014 and REQ-012
+    Given docs/requirements.md defines REQ-011 REQ-014 REQ-012 and REQ-039
     When the REQ-012 business rule about missing stored state is read
-    Then lights without stored state must use the REQ-011 default aligned with REQ-014
+    Then lights without established authoritative state in the running service must use the REQ-011 default aligned with REQ-014
     And they must still render per on and off rules
 
 Feature: Model view light list pagination and bulk settings (REQ-013)
@@ -422,11 +424,11 @@ Feature: Default light state and model reset (REQ-014)
     Then the model view must expose a reset affordance such as a Reset button
     And the control must restore all lights in the current model in one user action
 
-  Scenario: REQ-014 binds reset to persistence and visualization timeliness
+  Scenario: REQ-014 binds reset to authoritative state and visualization timeliness
     Parent requirement: REQ-014
-    Given docs/requirements.md defines REQ-011 REQ-012 REQ-013 and REQ-014
+    Given docs/requirements.md defines REQ-011 REQ-012 REQ-013 REQ-014 and REQ-039
     When the REQ-014 business rules about successful reset are read
-    Then reset must persist state per REQ-011
+    Then reset must update authoritative in-memory state per REQ-011 and REQ-039
     And the 3D view and light list must update without indefinite staleness after success
 
   Scenario: REQ-014 requires non-hover-only reset on all device classes
@@ -526,7 +528,7 @@ Feature: Camera reset for 3D views (REQ-016)
     Then the single-model view with three.js must expose a camera reset affordance
     And the scene view with three.js must expose a camera reset affordance
     And activating camera reset must restore the default framing per architecture
-    And activating camera reset must not change persisted models scenes placements or per-light state
+    And activating camera reset must not change persisted models scenes placements or authoritative per-light state
 
   Scenario: REQ-016 binds camera reset to responsive non-hover-only use
     Parent requirement: REQ-016
@@ -549,7 +551,7 @@ Feature: Options factory reset with confirmation (REQ-017)
     Given docs/requirements.md defines REQ-017 REQ-033 and REQ-032
     When the REQ-017 business rules about confirmation are read
     Then factory reset must show a blocking prompt before irreversible effects begin
-    And the prompt must warn that all models scenes routines including Python and shape animation routines and related data will be permanently removed
+    And the prompt must warn that all models scenes registered devices routines including Python and shape animation routines and related data will be permanently removed
     And only default sample models and default sample Python routines will remain after completion
     And cancel or dismiss must leave data unchanged
 
@@ -558,6 +560,7 @@ Feature: Options factory reset with confirmation (REQ-017)
     Given docs/requirements.md defines REQ-009 REQ-011 REQ-014 REQ-017 REQ-021 REQ-022 REQ-033 and REQ-032
     When the REQ-017 business rules about outcomes are read
     Then after confirmed factory reset no user-created models or scenes may remain in listings
+    And no registered devices or device-model assignments may remain per REQ-035 and REQ-036
     And no routine definitions beyond the three default Python sample routines from REQ-032 may remain including no user shape animation definitions per REQ-033 and no persisted routine run state from prior entities may remain
     And the model list must satisfy REQ-009 expectations for a fresh seed with three identifiable samples
     And the routine definition list must satisfy REQ-032 expectations for exactly three default Python sample routines
@@ -702,6 +705,12 @@ Feature: Scene routines Python definitions run stop and scene API (REQ-021)
     And automated changes from shape animation runs must use REQ-020 equivalent native paths that preserve REQ-011 semantics without executing user Python
     And canonical stored model coordinates must not be rewritten by routine automation
 
+  Scenario: REQ-021 coordinates with device requirements for physical output
+    Parent requirement: REQ-021
+    Given docs/requirements.md defines REQ-021 REQ-035 REQ-036 REQ-038 and REQ-039
+    When the REQ-021 scope about physical devices is read
+    Then physical output for models with assigned devices must follow REQ-035 through REQ-038 without REQ-021 restating device registry or WLED protocol details
+
   Scenario: REQ-021 allows volumetric targeting in scene space when scripts use regions
     Parent requirement: REQ-021
     Given docs/requirements.md defines REQ-020 and REQ-021
@@ -723,7 +732,7 @@ Feature: Scene routines Python definitions run stop and scene API (REQ-021)
     Given docs/requirements.md defines REQ-011 REQ-014 REQ-021 REQ-022 and REQ-032
     When the REQ-032 business rules for stopping the random colour cycle routine are read
     Then stopping must cease further automated updates promptly
-    And lights retain the last successfully persisted state per REQ-011
+    And lights retain the last successfully applied authoritative in-memory state per REQ-011 and REQ-039
     And stopping must not by itself reset lights to REQ-014 defaults
 
   Scenario: REQ-021 ties routine UI to responsive non-hover-only use when exposed
@@ -910,8 +919,8 @@ Feature: Python routine unified run-in-scene and live viewport (REQ-027)
     Parent requirement: REQ-027
     Given docs/requirements.md defines REQ-011 REQ-014 REQ-016 REQ-018 and REQ-027
     When the REQ-027 business rules about reset actions are read
-    Then a reset scene lights control must set every light in the selected scene to REQ-014 defaults and persist per REQ-011 without changing scene membership placements or canonical model coordinates
-    And a reset camera control must restore default client navigation for that viewport only per REQ-016 semantics without altering persisted models scenes placements or per-light state
+    Then a reset scene lights control must set every light in the selected scene to REQ-014 defaults and update authoritative in-memory state per REQ-011 and REQ-039 without changing scene membership placements or canonical model coordinates
+    And a reset camera control must restore default client navigation for that viewport only per REQ-016 semantics without altering persisted models scenes placements or authoritative per-light state
     And REQ-018 applies where reset actions are implemented as buttons
 
   Scenario: REQ-027 unified region remains usable without hover-only essential steps
@@ -954,7 +963,7 @@ Feature: Three.js emissive glow scaled by brightness (REQ-028)
     Parent requirement: REQ-028
     Given docs/requirements.md defines REQ-003 REQ-011 REQ-012 and REQ-028
     When the REQ-028 business rules about updates and architecture are read
-    Then glow must follow persisted state without indefinite staleness after successful writes consistent with REQ-012
+    Then glow must follow authoritative server light state per REQ-039 without indefinite staleness after successful writes consistent with REQ-012
     And docs architecture.md must describe the three.js material approach and brightness mapping including Pi WebGL notes where relevant
 
 Feature: High-throughput light updates (REQ-029)
@@ -1009,7 +1018,7 @@ Feature: Python scene API random hex colour helper (REQ-030)
     Then the REQ-024 API catalog must list the callable with a commented sample per REQ-024
     And CodeMirror completions and the scene worker must stay aligned with the chosen Python name and async or sync semantics
 
-Feature: Redundant light-state skips (visualization, persistence, future WLED) (REQ-031)
+Feature: Redundant light-state skips (visualization, authoritative state, device traffic) (REQ-031)
 
   Scenario: REQ-031 requires skipping unnecessary visualization work when state is unchanged
     Parent requirement: REQ-031
@@ -1018,19 +1027,19 @@ Feature: Redundant light-state skips (visualization, persistence, future WLED) (
     Then the client must compare incoming or locally applied per-light state to the last applied effective rendering state
     And when on off hex colour and brightness are equivalent after documented normalization the client must not perform a full visualization rebuild solely to reflect that same state again
 
-  Scenario: REQ-031 should reduce redundant persistence when stored state would not change
+  Scenario: REQ-031 should reduce redundant updates when authoritative state would not change
     Parent requirement: REQ-031
-    Given docs/requirements.md defines REQ-011 REQ-020 and REQ-031
-    When the REQ-031 business rules about persistence are read
-    Then the product should avoid persisting per-light state when the proposed state is equivalent to already stored state after documented normalization
-    And observable API behavior for such no-op persistence cases must be documented in docs/architecture.md
+    Given docs/requirements.md defines REQ-011 REQ-020 REQ-031 and REQ-039
+    When the REQ-031 business rules about authoritative state updates are read
+    Then the product should avoid applying redundant per-light state updates when the proposed state is equivalent to authoritative in-memory state after documented normalization
+    And observable API behavior for such no-op cases must be documented in docs/architecture.md
 
-  Scenario: REQ-031 anticipates future WLED physical sync without implementing devices
+  Scenario: REQ-031 aligns device traffic skips with REQ-035 through REQ-038
     Parent requirement: REQ-031
-    Given docs/requirements.md defines REQ-031
-    When the REQ-031 scope about WLED is read
-    Then WLED or equivalent device integration is out of scope for implementation now
-    And docs/architecture.md must describe how a future physical sync layer avoids unnecessary traffic when state is equivalent to last applied on the device or channel
+    Given docs/requirements.md defines REQ-031 REQ-035 REQ-036 REQ-038 and REQ-039
+    When the REQ-031 business rules about physical devices are read
+    Then docs/architecture.md must describe how assigned devices receive only changes not equivalent to last applied on the device or channel
+    And equivalence rules must align with REQ-031 rules for visualization and server state where possible
 
   Scenario: REQ-031 encourages in-memory last-applied or last-known state with invalidation
     Parent requirement: REQ-031
@@ -1045,13 +1054,13 @@ Feature: Redundant light-state skips (visualization, persistence, future WLED) (
     When per-light state differs from the last applied effective state
     Then the visualization must update without indefinite staleness after successful writes the client knows about
     And REQ-010 REQ-015 and REQ-027 drawing rules remain in force
-    And persisted state and API read results must reflect real updates without skipping them due to stale caches
+    And authoritative in-memory state and API read results must reflect real updates without skipping them due to stale caches
 
   Scenario: REQ-031 requires architecture documentation of equivalence cache and no-op semantics
     Parent requirement: REQ-031
     Given docs/requirements.md defines REQ-029 and REQ-031
     When docs/architecture.md is read after the architect pass
-    Then it describes where equivalence is evaluated what is cached invalidation rules and documented no-op persistence behavior
+    Then it describes where equivalence is evaluated what is cached invalidation rules and documented no-op update behavior including device push skips where applicable
     And it aligns with REQ-029 observer and refresh strategy where relevant
 
 Feature: Default seeded Python sample routines (REQ-032)
@@ -1204,6 +1213,137 @@ Feature: Faint scene boundary cuboid in three.js views (REQ-034)
     When REQ-010 scope and REQ-015 business rule 8 are read
     Then the model view must require the REQ-034 boundary alongside spheres and chain segments
     And the scene view must require the REQ-034 boundary alongside per-model chain segments
+
+Feature: Physical devices WLED first and extensibility (REQ-035)
+
+  Scenario: REQ-035 defines device and mandates WLED as first type
+    Parent requirement: REQ-035
+    Given docs/requirements.md defines REQ-035
+    When requirement REQ-035 is read
+    Then a device must be a physical controller that maps model light indices to hardware outputs
+    And the first supported device type must be WLED suitable for ESP32-class individually addressable strings
+    And architecture must document mapping from REQ-005 light id order to WLED segments or LEDs
+
+  Scenario: REQ-035 excludes durable storage of per-light output state
+    Parent requirement: REQ-035
+    Given docs/requirements.md defines REQ-035 and REQ-039
+    When the REQ-035 business rules about persistence are read
+    Then device registry metadata and connection parameters may be persisted
+    And per-light on off colour and brightness must not be persisted as application durable state
+
+  Scenario: REQ-035 mandates manual device registration for MVP
+    Parent requirement: REQ-035
+    Given docs/requirements.md defines REQ-035 and REQ-037
+    When the REQ-035 business rules are read
+    Then implementations must support adding a device using operator-supplied connection parameters
+    And automated network discovery may be deferred until architecture implements it without blocking the manual add path
+
+Feature: Device model one-to-one assignment (REQ-036)
+
+  Scenario: REQ-036 requires exclusive at-most-one assignment each side
+    Parent requirement: REQ-036
+    Given docs/requirements.md defines REQ-036
+    When the REQ-036 business rules are read
+    Then a device must be assigned to at most one model at a time
+    And a model must have at most one assigned device at a time
+    And unassigned devices and unassigned models must both be valid states
+
+  Scenario: REQ-036 forbids silent reassignment when a link already exists
+    Parent requirement: REQ-036
+    Given docs/requirements.md defines REQ-036
+    When the REQ-036 business rule about conflicting assignment is read
+    Then assigning when the device or model is already linked must be rejected with a clear error or require an explicit user flow
+    And silent reassignment that breaks an existing third link without user intent must not occur
+
+  Scenario: REQ-036 requires assign and unassign via Devices management
+    Parent requirement: REQ-036
+    Given docs/requirements.md defines REQ-036 and REQ-037
+    When the REQ-036 business rules are read
+    Then assign and unassign must be available through the Devices management flows described in REQ-037
+
+Feature: Device management UI (REQ-037)
+
+  Scenario: REQ-037 requires a Devices section and core flows
+    Parent requirement: REQ-037
+    Given docs/requirements.md defines REQ-002 REQ-018 REQ-035 REQ-037
+    When the REQ-037 scope and business rules are read
+    Then the UI must expose Devices as a first-class navigation destination
+    And the user must be able to list devices add a device using manual connection parameters per REQ-035 assign and unassign a model per REQ-036
+    And when architecture provides discovery the user must be able to initiate or refresh it and add a chosen candidate
+    And the user must be able to view and edit at least device name
+
+  Scenario: REQ-037 essential actions meet responsive baseline
+    Parent requirement: REQ-037
+    Given docs/requirements.md defines REQ-002 and REQ-037
+    When the REQ-037 responsive UX notes are read
+    Then essential device actions must not rely on hover-only steps on mobile tablet or desktop
+
+  Scenario: REQ-037 removing a device clears its model assignment
+    Parent requirement: REQ-037
+    Given docs/requirements.md defines REQ-037 REQ-035 and REQ-036
+    When the REQ-037 business rules about deleting or forgetting a device are read
+    Then removing a device from the registry must clear any model assignment for that device in the same logical operation
+
+Feature: Routines sync physical lights and run on server (REQ-038)
+
+  Scenario: REQ-038 requires backend routine execution independent of browser
+    Parent requirement: REQ-038
+    Given docs/requirements.md defines REQ-021 REQ-038 and REQ-039
+    When the REQ-038 business rules about server-side execution are read
+    Then starting a routine must run automation on the backend until stop or failure
+    And a web browser session must not be required for the run to progress
+
+  Scenario: REQ-038 requires physical sync for models with assigned devices
+    Parent requirement: REQ-038
+    Given docs/requirements.md defines REQ-015 REQ-021 REQ-035 REQ-036 REQ-038 and REQ-039
+    When the REQ-038 business rules about physical sync are read
+    Then when a routine run updates logical light state for a model that has an assigned device those updates must be applied to the device per architecture
+    And models without assigned devices require no physical traffic for those updates
+
+  Scenario: REQ-038 maps device to model local indices not scene placement
+    Parent requirement: REQ-038
+    Given docs/requirements.md defines REQ-015 and REQ-038
+    When the REQ-038 scope about mapping is read
+    Then device output must use model local light indices zero through n minus one
+    And scene placement offsets must not change how model lights map to hardware
+
+  Scenario: REQ-038 headless control uses the same documented API as the UI
+    Parent requirement: REQ-038
+    Given docs/requirements.md defines REQ-038
+    When the REQ-038 business rules are read
+    Then routine start and stop must be available through the same documented HTTP API surface the web UI uses
+    And architecture may add an explicit documented integrator alias only if semantics match the UI-facing surface
+
+Feature: In-memory light authority and sync (REQ-039)
+
+  Scenario: REQ-039 forbids durable per-light state in application storage
+    Parent requirement: REQ-039
+    Given docs/requirements.md defines REQ-011 and REQ-039
+    When the REQ-039 business rules are read
+    Then per-light on off colour and brightness must not be stored in SQLite or equivalent application store for reload after restart
+    And REQ-011 read APIs must reflect current authoritative in-memory state on the running server
+
+  Scenario: REQ-039 defines startup and assignment synchronization
+    Parent requirement: REQ-039
+    Given docs/requirements.md defines REQ-014 REQ-035 REQ-036 and REQ-039
+    When the REQ-039 business rules about sync events are read
+    Then on service start models without an assigned device must initialize to all lights off per REQ-014 defaults
+    And models with an assigned device must run a documented sync with that device at startup
+    And newly assigning a device to a model must trigger sync immediately after the link succeeds
+
+  Scenario: REQ-039 states product priority headless over device UI polish
+    Parent requirement: REQ-039
+    Given docs/requirements.md defines REQ-037 REQ-038 and REQ-039
+    When the REQ-039 scope and priority business rules are read
+    Then routine and device correctness and throughput are primary over device UI depth and authoring polish
+    And baseline REQ-002 usability where UI exists must still hold
+
+  Scenario: REQ-039 requires architecture to document startup and unassign policies
+    Parent requirement: REQ-039
+    Given docs/requirements.md defines REQ-039
+    When the REQ-039 business rules are read
+    Then docs/architecture.md must document one consistent policy when startup sync observes device state that differs from REQ-014 defaults
+    And docs/architecture.md must document physical output behavior when a device is unassigned from a model
 ```
 
 ---

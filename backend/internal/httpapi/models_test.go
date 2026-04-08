@@ -49,7 +49,7 @@ func TestModels_createValidCSV(t *testing.T) {
 		WriteTimeout:       15 * time.Second,
 		DBPath:             filepath.Join(t.TempDir(), "unused.db"),
 	}
-	srv := httptest.NewServer(NewSiteHandler(cfg, nil, st, nil))
+	srv := httptest.NewServer(NewSiteHandler(cfg, nil, st, nil, nil))
 	t.Cleanup(srv.Close)
 
 	csv := "id,x,y,z\n0,0,0,0\n"
@@ -76,7 +76,7 @@ func TestModels_rejectBadIds(t *testing.T) {
 		WriteTimeout: 15 * time.Second,
 		DBPath:       filepath.Join(t.TempDir(), "unused.db"),
 	}
-	srv := httptest.NewServer(NewSiteHandler(cfg, nil, st, nil))
+	srv := httptest.NewServer(NewSiteHandler(cfg, nil, st, nil, nil))
 	t.Cleanup(srv.Close)
 
 	csv := "id,x,y,z\n0,0,0,0\n2,1,1,1\n"
@@ -99,7 +99,7 @@ func TestModels_rejectWrongHeader(t *testing.T) {
 		WriteTimeout: 15 * time.Second,
 		DBPath:       filepath.Join(t.TempDir(), "unused.db"),
 	}
-	srv := httptest.NewServer(NewSiteHandler(cfg, nil, st, nil))
+	srv := httptest.NewServer(NewSiteHandler(cfg, nil, st, nil, nil))
 	t.Cleanup(srv.Close)
 
 	csv := "idx,x,y,z\n0,0,0,0\n"
@@ -118,7 +118,7 @@ func TestModels_duplicateNameConflict(t *testing.T) {
 		WriteTimeout: 15 * time.Second,
 		DBPath:       filepath.Join(t.TempDir(), "unused.db"),
 	}
-	srv := httptest.NewServer(NewSiteHandler(cfg, nil, st, nil))
+	srv := httptest.NewServer(NewSiteHandler(cfg, nil, st, nil, nil))
 	t.Cleanup(srv.Close)
 
 	csv := "id,x,y,z\n0,0,0,0\n"
@@ -142,7 +142,7 @@ func TestModels_listGetDelete(t *testing.T) {
 		WriteTimeout: 15 * time.Second,
 		DBPath:       filepath.Join(t.TempDir(), "unused.db"),
 	}
-	srv := httptest.NewServer(NewSiteHandler(cfg, nil, st, nil))
+	srv := httptest.NewServer(NewSiteHandler(cfg, nil, st, nil, nil))
 	t.Cleanup(srv.Close)
 
 	csv := "id,x,y,z\n0,0,0,0\n"
@@ -206,7 +206,7 @@ func TestModels_lightStateEndpoints(t *testing.T) {
 		WriteTimeout: 15 * time.Second,
 		DBPath:       filepath.Join(t.TempDir(), "unused.db"),
 	}
-	srv := httptest.NewServer(NewSiteHandler(cfg, nil, st, nil))
+	srv := httptest.NewServer(NewSiteHandler(cfg, nil, st, nil, nil))
 	t.Cleanup(srv.Close)
 
 	csv := "id,x,y,z\n0,0,0,0\n1,1,0,0\n"

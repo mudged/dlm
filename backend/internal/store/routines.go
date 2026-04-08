@@ -296,7 +296,7 @@ func (s *Store) findRunningRunForSceneRoutine(ctx context.Context, tx *sql.Tx, s
 	return id, true, nil
 }
 
-// StartRoutineRun creates a running row. Light mutations for automation run only in the browser (§3.17).
+// StartRoutineRun creates a running row. Light mutations during a run are performed by the server routine engine (REQ-038 / architecture §3.16–§3.17).
 // Returns runID, alreadyRunning (true if same routine already running on scene), error.
 func (s *Store) StartRoutineRun(ctx context.Context, sceneID, routineID string) (runID string, alreadyRunning bool, err error) {
 	if _, err := s.GetRoutine(ctx, routineID); err != nil {

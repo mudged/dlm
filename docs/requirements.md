@@ -450,7 +450,7 @@ As a user or integrator, I want a **REST API** on the model that lets me **read*
 2. The API MUST allow **updating** the state of **each** light **individually** (by **id**), including **on/off**, **hex colour**, and **brightness** **percentage**; partial updates that change only some fields MUST be supported where REST semantics allow (e.g. **PATCH**-style behavior).
 3. **Hex colour** MUST use a **canonical** form agreed in architecture (e.g. **`#RRGGBB`** with six **hexadecimal** digits); invalid values MUST be rejected with a **clear** error.
 4. **Brightness** MUST be a **number** interpreted as **percent** with **0** = minimum and **100** = maximum for the **on** appearance; behavior when the light is **off** (whether brightness is stored or ignored visually) is defined in **REQ-012**.
-5. Successful **writes** MUST be **persisted** with the model (same durability as model data per architecture) so reloads and other clients see the same state.
+5. Successful writes MUST update **authoritative** per-light state held **in memory** in the running service (**REQ-039**): API readers, routine automation, and connected visualization clients MUST observe the same logical state without requiring a process restart. The application MUST **not** store per-light operational state (**on**/**off**, colour, brightness) in **durable** application storage (e.g. SQLite) for later reload (**REQ-039**). When a model has an assigned device (**REQ-036**), successful writes MUST also drive the physical output per **REQ-038** subject to connectivity and device capability.
 6. **Default** state for lights in a newly created or legacy model without prior state MUST match **REQ-014** (all **off**, **100%** brightness, white **`#FFFFFF`** in canonical hex) and MUST be **consistent** across API and UI; **docs/architecture.md** MAY elaborate representation only.
 
 **Responsive / UX notes** *(when UI is involved)*
@@ -485,16 +485,16 @@ As a user viewing a model, I want the **3D visualization** to **match** each lig
 
 **Scope**
 
-- In scope: When viewing a model (**REQ-006**, **REQ-010**), each light’s **sphere** (**0.02 m** diameter) MUST reflect **REQ-011** state: **on** = **filled** **opaque** appearance using the light’s **hex colour** modulated by **brightness**; **off** = appearance using **`#D0D0D0`** and **85% transparency** (**15% opacity**) as **REQ-010** wire segments, applied to the **sphere** (filled or thin shell—exact geometry deferred to architecture) so **off** lights remain **discernible** but **less prominent** than **on** lights. **Any** change to persisted light state via the API (**REQ-011**) MUST be **reflected** in the visualization **without** requiring a full page reload if the client is already viewing that model (e.g. **poll**, **push**, or **same-session** refetch—architecture defines mechanism; the requirement is **timely** consistency from the user’s perspective).
+- In scope: When viewing a model (**REQ-006**, **REQ-010**), each light’s **sphere** (**0.02 m** diameter) MUST reflect **REQ-011** state: **on** = **filled** **opaque** appearance using the light’s **hex colour** modulated by **brightness**; **off** = appearance using **`#D0D0D0`** and **85% transparency** (**15% opacity**) as **REQ-010** wire segments, applied to the **sphere** (filled or thin shell—exact geometry deferred to architecture) so **off** lights remain **discernible** but **less prominent** than **on** lights. **Any** change to authoritative in-memory light state via the API (**REQ-011**, **REQ-039**) MUST be **reflected** in the visualization **without** requiring a full page reload if the client is already viewing that model (e.g. **poll**, **push**, or **same-session** refetch—architecture defines mechanism; the requirement is **timely** consistency from the user’s perspective).
 - Out of scope: Changing **wire segment** styling based on **on/off** state unless added later; **export** of rendered images.
 
 **Business rules**
 
 1. For a light that is **on**, the **sphere** MUST appear **filled** (solid or equivalent **opaque** **surface** fill) and MUST use the **current** **hex colour** and **brightness** from **REQ-011** (architecture defines how **percentage** maps to rendered colour or intensity).
 2. For a light that is **off**, the **sphere** MUST use **`#D0D0D0`** and **85% transparency** (**15% opacity**), **consistent** with **REQ-010** segment styling, so it reads as **not lit** yet remains **locatable**; it MUST **not** appear **more visually prominent** than **on** lights or than the **wire segments**.
-3. The visualization MUST **update** when light state changes from **REQ-011** while the user is viewing the affected model, so the **sphere** **appearance** matches the **latest** **persisted** state within a **reasonable** delay (architecture may set bounds; **stale** display after a successful write is **not** acceptable indefinitely).
+3. The visualization MUST **update** when light state changes from **REQ-011** while the user is viewing the affected model, so the **sphere** **appearance** matches the **latest** **authoritative** state (**REQ-039**) within a **reasonable** delay (architecture may set bounds; **stale** display after a successful write is **not** acceptable indefinitely).
 4. **REQ-010** **segments** and **hover**/**touch** **id** and **coordinates** behavior remain in force; state fields (**on/off**, **colour**, **brightness**) MAY be shown on hover/tap in addition if architecture chooses.
-5. Lights **without** stored state yet MUST follow the **default** defined for **REQ-011** and still render per rules **1** and **2** above.
+5. Lights **without** established authoritative state yet in the running service MUST follow the **default** defined for **REQ-011** (**REQ-014**, **REQ-039**) and still render per rules **1** and **2** above.
 
 **Responsive / UX notes** *(when UI is involved)*
 
@@ -528,7 +528,7 @@ As a user **viewing** a model, I want to **select multiple lights** and **apply 
 
 **Scope**
 
-- In scope: On the **model view** (**REQ-006**), a **list** (or equivalent tabular presentation) of the model’s lights that is **paged** (only one **page** of lights shown at a time). Controls to **change the page size** (number of lights per page) from **presets** or an agreed control pattern. A **“go to light”** (or equivalent) control that accepts a light **id** (**REQ-005**) and navigates the list to the **page** that contains that id, with **clear feedback** if the id is **invalid** or **out of range** for the model. **Multi-select** of lights **on the current page** (and, if architecture supports it, **across pages** via retained selection—see open questions) plus a **bulk apply** action that sets **on/off**, **hex colour**, and **brightness** (**REQ-011**) **to the same values** for **every selected** light; successful updates MUST **persist** per **REQ-011**.
+- In scope: On the **model view** (**REQ-006**), a **list** (or equivalent tabular presentation) of the model’s lights that is **paged** (only one **page** of lights shown at a time). Controls to **change the page size** (number of lights per page) from **presets** or an agreed control pattern. A **“go to light”** (or equivalent) control that accepts a light **id** (**REQ-005**) and navigates the list to the **page** that contains that id, with **clear feedback** if the id is **invalid** or **out of range** for the model. **Multi-select** of lights **on the current page** (and, if architecture supports it, **across pages** via retained selection—see open questions) plus a **bulk apply** action that sets **on/off**, **hex colour**, and **brightness** (**REQ-011**) **to the same values** for **every selected** light; successful updates MUST update **authoritative** state per **REQ-011** and **REQ-039**.
 - Out of scope: New state fields beyond **REQ-011**; reordering lights; deleting lights from the model; export of selection.
 
 **Business rules**
@@ -574,13 +574,13 @@ As a user working with a model, I want **every** light to **start** in a **known
 
 **Scope**
 
-- In scope: **Initial** per-light state for **each** light when a model first exists in the system (including **new** models after **CSV** upload or **seeded** samples, and **legacy** rows **backfilled** per architecture): **on** = **false** (**off**), **brightness** = **100** (percent, per **REQ-011**), **hex colour** = **`#FFFFFF`** (six-digit canonical form per **REQ-011**). On the **model view** (**REQ-006**), a **reset** affordance (e.g. a **Reset** button or equivalent clearly labeled control) that sets **every** light in the **current** model to that **same** triple (**off**, **100%**, **`#FFFFFF`**) in **one** deliberate user action, with **persistence** per **REQ-011**.
+- In scope: **Initial** per-light state for **each** light when a model first exists in the system (including **new** models after **CSV** upload or **seeded** samples, and **legacy** rows **backfilled** per architecture): **on** = **false** (**off**), **brightness** = **100** (percent, per **REQ-011**), **hex colour** = **`#FFFFFF`** (six-digit canonical form per **REQ-011**). On the **model view** (**REQ-006**), a **reset** affordance (e.g. a **Reset** button or equivalent clearly labeled control) that sets **every** light in the **current** model to that **same** triple (**off**, **100%**, **`#FFFFFF`**) in **one** deliberate user action, updating **authoritative** state per **REQ-011** and **REQ-039** (including propagation to any assigned device per **REQ-038**).
 - Out of scope: **Undo**/**redo** stacks; resetting **only** selected lights; resetting **3D** camera or navigation; **bulk** HTTP beyond what architecture needs to implement the single user gesture.
 
 **Business rules**
 
 1. For **every** light in a model, the **initial** stored state (including after model **creation** and any **migration** of older data) MUST be **off** (**on** = **false**), **brightness** = **100**, and **hex colour** = **`#FFFFFF`** (rejecting invalid hex remains per **REQ-011**).
-2. The **model view** MUST include a **reset** control, **reachable** and **operable** without **hover-only** interaction (**REQ-002**), that restores **all** lights in that model to the state in rule **1** and **persists** it so **API** clients and **reloads** see the same result.
+2. The **model view** MUST include a **reset** control, **reachable** and **operable** without **hover-only** interaction (**REQ-002**), that restores **all** lights in that model to the state in rule **1** and updates **authoritative** in-memory state so **API** clients and **other** **connected** **clients** see the same result **without** requiring a full page reload (**REQ-039**); after a **process** **restart**, initial state follows **REQ-039** sync rules rather than a database snapshot.
 3. After a **successful** reset, the **3D** visualization (**REQ-012**) and any **light list** showing state (**REQ-013** where applicable) MUST **reflect** the new state within the same **timeliness** expectations as other **REQ-011** writes (**no indefinite staleness**).
 4. **REQ-011** default semantics for lights **without** prior stored state MUST align with rule **1** (not **on** at default unless the user or API has turned them **on**).
 
@@ -709,15 +709,15 @@ As a user, I want an **Options** area that includes **factory reset**, so that I
 
 **Scope**
 
-- In scope: A **distinct** **Options** **section** (or **screen**/**panel** labeled **Options** or equivalent **clear** **navigation** **target**) in the **UI** that includes an action labeled **Factory reset** (or **equivalent** **unambiguous** **wording**). **Factory reset** MUST **remove** **all** **persisted** **user-relevant** **data** the product stores for **models**, **scenes** (**REQ-015**), **per-light** **state** (**REQ-011**), **scene routines** (**REQ-021**, **REQ-022**, **REQ-033** definitions and any **persisted** **run** **state**), and **any** **other** **application** **content** **tied** to those **entities** (exact **store** **shape** per **architecture**), then **re-seed** the **system** so the **user** sees the **same** **default** **sample** **models** as on a **fresh** **install** per **REQ-009** (**three** **samples**; **no** **user-uploaded** **models** or **user-created** **scenes** **remain**) **and** the **same** **three** **default** **Python** **routine** **definitions** as on a **fresh** **install** per **REQ-032** (**no** **other** **routine** **definitions** **remain**, **including** **no** **user** **shape** **animation** **definitions**). **Before** **any** **deletion** or **re-seed** **runs**, the user MUST be **prompted** with a **confirmation** **step** that **warns** of **data** **loss** and **irreversibility**; **Cancel** MUST **leave** **data** **unchanged**; **Confirm** MUST **complete** the **reset** and **surface** **success** **feedback** (exact **copy** deferred to **architecture**).
+- In scope: A **distinct** **Options** **section** (or **screen**/**panel** labeled **Options** or equivalent **clear** **navigation** **target**) in the **UI** that includes an action labeled **Factory reset** (or **equivalent** **unambiguous** **wording**). **Factory reset** MUST **remove** **all** **persisted** **user-relevant** **data** the product stores for **models**, **scenes** (**REQ-015**), **the** **entire** **device** **registry** (**REQ-035**) **and** **all** **device–model** **assignments** (**REQ-036**), **scene routines** (**REQ-021**, **REQ-022**, **REQ-033** definitions and any **persisted** **run** **state**), and **any** **other** **application** **content** **tied** to those **entities** (exact **store** **shape** per **architecture**); **per-light** **operational** **state** **is** **not** **durable** **(**REQ-039**)** **but** **the** **running** **process** **must** **reinitialize** **or** **clear** **in-memory** **state** **as** **architecture** **defines** **on** **reset**, then **re-seed** the **system** so the **user** sees the **same** **default** **sample** **models** as on a **fresh** **install** per **REQ-009** (**three** **samples**; **no** **user-uploaded** **models** or **user-created** **scenes** **remain**) **and** the **same** **three** **default** **Python** **routine** **definitions** as on a **fresh** **install** per **REQ-032** (**no** **other** **routine** **definitions** **remain**, **including** **no** **user** **shape** **animation** **definitions**). **Before** **any** **deletion** or **re-seed** **runs**, the user MUST be **prompted** with a **confirmation** **step** that **warns** of **data** **loss** and **irreversibility**; **Cancel** MUST **leave** **data** **unchanged**; **Confirm** MUST **complete** the **reset** and **surface** **success** **feedback** (exact **copy** deferred to **architecture**).
 - Out of scope: **Partial** **wipe** (e.g. **only** **scenes**); **scheduled** **reset**; **remote** **admin** **API** **for** **factory** **reset** unless added later; **export** **before** **wipe** (user may **export** **elsewhere** if **features** **exist**—not **required** here).
 
 **Business rules**
 
 1. The **product** MUST expose an **Options** **section** (or **dedicated** **Options** **view**) **discoverable** from **primary** **navigation** or **settings** **pattern** **documented** in **architecture**; it MUST **list** **Factory reset** as **one** of its **actions**.
-2. **Factory reset** MUST **not** **run** on a **single** **mis-click**: the user MUST **first** **see** a **blocking** **prompt** or **dialog** **before** **irreversible** **effects** **begin**, **explaining** that **all** **models**, **scenes**, **routines** (**REQ-021**, **REQ-022**, **REQ-033**), and **related** **data** will be **permanently** **removed** and **only** **default** **sample** **models** and **default** **sample** **Python** **routines** will **remain** (wording **may** **name** **consequences** **explicitly** per **UX** **review**).
+2. **Factory reset** MUST **not** **run** on a **single** **mis-click**: the user MUST **first** **see** a **blocking** **prompt** or **dialog** **before** **irreversible** **effects** **begin**, **explaining** that **all** **models**, **scenes**, **registered** **devices** (**REQ-035**, **REQ-036**), **routines** (**REQ-021**, **REQ-022**, **REQ-033**), and **related** **data** will be **permanently** **removed** and **only** **default** **sample** **models** and **default** **sample** **Python** **routines** will **remain** (wording **may** **name** **consequences** **explicitly** per **UX** **review**).
 3. **Until** the user **explicitly** **confirms** (e.g. **Confirm** on the **dialog**), **no** **factory** **reset** **side** **effects** **may** **occur**; **dismissal** or **Cancel** MUST **preserve** **current** **data**.
-4. After **confirmed** **factory reset**, **no** **user-created** **models**, **no** **scenes**, **no** **persisted** **routine** **run** **state**, and **no** **leftover** **state** **from** **prior** **entities** **may** **remain** **visible** in **listings** (or **equivalent** **discovery** **surfaces**) **except** **the** **re-seeded** **defaults**; the **model** **list** MUST **match** **REQ-009** **expectations** for a **fresh** **seed** (**exactly** **three** **sample** **models** **identifiable** as **sphere**, **cube**, **cone** per **REQ-009** **naming** **rules**), **and** the **routine** **definition** **list** MUST **match** **REQ-032** **expectations** for a **fresh** **seed** (**exactly** **three** **default** **Python** **sample** **routines** **with** **the** **behaviors** **named** **there**; **no** **other** **routine** **definitions**).
+4. After **confirmed** **factory reset**, **no** **user-created** **models**, **no** **scenes**, **no** **registered** **devices**, **no** **persisted** **routine** **run** **state**, and **no** **leftover** **state** **from** **prior** **entities** **may** **remain** **visible** in **listings** (or **equivalent** **discovery** **surfaces**) **except** **the** **re-seeded** **defaults**; the **model** **list** MUST **match** **REQ-009** **expectations** for a **fresh** **seed** (**exactly** **three** **sample** **models** **identifiable** as **sphere**, **cube**, **cone** per **REQ-009** **naming** **rules**), **and** the **routine** **definition** **list** MUST **match** **REQ-032** **expectations** for a **fresh** **seed** (**exactly** **three** **default** **Python** **sample** **routines** **with** **the** **behaviors** **named** **there**; **no** **other** **routine** **definitions**).
 5. **Per-light** **defaults** after **re-seed** MUST **align** with **REQ-014** / **REQ-011** for **newly** **present** **models**.
 6. The **entire** **flow** MUST **satisfy** **REQ-002**: **no** **hover-only** **requirement** for **opening** **Options**, **starting** **factory** **reset**, **or** **confirming** / **canceling**.
 
@@ -729,7 +729,7 @@ As a user, I want an **Options** area that includes **factory reset**, so that I
 
 **Dependencies**
 
-- REQ-002, REQ-006, REQ-009, REQ-011, REQ-014, REQ-015, REQ-021, REQ-022, REQ-032, REQ-033
+- REQ-002, REQ-006, REQ-009, REQ-011, REQ-014, REQ-015, REQ-021, REQ-022, REQ-032, REQ-033, REQ-035, REQ-036
 
 **Open questions**
 
@@ -886,14 +886,14 @@ As a user or integrator, I want **scene routines** I can **create**, **list**, a
 
 **Scope**
 
-- In scope: **Routine** **definitions** **support** **two** **kinds**: **(**a**)** **Python** **routines** **(**REQ-022**)** **persisted** **with** **name**, **description**, **and** **routine** **kind** **Python**; **(**b**)** **declarative** **shape** **animation** **routines** **(**REQ-033**)** **with** **name**, **description**, **and** **kind** **shape** **animation**. User or API flows to **create**, **list**, and **delete** definitions (exact **create** **path** **per** **REQ-023**). **Start** a routine **against a chosen scene** and **stop** a running instance **without** deleting the definition. While **running**, **Python** **execution** (**REQ-022**) MUST apply state changes **only** through **scene-level** operations consistent with **REQ-020** (and **REQ-011** field semantics), using **scene-space** geometry for any **region-scoped** updates; **shape** **animation** **(**REQ-033**)** MUST apply **the** **same** **logical** **light-state** **updates** **through** **REQ-020**-class **scene** **API** **operations** **(**or** **documented** **equivalent** **server** **paths** **that** **preserve** **REQ-011** **semantics**)** **without** **executing** **user** **Python** **for** **that** **kind**. Canonical stored model coordinates MUST NOT be rewritten (**REQ-015**). **Effects** **authored** **in** **Python** MAY restrict which lights are affected using **cuboid** or **sphere** volumes in **scene space** (**REQ-020** shapes and composition rules). **Stopping** ends automation; **per-light state** remains whatever was last successfully written (**REQ-011**). **Default** **sample** **behaviors** **(**including** **the** **former** **built-in** **“random** **colour** **cycle** **—** **all** **scene** **lights”** **effect**)** **are** **delivered** **as** **seeded** **Python** **definitions** **per** **REQ-032**, **not** **as** **separate** **non-Python** **routine** **types** **beyond** **the** **two** **kinds** **above**.
-- Out of scope: **Routine** **kinds** **other** **than** **Python** **and** **shape** **animation** **(**REQ-033**)**; **editing** **routine** **definitions** **after** **create** **(**Python** **via** **REQ-022**; **shape** **animation** **via** **REQ-033** **authoring** **surface**)** **except** **as** **those** **requirements** **define**; **physical** **hardware** **protocols**; **new** **volumetric** **shapes** **for** **REQ-020** **beyond** **cuboid** **and** **sphere** **(**shape** **animation** **uses** **those** **for** **light** **assignment**)**; **routines** **that** **move** **or** **reorder** **lights** **in** **REQ-005** **space**; **authentication** **policy**.
+- In scope: **Routine** **definitions** **support** **two** **kinds**: **(**a**)** **Python** **routines** **(**REQ-022**)** **persisted** **with** **name**, **description**, **and** **routine** **kind** **Python**; **(**b**)** **declarative** **shape** **animation** **routines** **(**REQ-033**)** **with** **name**, **description**, **and** **kind** **shape** **animation**. User or API flows to **create**, **list**, and **delete** definitions (exact **create** **path** **per** **REQ-023**). **Start** a routine **against a chosen scene** and **stop** a running instance **without** deleting the definition. While **running**, **Python** **execution** (**REQ-022**) MUST apply state changes **only** through **scene-level** operations consistent with **REQ-020** (and **REQ-011** field semantics), using **scene-space** geometry for any **region-scoped** updates; **shape** **animation** **(**REQ-033**)** MUST apply **the** **same** **logical** **light-state** **updates** **through** **REQ-020**-class **scene** **API** **operations** **(**or** **documented** **equivalent** **server** **paths** **that** **preserve** **REQ-011** **semantics**)** **without** **executing** **user** **Python** **for** **that** **kind**. Canonical stored model coordinates MUST NOT be rewritten (**REQ-015**). **Effects** **authored** **in** **Python** MAY restrict which lights are affected using **cuboid** or **sphere** volumes in **scene space** (**REQ-020** shapes and composition rules). **Stopping** ends automation; **per-light** **authoritative** **state** remains whatever was last successfully applied in memory (**REQ-011**, **REQ-039**), including on physical devices when assigned (**REQ-038**). **Default** **sample** **behaviors** **(**including** **the** **former** **built-in** **“random** **colour** **cycle** **—** **all** **scene** **lights”** **effect**)** **are** **delivered** **as** **seeded** **Python** **definitions** **per** **REQ-032**, **not** **as** **separate** **non-Python** **routine** **types** **beyond** **the** **two** **kinds** **above**. **Physical** output for models with assigned devices follows **REQ-035**–**REQ-038**; **REQ-021** does not duplicate those specifications but **depends** on them when devices exist.
+- Out of scope: **Routine** **kinds** **other** **than** **Python** **and** **shape** **animation** **(**REQ-033**)**; **editing** **routine** **definitions** **after** **create** **(**Python** **via** **REQ-022**; **shape** **animation** **via** **REQ-033** **authoring** **surface**)** **except** **as** **those** **requirements** **define**; **new** **volumetric** **shapes** **for** **REQ-020** **beyond** **cuboid** **and** **sphere** **(**shape** **animation** **uses** **those** **for** **light** **assignment**)**; **routines** **that** **move** **or** **reorder** **lights** **in** **REQ-005** **space**; **authentication** **policy**.
 
 **Business rules**
 
 1. The product MUST support **creating** a routine definition with **name**, **description**, and **routine** **kind** **either** **Python** **(**REQ-022**)** **or** **shape** **animation** **(**REQ-033**)**; **listing** all routine definitions; and **deleting** a definition. **Name** is **required** at create time; **description** MAY be empty if architecture allows, but the field MUST exist.
 2. The product MUST support **starting** a routine **run** **scoped to exactly one scene** that exists at start time, and **stopping** an active run for that routine–scene pair (or **run identifier**—exact API deferred to architecture). **Start** MUST fail with **clear, actionable** errors if the scene does not exist or is not usable.
-3. While a routine **run** is **active**, any change to **on/off**, **hex colour**, or **brightness** for lights in that scene performed **by** **the** **routine** MUST be effected **through** **the** **underlying** **scene** **API** **surface** **from** **REQ-020** **with** **REQ-011** **field** **semantics**: **for** **Python** **runs**, **via** **the** **Python** **scene** **binding** **(**REQ-022**)**; **for** **shape** **animation** **runs**, **via** **the** **native** **engine** **documented** **in** **architecture** **that** **MUST** **not** **bypass** **REQ-020**-equivalent **persistence** **and** **validation**. (Direct per-light model APIs **REQ-011** remain valid for **manual** user or integrator actions outside this requirement.)
+3. While a routine **run** is **active**, any change to **on/off**, **hex colour**, or **brightness** for lights in that scene performed **by** **the** **routine** MUST be effected **through** **the** **underlying** **scene** **API** **surface** **from** **REQ-020** **with** **REQ-011** **field** **semantics**: **for** **Python** **runs**, **via** **the** **Python** **scene** **binding** **(**REQ-022**)**; **for** **shape** **animation** **runs**, **via** **the** **native** **engine** **documented** **in** **architecture** **that** **MUST** **not** **bypass** **REQ-020**-equivalent **updates** **to** **authoritative** **light** **state** **(**REQ-039**)** **and** **validation**. (Direct per-light model APIs **REQ-011** remain valid for **manual** user or integrator actions outside this requirement.) Routine execution MUST run **on** **the** **server** **so** **automation** **continues** **without** **a** **browser** **(**REQ-038**)**.
 4. **Volumetric targeting (when** **used** **by** **script**)**:** Inclusion MUST be evaluated against **scene-space** positions (**REQ-015**/**REQ-020**), using **cuboid** and/or **sphere** parameters as **the** **script** **and** **API** **define**. **Invalid** region geometry MUST be rejected per **REQ-020** error expectations.
 5. **Concurrency and deletion:** If **multiple** runs could conflict, architecture MUST define **allowed** concurrency (e.g. **one** active run per scene) and **deterministic** error or **queue** behavior (**open questions**). Deleting a routine definition **while** a run is active MUST either be **disallowed** with clear feedback or MUST **implicitly stop** the run first—architecture picks **one** policy and documents it.
 
@@ -905,7 +905,7 @@ As a user or integrator, I want **scene routines** I can **create**, **list**, a
 
 **Dependencies**
 
-- REQ-002 (when UI surfaces routines), REQ-011, REQ-015, REQ-020, REQ-022, REQ-033
+- REQ-002 (when UI surfaces routines), REQ-011, REQ-015, REQ-020, REQ-022, REQ-033, REQ-035, REQ-036, REQ-038, REQ-039
 
 **Open questions**
 
@@ -1234,12 +1234,12 @@ As an integrator or operator driving dynamic lighting, I want the system to sust
 
 **Scope**
 
-- In scope: Non-functional expectations for **persisted** per-light state (same fields and validation semantics as **REQ-011**) when **updating large sets** in **model** and **scene** contexts (**REQ-015**, **REQ-020**), and for **viewers** to remain sufficiently fresh relative to **REQ-012** when change rates are high. **Scale assumption** (design target): on the order of **hundreds** of lights (consistent with **REQ-005**’s upper bound) with **multiple** aggregate **update cycles per second** across writes and/or viewer refresh. **Illustrative** mechanisms the architecture **must consider and document** (not all mandatory in isolation): **HTTP/2** or other **connection reuse**, **client connection pooling** / keep-alive, **batch or bulk write** APIs (including **REQ-020** where scene-scoped), **Server-Sent Events**, **WebSocket**, or **similar server-push** for distributing state changes to connected clients. Solutions **must remain plausible** on **Raspberry Pi 4** constraints (**REQ-003**).
-- Out of scope: Hard numeric SLOs unless raised in **open questions**; mandating one specific protocol when another meets the same goals; physical lighting protocols (e.g. DMX).
+- In scope: Non-functional expectations for **authoritative** **in-memory** per-light state (**REQ-039**; same fields and validation semantics as **REQ-011**) when **updating large sets** in **model** and **scene** contexts (**REQ-015**, **REQ-020**), and for **viewers** to remain sufficiently fresh relative to **REQ-012** when change rates are high. **Scale assumption** (design target): on the order of **hundreds** of lights (consistent with **REQ-005**’s upper bound) with **multiple** aggregate **update cycles per second** across writes and/or viewer refresh. **Illustrative** mechanisms the architecture **must consider and document** (not all mandatory in isolation): **HTTP/2** or other **connection reuse**, **client connection pooling** / keep-alive, **batch or bulk write** APIs (including **REQ-020** where scene-scoped), **Server-Sent Events**, **WebSocket**, or **similar server-push** for distributing state changes to connected clients. Solutions **must remain plausible** on **Raspberry Pi 4** constraints (**REQ-003**).
+- Out of scope: Hard numeric SLOs unless raised in **open questions**; mandating one specific protocol when another meets the same goals; low-level **WLED** **framing** (**REQ-035**–**REQ-038**); legacy **DMX** unless added later.
 
 **Business rules**
 
-1. **`docs/architecture.md` MUST** describe how the product meets high-throughput light updates at the stated scale: the **write path** (batching, use of **REQ-020** where applicable, persistence and transaction boundaries as relevant) and the **observer path** (how UIs and integrators obtain timely state—**server-push vs polling** with rationale).
+1. **`docs/architecture.md` MUST** describe how the product meets high-throughput light updates at the stated scale: the **write path** (batching, use of **REQ-020** where applicable, in-memory authoritative updates and device push per **REQ-039**/**REQ-038** as relevant) and the **observer path** (how UIs and integrators obtain timely state—**server-push vs polling** with rationale).
 2. Integrators **MUST NOT** be limited to **one HTTP request per light** as the **only** supported path for high-frequency multi-light changes: the product **MUST** expose **documented** **aggregate** update paths (for example **REQ-020** region bulk updates, and/or **model-scoped** batch operations if architecture defines them). **REQ-011** per-light read and write operations **remain** required for granular control.
 3. **Connection reuse:** **`docs/architecture.md` SHOULD** document which **HTTP** features are enabled or assumed (for example **HTTP/2**, **HTTP/1.1 keep-alive**) and **client pooling** or equivalent guidance for integrators and for the shipped web UI.
 4. For **low-latency** refresh or **many concurrent viewers**, **`docs/architecture.md` SHOULD** specify **server-push** (**SSE**, **WebSocket**, or **equivalent**) **or** justify **bounded polling** that still satisfies **REQ-012**-class timeliness under the stated load.
@@ -1315,21 +1315,21 @@ As a **user** **writing** **Python** **routines**, I want **the** **`scene`** **
 
 **User story**
 
-As an **end** **user** **working** **with** **models** **or** **scenes**, I want **the** **product** **to** **avoid** **unnecessary** **three.js** **redraw** **work**, **unnecessary** **calls** **that** **update** **persisted** **per-light** **state**, **and** **(**in** **future** **when** **physical** **sync** **exists**)** **unnecessary** **traffic** **to** **attached** **lighting** **hardware**, **when** **the** **effective** **state** **would** **not** **change**, **so** **that** **the** **UI** **stays** **responsive**, **the** **store** **and** **network** **are** **less** **loaded**, **and** **external** **devices** **are** **not** **spammed** **with** **no-op** **updates** **during** **frequent** **or** **repeated** **operations** **(**including** **high-throughput** **paths** **per** **REQ-029**)**.
+As an **end** **user** **working** **with** **models** **or** **scenes**, I want **the** **product** **to** **avoid** **unnecessary** **three.js** **redraw** **work**, **unnecessary** **updates** **to** **authoritative** **in-memory** **per-light** **state** **(**REQ-039**)** , **and** **unnecessary** **traffic** **to** **assigned** **lighting** **devices** **(**REQ-035**–**REQ-038**)** , **when** **the** **effective** **state** **would** **not** **change**, **so** **that** **the** **UI** **stays** **responsive**, **the** **server** **does** **less** **redundant** **work**, **and** **external** **devices** **are** **not** **spammed** **with** **no-op** **updates** **during** **frequent** **or** **repeated** **operations** **(**including** **high-throughput** **paths** **per** **REQ-029**)**.
 
 **Scope**
 
-- In scope: **(**1**)** **Client-side** **detection** **that** **incoming** **or** **locally** **proposed** **per-light** **state** **(**on**/**off**, **hex** **colour**, **brightness** **per** **REQ-011**/**REQ-012**)** **is** **equivalent** **to** **what** **the** **visualization** **already** **shows** **for** **that** **light** **in** **the** **current** **view** **context**; **skipping** **full** **scene**/**mesh** **refresh** **or** **other** **expensive** **redraw** **work** **when** **the** **effective** **rendering** **state** **would** **not** **change**. **(**2**)** **Reducing** **redundant** **persistence** **operations** **:** **where** **the** **implementation** **can** **determine** **that** **a** **proposed** **write** **(**REQ-011**,** **REQ-020**, **or** **equivalent** **paths**)** **would** **not** **change** **stored** **per-light** **state** **(**after** **the** **same** **normalization** **as** **rule** **1**)** **,** **the** **product** **SHOULD** **avoid** **performing** **that** **write** **(**for** **example** **by** **short-circuiting** **before** **database** **update** **or** **by** **not** **issuing** **a** **redundant** **HTTP** **request** **from** **the** **client** **when** **the** **client** **already** **knows** **persisted** **state** **matches** **)** **without** **breaking** **REQ-012**-class **correctness** **for** **real** **changes**. **(**3**)** **An** **in-memory** **record** **of** **last-applied** **/** **last-known** **effective** **state** **(**cache** **or** **equivalent**)** **at** **client** **and** **/** **or** **server** **as** **architecture** **defines**. **(**4**)** **Forward** **compatibility** **:** **design** **and** **documentation** **MUST** **anticipate** **future** **sync** **of** **logical** **light** **state** **to** **physical** **fixtures** **via** **WLED** **(**or** **documented** **equivalent**)** **so** **that** **no-op** **state** **updates** **do** **not** **imply** **unnecessary** **outbound** **traffic** **to** **those** **devices** **(**WLED** **integration** **itself** **remains** **out** **of** **scope** **until** **a** **later** **requirement**)**. **Applies** **to** **single-model** **three.js** **view** **(**REQ-010**/**REQ-012**)** **,** **scene** **composite** **view** **(**REQ-015**/**REQ-012**)** **,** **and** **the** **unified** **Python** **routine** **live** **viewport** **(**REQ-027**)** **for** **(**1**)** **;** **(**2**)** **covers** **any** **code** **path** **that** **persists** **per-light** **state** **including** **routines** **(**REQ-021**/**REQ-022**)** **where** **applicable**.
-- Out of scope: **Implementing** **WLED** **drivers**, **discovery**, **pairing**, **or** **device** **management** **(**this** **requirement** **only** **constrains** **how** **redundant** **work** **is** **avoided** **so** **a** **future** **physical** **sync** **layer** **can** **reuse** **the** **same** **equivalence** **concept**)**; **hard** **frame-rate** **or** **latency** **SLOs** **(**Pi** **constraints** **remain** **per** **REQ-003**/**REQ-029**)**; **changing** **REQ-011** **resource** **shapes** **or** **error** **codes** **in** **a** **breaking** **way** **(**idempotent** **repeats** **may** **still** **succeed** **if** **submitted** **by** **an** **integrator** **that** **bypasses** **product** **short-circuits**)**.
+- In scope: **(**1**)** **Client-side** **detection** **that** **incoming** **or** **locally** **proposed** **per-light** **state** **(**on**/**off**, **hex** **colour**, **brightness** **per** **REQ-011**/**REQ-012**)** **is** **equivalent** **to** **what** **the** **visualization** **already** **shows** **for** **that** **light** **in** **the** **current** **view** **context**; **skipping** **full** **scene**/**mesh** **refresh** **or** **other** **expensive** **redraw** **work** **when** **the** **effective** **rendering** **state** **would** **not** **change**. **(**2**)** **Reducing** **redundant** **authoritative** **state** **updates** **:** **where** **the** **implementation** **can** **determine** **that** **a** **proposed** **write** **(**REQ-011**,** **REQ-020**, **or** **equivalent** **paths**)** **would** **not** **change** **authoritative** **in-memory** **per-light** **state** **(**REQ-039**)** **after** **the** **same** **normalization** **as** **rule** **1**, **the** **product** **SHOULD** **avoid** **performing** **that** **update** **(**including** **skipping** **redundant** **device** **traffic** **per** **rule** **4** **when** **applicable**)** **without** **breaking** **REQ-012**-class **correctness** **for** **real** **changes**. **(**3**)** **An** **in-memory** **record** **of** **last-applied** **/** **last-known** **effective** **state** **(**cache** **or** **equivalent**)** **at** **client** **and** **/** **or** **server** **as** **architecture** **defines**. **(**4**)** **Physical** **sync** **:** **with** **REQ-035**–**REQ-038**, **design** **and** **documentation** **MUST** **ensure** **no-op** **logical** **state** **updates** **do** **not** **imply** **unnecessary** **outbound** **traffic** **to** **assigned** **devices** **(**WLED** **or** **equivalent**)** **when** **the** **effective** **output** **would** **not** **change** **(**same** **equivalence** **rules** **as** **elsewhere** **in** **this** **requirement**)**. **Applies** **to** **single-model** **three.js** **view** **(**REQ-010**/**REQ-012**)** **,** **scene** **composite** **view** **(**REQ-015**/**REQ-012**)** **,** **and** **the** **unified** **Python** **routine** **live** **viewport** **(**REQ-027**)** **for** **(**1**)** **;** **(**2**)** **covers** **any** **code** **path** **that** **persists** **per-light** **state** **including** **routines** **(**REQ-021**/**REQ-022**)** **where** **applicable**.
+- Out of scope: **Defining** **WLED** **wire** **protocols** **or** **device** **registry** **(**those** **are** **REQ-035**–**REQ-038**)** **—** **this** **requirement** **only** **constrains** **equivalence** **and** **skip** **behavior** **for** **visualization**, **server** **authoritative** **state**, **and** **device** **traffic**; **hard** **frame-rate** **or** **latency** **SLOs** **(**Pi** **constraints** **remain** **per** **REQ-003**/**REQ-029**)**; **changing** **REQ-011** **resource** **shapes** **or** **error** **codes** **in** **a** **breaking** **way** **(**idempotent** **repeats** **may** **still** **succeed** **if** **submitted** **by** **an** **integrator** **that** **bypasses** **product** **short-circuits**)**.
 
 **Business rules**
 
 1. **Before** **applying** **incoming** **light** **state** **to** **the** **three.js** **visualization** **(**including** **after** **poll**, **push**, **or** **successful** **local** **mutation** **that** **would** **normally** **trigger** **a** **refresh**)** **,** **the** **client** **MUST** **determine** **whether** **the** **effective** **rendering** **relevant** **fields** **(**on**/**off**, **colour**, **brightness** **per** **REQ-012**)** **for** **each** **affected** **light** **differ** **from** **the** **last** **state** **already** **applied** **in** **that** **view** **context**. **When** **they** **are** **equivalent** **(**after** **any** **canonical** **normalization** **documented** **in** **`docs/architecture.md`** **for** **colour** **strings** **or** **numeric** **forms**)** **,** **the** **client** **MUST** **not** **perform** **a** **full** **visualization** **rebuild** **or** **other** **redraw** **work** **that** **exists** **solely** **to** **reflect** **that** **same** **state** **again**.
-2. **The** **product** **SHOULD** **avoid** **persisting** **per-light** **state** **when** **the** **proposed** **new** **state** **is** **equivalent** **to** **the** **already** **stored** **state** **for** **that** **light** **(**same** **field** **set** **and** **normalization** **as** **rule** **1**)** **,** **including** **for** **paths** **invoked** **by** **automation** **(**REQ-021**/**REQ-022**)** **and** **bulk** **/** **region** **updates** **(**REQ-020**)** **where** **architecture** **places** **the** **comparison**. **Observable** **API** **behavior** **for** **integrators** **(**success** **vs** **no-op** **response** **shape**)** **MUST** **be** **documented** **in** **`docs/architecture.md`** **so** **clients** **and** **future** **device** **sync** **can** **rely** **on** **consistent** **semantics**.
-3. **The** **product** **SHOULD** **maintain** **in-memory** **(**or** **architecture-defined** **equivalent**)** **records** **of** **last-applied** **/** **last-known** **effective** **per-light** **state** **where** **they** **reduce** **redundant** **work** **:** **e.g.** **per** **active** **model** **or** **scene** **view** **on** **the** **client** **(**updated** **when** **state** **is** **applied** **to** **the** **renderer** **or** **confirmed** **from** **the** **server**)** **,** **and** **/** **or** **on** **the** **server** **for** **the** **persistence** **short-circuit** **in** **rule** **2**. **Records** **MUST** **be** **cleared** **or** **resynchronized** **on** **navigation**, **model**/**scene** **change**, **or** **architecture-defined** **invalidation** **(**another** **tab**, **external** **integrator**, **or** **administrative** **action** **if** **documented**)**.
-4. **`docs/architecture.md`** **MUST** **describe** **how** **a** **future** **physical** **sync** **layer** **(**WLED** **or** **equivalent**)** **will** **receive** **only** **state** **changes** **that** **are** **not** **equivalent** **to** **what** **was** **last** **successfully** **applied** **on** **the** **device**/**channel** **(**or** **document** **an** **explicit** **alternative** **that** **still** **meets** **the** **“no** **unnecessary** **traffic”** **goal**)** **,** **reusing** **or** **aligning** **with** **the** **same** **equivalence** **rules** **as** **rules** **1**–**2** **where** **possible**.
-5. **When** **per-light** **state** **does** **change**, **timeliness** **and** **correctness** **MUST** **remain** **consistent** **with** **REQ-012** **(**no** **indefinite** **staleness** **after** **successful** **writes** **the** **client** **knows** **about**)** **and** **REQ-010**/**REQ-015**/**REQ-027** **drawing** **rules** **unchanged**; **persisted** **state** **and** **API** **read** **results** **MUST** **reflect** **real** **updates** **without** **skipping** **them** **due** **to** **stale** **caches**.
-6. **`docs/architecture.md`** **MUST** **describe** **where** **equivalence** **is** **evaluated** **(**client**, **server**, **both**)** **,** **what** **is** **cached**, **invalidation** **rules**, **and** **documented** **no-op** **persistence** **behavior**, **in** **line** **with** **REQ-029** **observer**/**refresh** **strategy** **where** **relevant**.
+2. **The** **product** **SHOULD** **avoid** **applying** **redundant** **per-light** **state** **updates** **when** **the** **proposed** **new** **state** **is** **equivalent** **to** **the** **already** **authoritative** **in-memory** **state** **for** **that** **light** **(**REQ-039**)** **(**same** **field** **set** **and** **normalization** **as** **rule** **1**)** **,** **including** **for** **paths** **invoked** **by** **automation** **(**REQ-021**/**REQ-022**)** **and** **bulk** **/** **region** **updates** **(**REQ-020**)** **where** **architecture** **places** **the** **comparison**. **Observable** **API** **behavior** **for** **integrators** **(**success** **vs** **no-op** **response** **shape**)** **MUST** **be** **documented** **in** **`docs/architecture.md`** **so** **clients** **and** **device** **sync** **can** **rely** **on** **consistent** **semantics**.
+3. **The** **product** **SHOULD** **maintain** **in-memory** **(**or** **architecture-defined** **equivalent**)** **records** **of** **last-applied** **/** **last-known** **effective** **per-light** **state** **where** **they** **reduce** **redundant** **work** **:** **e.g.** **per** **active** **model** **or** **scene** **view** **on** **the** **client** **(**updated** **when** **state** **is** **applied** **to** **the** **renderer** **or** **confirmed** **from** **the** **server**)** **,** **and** **/** **or** **on** **the** **server** **for** **the** **authoritative** **state** **short-circuit** **in** **rule** **2**. **Records** **MUST** **be** **cleared** **or** **resynchronized** **on** **navigation**, **model**/**scene** **change**, **or** **architecture-defined** **invalidation** **(**another** **tab**, **external** **integrator**, **or** **administrative** **action** **if** **documented**)**.
+4. **`docs/architecture.md`** **MUST** **describe** **how** **assigned** **devices** **(**REQ-035**–**REQ-038**)** **receive** **only** **state** **changes** **that** **are** **not** **equivalent** **to** **what** **was** **last** **successfully** **applied** **on** **the** **device**/**channel** **(**or** **document** **an** **explicit** **alternative** **that** **still** **meets** **the** **“no** **unnecessary** **traffic”** **goal**)** **,** **reusing** **or** **aligning** **with** **the** **same** **equivalence** **rules** **as** **rules** **1**–**2** **where** **possible**.
+5. **When** **per-light** **state** **does** **change**, **timeliness** **and** **correctness** **MUST** **remain** **consistent** **with** **REQ-012** **(**no** **indefinite** **staleness** **after** **successful** **writes** **the** **client** **knows** **about**)** **and** **REQ-010**/**REQ-015**/**REQ-027** **drawing** **rules** **unchanged**; **authoritative** **in-memory** **state** **and** **API** **read** **results** **MUST** **reflect** **real** **updates** **without** **skipping** **them** **due** **to** **stale** **caches**.
+6. **`docs/architecture.md`** **MUST** **describe** **where** **equivalence** **is** **evaluated** **(**client**, **server**, **both**)** **,** **what** **is** **cached**, **invalidation** **rules**, **and** **documented** **no-op** **update** **behavior** **(**including** **device** **push** **skips** **where** **applicable**)** **,** **in** **line** **with** **REQ-029** **observer**/**refresh** **strategy** **where** **relevant**.
 
 **Responsive / UX notes** *(when UI is involved)*
 
@@ -1339,7 +1339,7 @@ As an **end** **user** **working** **with** **models** **or** **scenes**, I want
 
 **Dependencies**
 
-- REQ-010, REQ-011, REQ-012, REQ-015, REQ-020, REQ-021, REQ-022, REQ-027, REQ-029
+- REQ-010, REQ-011, REQ-012, REQ-015, REQ-020, REQ-021, REQ-022, REQ-027, REQ-029, REQ-035, REQ-036, REQ-038, REQ-039
 
 **Open questions**
 
@@ -1373,7 +1373,7 @@ As a **novice** **Python** **user**, I want **three** **ready-made** **Python** 
 2. **Each** **seeded** **routine** **MUST** **be** **valid** **Python** **code** **runnable** **against** **any** **scene** **that** **satisfies** **REQ-015**/**REQ-020** **(**subject** **to** **normal** **REQ-020** **validation**)**.
 3. **Growing-sphere** **routine** **(**looping** **cycle**)** **:** **(**a**)** **Choose** **a** **new** **independent** **uniform** **random** **REQ-011**-valid **hex** **colour** **each** **cycle** **(**REQ-030** **helper** **SHOULD** **be** **used** **unless** **architecture** **documents** **a** **clear** **reason** **not** **to**)**. **(**b**)** **Place** **a** **sphere** **in** **scene** **space** **centered** **at** **the** **geometric** **center** **of** **the** **scene** **axis-aligned** **extent** **(**REQ-026**/**REQ-020**)**. **(**c**)** **The** **sphere** **starts** **with** **a** **small** **positive** **radius** **and** **over** **10** **SI** **seconds** **its** **radius** **increases** **monotonically** **until** **every** **light** **position** **in** **the** **scene** **lies** **inside** **or** **on** **the** **closed** **sphere** **(**REQ-020** **sphere** **semantics**)**. **(**d**)** **While** **the** **sphere** **grows**, **every** **light** **inside** **the** **current** **closed** **sphere** **MUST** **be** **on** **with** **brightness** **100** **percent** **and** **the** **cycle** **colour**. **(**e**)** **The** **routine** **MUST** **not** **turn** **off** **or** **recolour** **lights** **solely** **because** **they** **fall** **outside** **the** **sphere** **during** **growth** **(**lights** **not** **yet** **enclosed** **keep** **prior** **state**)**. **(**f**)** **After** **growth** **completes**, **the** **next** **cycle** **begins** **immediately** **with** **a** **new** **small** **sphere** **and** **new** **random** **colour** **while** **the** **run** **remains** **active** **(**REQ-022** **loop**)**.
 4. **Sweeping-cuboid** **routine** **(**looping** **cycle**)** **:** **(**a**)** **Each** **cycle** **uses** **a** **new** **independent** **uniform** **random** **REQ-011**-valid **hex** **colour** **(**REQ-030** **helper** **SHOULD** **be** **used**)**. **(**b**)** **Cuboid** **width** **and** **depth** **equal** **scene** **width** **and** **depth** **(**REQ-026**/**REQ-020**)** **and** **height** **exactly** **0.2** **SI** **meters**. **(**c**)** **Start** **each** **cycle** **at** **the** **bottom** **of** **the** **scene** **volume** **(**minimum** **on** **the** **vertical** **axis** **documented** **for** **height**)** **spanning** **full** **width** **and** **depth**. **(**d**)** **Over** **10** **SI** **seconds** **translate** **monotonically** **to** **the** **top** **without** **leaving** **scene** **bounds**. **(**e**)** **At** **each** **update**, **lights** **inside** **or** **on** **the** **closed** **cuboid** **MUST** **be** **on** **at** **100** **percent** **with** **the** **cycle** **colour**. **(**f**)** **Lights** **that** **were** **inside** **on** **a** **prior** **update** **in** **the** **same** **cycle** **but** **are** **no** **longer** **inside** **MUST** **be** **set** **off** **(**REQ-011**)**. **(**g**)** **After** **reaching** **the** **top**, **start** **the** **next** **cycle** **at** **the** **bottom** **with** **a** **new** **random** **colour**.
-5. **Random** **colour** **cycle** **—** **all** **scene** **lights** **routine** **(**successor** **to** **the** **former** **non-Python** **test** **routine** **behavior** **such** **as** **random_colour_cycle_all**)** **:** **When** **started** **on** **a** **scene**, **(**a**)** **every** **light** **in** **that** **scene** **MUST** **be** **set** **on** **(**`on`** **true**)** **with** **brightness** **100** **percent** **and** **REQ-011**-valid **hex** **colour**; **(**b**)** **thereafter**, **at** **most** **once** **per** **elapsed** **SI** **second** **while** **the** **run** **remains** **active**, **each** **light** **MUST** **receive** **a** **new** **hex** **colour** **chosen** **independently** **and** **uniformly** **at** **random** **from** **REQ-011**-valid **colours** **(**repeats** **allowed**)**. **The** **approximate** **one-second** **cadence** **MUST** **be** **documented** **in** **`docs/architecture.md`**. **Stopping** **MUST** **cease** **further** **automated** **updates** **promptly**; **lights** **retain** **last** **persisted** **state** **(**REQ-011**)** **and** **stopping** **MUST** **not** **by** **itself** **reset** **to** **REQ-014** **defaults**.
+5. **Random** **colour** **cycle** **—** **all** **scene** **lights** **routine** **(**successor** **to** **the** **former** **non-Python** **test** **routine** **behavior** **such** **as** **random_colour_cycle_all**)** **:** **When** **started** **on** **a** **scene**, **(**a**)** **every** **light** **in** **that** **scene** **MUST** **be** **set** **on** **(**`on`** **true**)** **with** **brightness** **100** **percent** **and** **REQ-011**-valid **hex** **colour**; **(**b**)** **thereafter**, **at** **most** **once** **per** **elapsed** **SI** **second** **while** **the** **run** **remains** **active**, **each** **light** **MUST** **receive** **a** **new** **hex** **colour** **chosen** **independently** **and** **uniformly** **at** **random** **from** **REQ-011**-valid **colours** **(**repeats** **allowed**)**. **The** **approximate** **one-second** **cadence** **MUST** **be** **documented** **in** **`docs/architecture.md`**. **Stopping** **MUST** **cease** **further** **automated** **updates** **promptly**; **lights** **retain** **last** **authoritative** **in-memory** **state** **(**REQ-011**, **REQ-039**)** **and** **stopping** **MUST** **not** **by** **itself** **reset** **to** **REQ-014** **defaults**.
 6. **All** **three** **routines** **MUST** **NOT** **read** **or** **write** **canonical** **model** **coordinates** **directly**; **they** **MUST** **use** **scene-space** **operations** **only** **(**REQ-022**/**REQ-020**)**.
 7. **`docs/architecture.md`** **MUST** **name** **where** **the** **initial** **seed** **content** **is** **defined** **(**e.g.** **embedded** **strings** **or** **shipped** **files**)** **and** **how** **those** **definitions** **relate** **to** **REQ-025** **(**new** **blank** **routine** **template**)** **if** **applicable**.
 
@@ -1408,7 +1408,7 @@ As an end user, I want to **define** **and** **edit** **shape** **animation** **
 
 **Scope**
 
-- In scope: A **second** **routine** **kind**, **shape** **animation**, **alongside** **Python** **(**REQ-021**)**. **Persisted** **definition** **includes** **name** **(**required**)** , **description** **(**optional** **if** **architecture** **allows**)** , **and** **structured** **parameters** **below**. **Create**, **list**, **duplicate**, **edit**, **delete** **(**same** **lifecycle** **expectations** **as** **REQ-022** **where** **applicable** **except** **no** **Python** **buffer** **or** **REQ-024** **catalog**)**. **Start** **and** **stop** **a** **run** **against** **one** **scene** **(**REQ-021** **run** **lifecycle** **semantics**)**. **Add**/**edit** **surface** **MUST** **include** **the** **unified** **region** **from** **REQ-027** **:** **scene** **selection**, **run**/**stop**, **live** **three.js** **viewport** **for** **that** **scene**, **reset** **scene** **lights**, **reset** **camera** **—** **so** **the** **user** **can** **run** **on** **scene** **while** **authoring** **(**no** **duplicate** **scene** **picker**/**viewport** **for** **this** **workflow**)**. **While** **a** **shape** **animation** **run** **is** **active**, **the** **engine** **updates** **per-light** **state** **(**REQ-011**)** **via** **REQ-020**-equivalent **scene** **operations** **only**; **canonical** **model** **coordinates** **MUST** **NOT** **be** **rewritten** **(**REQ-015**)**. **Stopping** **ends** **automation**; **lights** **keep** **last** **persisted** **state** **(**REQ-021**)**. **Factory** **reset** **removes** **shape** **animation** **definitions** **(**REQ-017**)**.
+- In scope: A **second** **routine** **kind**, **shape** **animation**, **alongside** **Python** **(**REQ-021**)**. **Persisted** **definition** **includes** **name** **(**required**)** , **description** **(**optional** **if** **architecture** **allows**)** , **and** **structured** **parameters** **below**. **Create**, **list**, **duplicate**, **edit**, **delete** **(**same** **lifecycle** **expectations** **as** **REQ-022** **where** **applicable** **except** **no** **Python** **buffer** **or** **REQ-024** **catalog**)**. **Start** **and** **stop** **a** **run** **against** **one** **scene** **(**REQ-021** **run** **lifecycle** **semantics**)**. **Add**/**edit** **surface** **MUST** **include** **the** **unified** **region** **from** **REQ-027** **:** **scene** **selection**, **run**/**stop**, **live** **three.js** **viewport** **for** **that** **scene**, **reset** **scene** **lights**, **reset** **camera** **—** **so** **the** **user** **can** **run** **on** **scene** **while** **authoring** **(**no** **duplicate** **scene** **picker**/**viewport** **for** **this** **workflow**)**. **While** **a** **shape** **animation** **run** **is** **active**, **the** **engine** **updates** **per-light** **state** **(**REQ-011**)** **via** **REQ-020**-equivalent **scene** **operations** **only**; **canonical** **model** **coordinates** **MUST** **NOT** **be** **rewritten** **(**REQ-015**)**. **Stopping** **ends** **automation**; **lights** **keep** **last** **authoritative** **in-memory** **state** **(**REQ-021**, **REQ-039**)**. **Factory** **reset** **removes** **shape** **animation** **definitions** **(**REQ-017**)**.
 - Out of scope: **Authoring** **shape** **animations** **in** **Python** **(**use** **REQ-022**)**; **new** **geometric** **primitives** **beyond** **sphere** **and** **axis-aligned** **cuboid** **for** **this** **kind**; **physics** **simulation** **beyond** **the** **stated** **edge** **behaviors**; **per-light** **assignment** **without** **going** **through** **scene-space** **volumes**.
 
 **Business rules**
@@ -1487,5 +1487,215 @@ As a user viewing a **model** or a **scene** in **three.js**, I want a **faint**
 
 - Whether **REQ-020** **`GET …/dimensions`** **should** **expose** **or** **derive** **from** **the** **same** **`m`** **(**architect** **decision** **—** **simulation** **vs** **pure** **visual** **)**.
 - **Exact** **line** **width** **/** **material** **(**dashed** **vs** **solid** **edges**)** **—** **architecture**.
+
+---
+
+### REQ-035 — Physical lighting devices (ESP32 / WLED first; extensible types)
+
+| Field | Value |
+|-------|-------|
+| **ID** | REQ-035 |
+| **Title** | Physical lighting devices (ESP32 / WLED first; extensible types) |
+| **Priority** | Must |
+| **Actor(s)** | End user; operator; integrator |
+
+**User story**
+
+As an operator, I want the product to treat a **device** as a **physical** controller that drives real lights arranged according to a **model’s** light layout, starting with **ESP32**-based **WLED** controllers that support **individually addressable** strings, so that what I design in software can match what is installed—and I want the design to allow **other** device kinds later without rewriting the core concepts.
+
+**Scope**
+
+- In scope: Definition of **device** as a first-class concept: a network-reachable (or discoverable) unit that maps logical light indices **0 … n−1** for an assigned model to hardware outputs. **Initial** implementation target: **WLED** on **ESP32** (or architecture-documented equivalent) with per-segment or per-LED control consistent with REQ-005 ordering. **Device type** (e.g. WLED) is explicit so additional types can be added. Persisted **device registry** data (identity, type, connection parameters, user metadata such as name) as architecture defines—**excluding** per-light colour state (**REQ-039**).
+- Out of scope: Mandating a specific WLED build, LED chipset, or wiring topology; certification of hardware; cloud-only bridges unless architecture chooses to support them.
+
+**Business rules**
+
+1. The product MUST represent devices with a **device type**; the first supported type MUST be **WLED** (ESP32-class) suitable for individually addressable strips or strings as architecture documents.
+2. The architecture MUST describe how logical light **id** order (**REQ-005**) maps to WLED segments/LED indices and any grouping assumptions.
+3. Additional device types MAY be introduced later; shared UX and APIs SHOULD treat **type** as an extension point (new type-specific configuration, same assignment and sync rules **REQ-036**–**REQ-039** where applicable).
+4. Device **configuration** and **metadata** needed to reach the device (address, credentials if any, name) MAY be persisted; **light output state** MUST NOT be persisted as application durable state (**REQ-039**).
+5. **MVP registration:** The product MUST support **adding** a device using **operator-supplied** **connection** **parameters** (e.g. **base** **URL**, **host**, **port**, **path** prefix—as **architecture** documents for **WLED**). **Automated** **network** **discovery** (**mDNS**, **broadcast**, **scan**) **MAY** ship in the **same** or a **later** release; **REQ-037** **still** **requires** a **manual** **add** **path** **so** **implementation** **is** **not** **blocked** **on** **discovery** **protocol** **choices**.
+
+**Responsive / UX notes** *(when UI is involved)*
+
+- Mobile: Device list and detail remain usable per **REQ-002**; discovery results must be scannable without horizontal clutter.
+- Tablet: Same; optional two-column layout for metadata vs actions.
+- Desktop: Efficient editing of names and viewing connection details.
+
+**Dependencies**
+
+- REQ-001, REQ-005, REQ-006
+
+**Open questions**
+
+- None (**factory** **reset** **clears** **devices** **per** **REQ-017**; **MVP** **manual** **add** **per** **business** **rule** **5**; **optional** **discovery** **per** **architecture**).
+
+---
+
+### REQ-036 — Exclusive one-to-one device–model assignment
+
+| Field | Value |
+|-------|-------|
+| **ID** | REQ-036 |
+| **Title** | Exclusive one-to-one device–model assignment |
+| **Priority** | Must |
+| **Actor(s)** | End user; operator |
+
+**User story**
+
+As an operator, I want **at most one** device driving **one** model and **at most one** model per device at any time, while still allowing **models** and **devices** to exist **without** each other until I link them, so that I never get ambiguous ownership of lights or double-mapping.
+
+**Scope**
+
+- In scope: Assignment relation between a **device** and a **model** with **cardinality** **1:1** when linked: a device assigned to a model is the **sole** device for that model; that model is the **sole** model for that device. **Unassigned** models and **unassigned** devices are both valid. Operations to **assign** and **unassign** with validation when a conflicting assignment exists.
+- Out of scope: Many-to-many or one-to-many fan-out from one model to multiple devices in this requirement (future extension only).
+
+**Business rules**
+
+1. At any time, a given **device** MUST be assigned to **at most one** model, or to **none**.
+2. At any time, a given **model** MUST have **at most one** assigned device, or **none**.
+3. Assigning device **D** to model **M** when **D** or **M** is already linked MUST either be **rejected** with a clear error or resolved through an **explicit** user flow (e.g. break existing link first)—**silent** reassignment of a third party’s link is **not** allowed.
+4. **Scenes** (**REQ-015**) compose models; when a routine runs on a scene, each model instance in that scene uses the **model’s** assignment (**REQ-038**): if the model has a device, physical output for that model’s lights MUST follow the same logical state as the visualization for those lights.
+5. **Assignment** **UX:** **Assign** and **unassign** MUST be available through the **Devices** **management** **flows** (**REQ-037**). A **model** **detail** **view** **SHOULD** **show** **whether** **a** **device** **is** **linked** **and** **MAY** **offer** **the** **same** **operations** **or** **a** **clear** **link** **to** **the** **device** **—** **architecture** **chooses** **surface(s)** **as** **long** **as** **REQ-037** **minimum** **is** **met** **and** **the** **API** **remains** **consistent**.
+
+**Responsive / UX notes** *(when UI is involved)*
+
+- Mobile: Current assignment visible on model detail and device detail; unassign must be confirmable without hover-only steps (**REQ-002**).
+- Tablet / Desktop: Same clarity for which model a device drives.
+
+**Dependencies**
+
+- REQ-006, REQ-015, REQ-035
+
+**Open questions**
+
+- None (**REQ-037** **+** **business** **rule** **5** **define** **surfaces**).
+
+---
+
+### REQ-037 — Device management UI: discover, assign, metadata
+
+| Field | Value |
+|-------|-------|
+| **ID** | REQ-037 |
+| **Title** | Device management UI: discover, assign, metadata |
+| **Priority** | Must |
+| **Actor(s)** | End user; operator |
+
+**User story**
+
+As an operator, I want a **dedicated** area in the app to **find** devices on the network, **register** or **add** them, **connect** them to a model or **disconnect**, and **view**/**edit** metadata such as a **friendly name**, so that I can manage hardware without treating devices as a hidden integrator-only feature.
+
+**Scope**
+
+- In scope: A **new** primary **section** in the shell navigation (or equivalent discoverable entry per **REQ-018** patterns) for **Devices**. Flows: **list** known devices; **add** device (**manual** **connection** **parameters** **MUST** **be** **supported** **per** **REQ-035** **business** **rule** **5**; **automated** **discovery** **and** **“refresh** **discovery”** **MAY** **be** **added** **when** **architecture** **implements** **them**); **remove** or **forget** device from registry; **assign**/**unassign** model (**REQ-036**); **view** and **edit** persisted metadata (**name** minimum). When **discovery** exists, it SHOULD surface candidates on the local network compatible with **REQ-035**.
+- Out of scope: Pixel-perfect parity with vendor-native WLED apps; full OTA firmware management.
+
+**Business rules**
+
+1. The UI MUST expose **Devices** as a **first-class** destination alongside existing major areas (models, scenes, routines, options).
+2. The user MUST be able to **add** a device using **manual** **connection** **parameters** (**REQ-035**). When **architecture** provides **discovery**, the user MUST be able to **initiate** or **refresh** it and **add** a chosen candidate; until then, **manual** **add** **alone** **satisfies** **this** **rule**.
+3. The user MUST be able to **assign** the device to a model and **unassign** it, obeying **REQ-036**.
+4. The user MUST be able to **view** and **edit** at least **device name** (and architecture may add type-specific fields).
+5. Essential actions MUST follow **REQ-002** (no hover-only critical steps). **Priority:** device UI polish is **secondary** to correct **routine**/**device** sync (**REQ-039**); MVP may be minimal if documented.
+6. **Removing** a **device** from the **registry** (**delete**/**forget**) MUST **clear** **any** **model** **assignment** **for** **that** **device** **in** **the** **same** **logical** **operation** (**no** **orphaned** **assignment** **rows**), **then** **remove** **the** **device** **record** **per** **architecture** **transaction** **rules**.
+
+**Responsive / UX notes** *(when UI is involved)*
+
+- Mobile: Stacked list, full-width forms, clear assign/unassign affordances.
+- Tablet: List + detail split where space allows.
+- Desktop: Same information hierarchy; keyboard-friendly naming fields.
+
+**Dependencies**
+
+- REQ-002, REQ-018, REQ-035, REQ-036
+
+**Open questions**
+
+- None (**delete** **cascades** **per** **business** **rule** **6**; **type-specific** **secrets** **per** **architecture**).
+
+---
+
+### REQ-038 — Routine runs synchronize visualization and physical lights; server-side execution
+
+| Field | Value |
+|-------|-------|
+| **ID** | REQ-038 |
+| **Title** | Routine runs synchronize visualization and physical lights; server-side execution |
+| **Priority** | Must |
+| **Actor(s)** | End user; operator; integrator |
+
+**User story**
+
+As an operator, I want a **routine** running on a **scene** to update **both** the on-screen lights and any **physical** lights for models that have devices, in **lockstep** with the same logical state, and I want routines to keep running **without** keeping a browser open, so that installations can run **headless** on the Pi.
+
+**Scope**
+
+- In scope: When a **routine run** (**REQ-021**, **REQ-033**) is **active** on a **scene**, every update to logical per-light state for lights belonging to a **model** that has an **assigned device** MUST be **applied** to that **device** as architecture defines (WLED API or equivalent), in addition to updating **authoritative** state consumed by the UI (**REQ-039**). **Routine execution** (Python loop, shape animation engine, scheduling) MUST execute **in the Go service** (or documented server process), **not** only inside the browser. Browsers MAY subscribe or poll for **observability** but MUST NOT be required for the run to progress. **Per-model** mapping: scene placement does not change device mapping (**REQ-015**); device maps **model local** light indices **0…n−1** to hardware.
+- Out of scope: Guaranteeing sub-millisecond sync between LED output and GPU frame; offline device behavior beyond documented error/retry policy.
+
+**Business rules**
+
+1. **Server-side execution:** Starting a routine (**REQ-021**) MUST cause **durable** **automation** on the **backend** until **stop** or failure, independent of any **Web** client session.
+2. **Physical sync:** For each **model** in the **scene** with an **assigned** **device**, state changes from the routine MUST be **reflected** on the **device** for all affected logical lights, subject to **REQ-039** in-memory authority and **REQ-031**-style **no-op** suppression where architecture applies.
+3. **Visualization sync:** Connected clients showing the **same** scene or model MUST observe state consistent with **REQ-012** / **REQ-015** for logical lights (timeliness class as architecture documents under **REQ-029**).
+4. **Models without devices:** Routine behavior is **unchanged** for logical state; no physical traffic is required.
+5. **Concurrency:** If multiple runs or manual API writes target overlapping lights, architecture MUST define **precedence** (e.g. single run per scene, queueing, or last-writer); the requirement is **deterministic** documented behavior, not silent corruption.
+6. **Headless** **control:** **Routine** **start** and **stop** **MUST** **be** **available** **through** **the** **same** **documented** **`/api/v1`** **HTTP** **surface** **the** **web** **UI** **uses**, **unless** **architecture** **adds** **an** **explicit** **documented** **alias** **for** **integrators** **with** **the** **same** **semantics**.
+
+**Responsive / UX notes** *(when UI is involved)*
+
+- Mobile / Tablet / Desktop: Start/stop and status MUST remain usable per **REQ-002** when exposed; **headless** operation MUST not depend on these surfaces.
+
+**Dependencies**
+
+- REQ-003, REQ-015, REQ-020, REQ-021, REQ-022, REQ-029, REQ-031, REQ-035, REQ-036, REQ-039
+
+**Open questions**
+
+- None (**headless** **API** **per** **business** **rule** **6**; **WLED** **rate**/**batch** **limits** **documented** **under** **REQ-029**/**REQ-031**/**architecture**).
+
+---
+
+### REQ-039 — Authoritative in-memory light state; sync at startup and on assignment
+
+| Field | Value |
+|-------|-------|
+| **ID** | REQ-039 |
+| **Title** | Authoritative in-memory light state; sync at startup and on assignment |
+| **Priority** | Must |
+| **Actor(s)** | End user; operator; integrator |
+
+**User story**
+
+As an integrator, I want the app to treat **light output state** as **runtime** data held **in memory** for **performance**, **not** stored in the database, with clear rules for **initial** state at **startup** and when I **link** a device, so that the system stays fast and the **truth** for pixels lives in **RAM** (and on the **wire**), not in SQLite.
+
+**Scope**
+
+- In scope: **Per-light** operational state (**REQ-011** fields) is **authoritative** in **server memory** for the running process. It MUST **not** be written to **durable** application storage for reload after restart. The service SHOULD maintain an **in-memory** representation (per model or global structure per architecture) to serve reads and drive pushes to devices **without** re-querying hardware for full state on every operation. **Synchronization** events: **(a)** **process start**: for each model **with** an assigned device, perform a **sync** with that device as architecture defines (direction: align logical state to device, or push defaults then device follows—**documented**); **(b)** **first association** of a device to a model: sync **when the link is created**; **(c)** models **without** a device: initial logical state is **all lights off** with **REQ-014** default colour/brightness semantics for the **off** appearance. **Product priority**: **correctness** and **throughput** of **routine-driven** updates and **device** output are **primary**; **Devices** UI (**REQ-037**) and **authoring** UIs are **secondary**—the product is intended to run **headless** with the UI as an **occasional** configuration and development tool.
+- Out of scope: Long-term **analytics** or **history** of light states in the app database.
+
+**Business rules**
+
+1. **No durable light state:** The application MUST **not** persist per-light **on**/**off**, **colour**, or **brightness** in **SQLite** or equivalent **application** store for **reload** after **restart** (**REQ-011** rule **5** as updated).
+2. **In-memory authority:** All **REQ-011** read APIs MUST reflect the **current** **in-memory** authoritative state for the running server (plus documented **consistency** if scaled-out is ever introduced—default single instance).
+3. **Startup:** On service start, for each model **without** an assigned device, authoritative state MUST be initialized to **all lights off** per **REQ-014** defaults. For each model **with** an assigned device, a **sync** MUST run per architecture (read from device, or push initial pattern—**documented**).
+4. **On assignment:** When a device is **newly** assigned to a model, a **sync** MUST run **immediately** after the link succeeds (**same** architectural meaning as rule **3**).
+5. **Performance:** Architecture MUST describe how in-memory structures support **REQ-029** and **REQ-031** (last-known, equivalence, push coalescing).
+6. **Priority:** Implementation and verification MUST favor **routine**/**device** **correctness** and **performance** over **Devices** UI depth and over **visual** **polish** of **occasional** configuration flows, without violating **REQ-002** **baseline** usability where UI exists.
+7. **Startup** **vs** **device-reported** **state:** If **startup** **sync** **observes** **per-light** **state** **on** **the** **device** **that** **differs** **from** **REQ-014** **defaults**, **architecture** **MUST** **document** **one** **consistent** **policy** (**examples:** **treat** **device** **as** **initial** **authority** **for** **logical** **state**; **or** **initialize** **to** **REQ-014** **defaults** **in** **memory** **then** **push** **to** **the** **device**). **Implementations** **MUST** **follow** **that** **documented** **policy**.
+8. **Unassign** **behavior:** **Architecture** **MUST** **document** **what** **happens** **to** **physical** **outputs** **when** **a** **device** **is** **unassigned** **from** **a** **model** (**e.g.** **leave** **hardware** **unchanged**, **push** **all** **off**, **or** **other** **explicit** **behavior**) **so** **operators** **can** **predict** **installed** **effects**.
+
+**Responsive / UX notes** *(when UI is involved)*
+
+- Mobile / Tablet / Desktop: **REQ-037** and routine authoring remain **basically** usable (**REQ-002**); **polish** and **feature** **breadth** for those surfaces are **explicitly** lower priority than **REQ-038**/**REQ-039** server and device behavior.
+
+**Dependencies**
+
+- REQ-011, REQ-014, REQ-029, REQ-031, REQ-035, REQ-036
+
+**Open questions**
+
+- None (**policies** **for** **rules** **7**–**8** **are** **architecture** **documentation** **obligations**, **not** **open** **product** **questions**).
 
 ---

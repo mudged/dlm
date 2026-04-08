@@ -406,8 +406,8 @@ func TestAcceptance_REQ011_restLightStateAPI(t *testing.T) {
 	if !strings.Contains(lower, "patch") {
 		t.Fatal("REQ-011 must mention PATCH-style partial updates")
 	}
-	if !strings.Contains(lower, "persist") {
-		t.Fatal("REQ-011 must require successful writes to be persisted")
+	if !strings.Contains(lower, "persist") && !(strings.Contains(lower, "authoritative") && strings.Contains(lower, "req-039")) {
+		t.Fatal("REQ-011 must require successful writes to be persisted or held as authoritative in-memory state (REQ-039)")
 	}
 	if !strings.Contains(lower, "docs/architecture.md") {
 		t.Fatal("REQ-011 must defer URL layout or defaults to docs/architecture.md")
@@ -496,8 +496,8 @@ func TestAcceptance_REQ013_modelViewPaginationAndBulkSettings(t *testing.T) {
 	if !strings.Contains(lower, "req-011") {
 		t.Fatal("REQ-013 must reference REQ-011 for on/off, colour, and brightness")
 	}
-	if !strings.Contains(lower, "persist") {
-		t.Fatal("REQ-013 must require persistence per REQ-011 for successful updates")
+	if !strings.Contains(lower, "persist") && !strings.Contains(lower, "authoritative") {
+		t.Fatal("REQ-013 must require persistence or authoritative state per REQ-011 for successful updates")
 	}
 	if !strings.Contains(lower, "req-012") {
 		t.Fatal("REQ-013 must reference REQ-012 for 3D view and list timeliness after bulk apply")
@@ -546,8 +546,8 @@ func TestAcceptance_REQ014_defaultLightStateAndReset(t *testing.T) {
 	if !strings.Contains(lower, "all") {
 		t.Fatal("REQ-014 must require reset to apply to all lights")
 	}
-	if !strings.Contains(lower, "persist") {
-		t.Fatal("REQ-014 must require reset persistence")
+	if !strings.Contains(lower, "persist") && !(strings.Contains(lower, "authoritative") && strings.Contains(lower, "req-039")) {
+		t.Fatal("REQ-014 must require reset to update persisted or authoritative state (REQ-039)")
 	}
 	if !strings.Contains(lower, "req-011") || !strings.Contains(lower, "req-012") || !strings.Contains(lower, "req-013") {
 		t.Fatal("REQ-014 must reference REQ-011, REQ-012, and REQ-013")

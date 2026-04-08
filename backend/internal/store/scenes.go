@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"example.com/dlm/backend/internal/lightstate"
 )
 
 const sceneCoordEps = 1e-9
@@ -429,20 +431,26 @@ func (s *Store) getDetailTx(ctx context.Context, tx *sql.Tx, modelID string) (*D
 	d.CreatedAt = t.UTC()
 
 	rows, err := query(ctx, `
-		SELECT idx, x, y, z, "on", color, brightness_pct FROM lights WHERE model_id = ? ORDER BY idx ASC
+		SELECT idx, x, y, z FROM lights WHERE model_id = ? ORDER BY idx ASC
 	`, modelID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
+	ls := s.requireLS()
 	for rows.Next() {
 		var L LightDTO
-		var onInt int
-		if err := rows.Scan(&L.ID, &L.X, &L.Y, &L.Z, &onInt, &L.Color, &L.BrightnessPct); err != nil {
+		if err := rows.Scan(&L.ID, &L.X, &L.Y, &L.Z); err != nil {
 			return nil, err
 		}
-		L.On = onInt != 0
+		st, err := ls.Get(modelID, L.ID)
+		if err != nil {
+			return nil, err
+		}
+		L.On = st.On
+		L.Color = st.Color
+		L.BrightnessPct = st.BrightnessPct
 		d.Lights = append(d.Lights, L)
 	}
 	if err := rows.Err(); err != nil {
@@ -1129,15 +1137,16 @@ func (s *Store) patchSceneLightsByRegionTx(ctx context.Context, tx *sql.Tx, scen
 		if brightnessNorm != nil {
 			brightness = *brightnessNorm
 		}
-		rowUnchanged := EquivLightStateTriple(prevOn, prevColor, prevBr, on, color, brightness)
+		rowUnchanged := lightstate.EquivLightStateTriple(prevOn, prevColor, prevBr, on, color, brightness)
 		if !rowUnchanged {
 			allEquiv = false
-			if _, err := tx.ExecContext(ctx, `
-				UPDATE lights SET "on" = ?, color = ?, brightness_pct = ? WHERE model_id = ? AND idx = ?
-			`, boolToInt(on), color, brightness, L.ModelID, L.LightID); err != nil {
+			unch, err := s.requireLS().SetTriple(L.ModelID, L.LightID, on, color, brightness)
+			if err != nil {
 				return nil, err
 			}
-			writeCount++
+			if !unch {
+				writeCount++
+			}
 		}
 		updated = append(updated, ScenePatchedState{
 			ModelID:       L.ModelID,
@@ -1254,19 +1263,16 @@ func (s *Store) patchSceneLightsBatchTx(ctx context.Context, tx *sql.Tx, sceneID
 			return nil, ErrSceneLightNotInScene
 		}
 
-		row := tx.QueryRowContext(ctx, `
-			SELECT "on", color, brightness_pct FROM lights WHERE model_id = ? AND idx = ?
-		`, u.ModelID, u.LightID)
-		var onInt int
-		var color string
-		var brightness float64
-		if err := row.Scan(&onInt, &color, &brightness); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
+		prevSt, err := s.requireLS().Get(u.ModelID, u.LightID)
+		if err != nil {
+			if errors.Is(err, lightstate.ErrInvalidLightIndex) {
 				return nil, ErrSceneLightNotInScene
 			}
 			return nil, err
 		}
-		prevOn := onInt != 0
+		prevOn := prevSt.On
+		color := prevSt.Color
+		brightness := prevSt.BrightnessPct
 		on := prevOn
 		prevColor := strings.ToLower(strings.TrimSpace(color))
 		prevBr := brightness
@@ -1287,17 +1293,18 @@ func (s *Store) patchSceneLightsBatchTx(ctx context.Context, tx *sql.Tx, sceneID
 			brightness = *u.Patch.BrightnessPct
 		}
 
-		rowUnchanged := EquivLightStateTriple(prevOn, prevColor, prevBr, on, color, brightness)
+		rowUnchanged := lightstate.EquivLightStateTriple(prevOn, prevColor, prevBr, on, color, brightness)
 		if rowUnchanged {
-			// no UPDATE
+			// no memory write
 		} else {
 			allUnchanged = false
-			if _, err := tx.ExecContext(ctx, `
-				UPDATE lights SET "on" = ?, color = ?, brightness_pct = ? WHERE model_id = ? AND idx = ?
-			`, boolToInt(on), color, brightness, u.ModelID, u.LightID); err != nil {
+			unch, err := s.requireLS().SetTriple(u.ModelID, u.LightID, on, color, brightness)
+			if err != nil {
 				return nil, err
 			}
-			writeCount++
+			if !unch {
+				writeCount++
+			}
 		}
 		updated = append(updated, ScenePatchedState{
 			ModelID:       u.ModelID,

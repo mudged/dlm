@@ -12,7 +12,9 @@ import (
 	"time"
 
 	"example.com/dlm/backend/internal/config"
+	"example.com/dlm/backend/internal/devices"
 	"example.com/dlm/backend/internal/httpapi"
+	"example.com/dlm/backend/internal/lightstate"
 	"example.com/dlm/backend/internal/store"
 	"example.com/dlm/backend/internal/webdist"
 )
@@ -37,12 +39,20 @@ func main() {
 	}
 	defer func() { _ = st.Close() }()
 
-	if err := st.SeedDefaultSamples(context.Background()); err != nil {
+	ls := lightstate.New()
+	st.SetLightState(ls)
+
+	ctx := context.Background()
+	if err := st.SeedDefaultSamples(ctx); err != nil {
 		log.Error("seed default samples", "err", err)
 		os.Exit(1)
 	}
-	if err := st.SeedDefaultPythonRoutines(context.Background()); err != nil {
+	if err := st.SeedDefaultPythonRoutines(ctx); err != nil {
 		log.Error("seed default python routines", "err", err)
+		os.Exit(1)
+	}
+	if err := st.LoadLightStateFromDB(ctx); err != nil {
+		log.Error("load light state from db", "err", err)
 		os.Exit(1)
 	}
 
@@ -53,7 +63,11 @@ func main() {
 	}
 
 	revHub := httpapi.NewRevisionHub()
-	handler := httpapi.NewSiteHandler(cfg, ui, st, revHub)
+	pusher := devices.NewPusher(st, nil)
+	if err := pusher.SyncAllAssignedModels(ctx); err != nil {
+		log.Warn("wled sync on startup", "err", err)
+	}
+	handler := httpapi.NewSiteHandler(cfg, ui, st, revHub, pusher)
 	srv := &http.Server{
 		Addr:              cfg.HTTPListen,
 		Handler:           handler,

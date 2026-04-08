@@ -9,6 +9,7 @@ import {
   faHouse,
   faLayerGroup,
   faMoon,
+  faNetworkWired,
   faSun,
   faWandMagicSparkles,
 } from "@fortawesome/free-solid-svg-icons";
@@ -31,6 +32,7 @@ type NavItem = { href: string; label: string; icon: typeof faHouse };
 const NAV: NavItem[] = [
   { href: "/", label: "Home", icon: faHouse },
   { href: "/models", label: "Models", icon: faCubes },
+  { href: "/devices", label: "Devices", icon: faNetworkWired },
   { href: "/scenes", label: "Scenes", icon: faLayerGroup },
   { href: "/routines", label: "Routines", icon: faWandMagicSparkles },
   { href: "/options", label: "Options", icon: faGear },

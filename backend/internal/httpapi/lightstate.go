@@ -46,7 +46,7 @@ func (a *apiDeps) postResetLightStates(w http.ResponseWriter, r *http.Request) {
 		states = []store.LightStateDTO{}
 	}
 	if !unchangedAll {
-		a.rev.NotifyModelLightsChanged(r.Context(), a.store, modelID)
+		a.notifyModelLightsChanged(r.Context(), modelID)
 	}
 	resp := map[string]any{"states": states}
 	if unchangedAll {
@@ -154,7 +154,7 @@ func (a *apiDeps) patchLightState(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !unchanged {
-		a.rev.NotifyModelLightsChanged(r.Context(), a.store, modelID)
+		a.notifyModelLightsChanged(r.Context(), modelID)
 	}
 	out := map[string]any{
 		"id":             st.ID,
@@ -248,7 +248,7 @@ func (a *apiDeps) patchLightStatesBatch(w http.ResponseWriter, r *http.Request) 
 		states = []store.LightStateDTO{}
 	}
 	if !unchangedAll {
-		a.rev.NotifyModelLightsChanged(r.Context(), a.store, modelID)
+		a.notifyModelLightsChanged(r.Context(), modelID)
 	}
 	resp := map[string]any{"states": states}
 	if unchangedAll {

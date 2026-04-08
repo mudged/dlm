@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"example.com/dlm/backend/internal/config"
+	"example.com/dlm/backend/internal/lightstate"
 	"example.com/dlm/backend/internal/store"
 	"example.com/dlm/backend/internal/wiremodel"
 )
@@ -25,6 +26,12 @@ func testStore(t *testing.T) *store.Store {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = s.Close() })
+	ls := lightstate.New()
+	s.SetLightState(ls)
+	ctx := context.Background()
+	if err := s.LoadLightStateFromDB(ctx); err != nil {
+		t.Fatal(err)
+	}
 	return s
 }
 
@@ -39,7 +46,7 @@ func newTestHandler(t *testing.T, cfg *config.Config) http.Handler {
 			DBPath:             filepath.Join(t.TempDir(), "unused.db"),
 		}
 	}
-	return NewSiteHandler(cfg, nil, testStore(t), nil)
+	return NewSiteHandler(cfg, nil, testStore(t), nil, nil)
 }
 
 func TestHealth_returnsOKJSON(t *testing.T) {
@@ -145,7 +152,7 @@ func TestCORSPreflight_allowsConfiguredOrigin(t *testing.T) {
 		CORSAllowedOrigins: []string{"http://localhost:3000"},
 		DBPath:             filepath.Join(t.TempDir(), "unused.db"),
 	}
-	srv := httptest.NewServer(NewSiteHandler(cfg, nil, testStore(t), nil))
+	srv := httptest.NewServer(NewSiteHandler(cfg, nil, testStore(t), nil, nil))
 	t.Cleanup(srv.Close)
 
 	req, err := http.NewRequest(http.MethodOptions, srv.URL+"/api/v1/status", nil)
@@ -182,7 +189,7 @@ func TestStatic_servesEmbeddableExport(t *testing.T) {
 		CORSAllowedOrigins: nil,
 		DBPath:             filepath.Join(t.TempDir(), "unused.db"),
 	}
-	srv := httptest.NewServer(NewSiteHandler(cfg, fsys, testStore(t), nil))
+	srv := httptest.NewServer(NewSiteHandler(cfg, fsys, testStore(t), nil, nil))
 	t.Cleanup(srv.Close)
 
 	res, err := http.Get(srv.URL + "/")
@@ -219,7 +226,7 @@ func TestAPI_precedenceOverStaticPrefix(t *testing.T) {
 		CORSAllowedOrigins: nil,
 		DBPath:             filepath.Join(t.TempDir(), "unused.db"),
 	}
-	srv := httptest.NewServer(NewSiteHandler(cfg, fsys, testStore(t), nil))
+	srv := httptest.NewServer(NewSiteHandler(cfg, fsys, testStore(t), nil, nil))
 	t.Cleanup(srv.Close)
 
 	res, err := http.Get(srv.URL + "/health")
@@ -245,7 +252,7 @@ func TestStatic_unknownClientRoute_fallsBackToIndexHTML(t *testing.T) {
 		CORSAllowedOrigins: nil,
 		DBPath:             filepath.Join(t.TempDir(), "unused.db"),
 	}
-	srv := httptest.NewServer(NewSiteHandler(cfg, fsys, testStore(t), nil))
+	srv := httptest.NewServer(NewSiteHandler(cfg, fsys, testStore(t), nil, nil))
 	t.Cleanup(srv.Close)
 
 	res, err := http.Get(srv.URL + "/settings/profile")
@@ -273,7 +280,7 @@ func TestStatic_missingNextAsset_returnsNotFound(t *testing.T) {
 		CORSAllowedOrigins: nil,
 		DBPath:             filepath.Join(t.TempDir(), "unused.db"),
 	}
-	srv := httptest.NewServer(NewSiteHandler(cfg, fsys, testStore(t), nil))
+	srv := httptest.NewServer(NewSiteHandler(cfg, fsys, testStore(t), nil, nil))
 	t.Cleanup(srv.Close)
 
 	res, err := http.Get(srv.URL + "/_next/static/missing.js")
@@ -294,10 +301,23 @@ func TestAPIv1FactoryReset_resetsToThreeSamples(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = st.Close() })
+	ls := lightstate.New()
+	st.SetLightState(ls)
 	if err := st.SeedDefaultSamples(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := st.Create(ctx, "user-model", []wiremodel.Light{{ID: 0, X: 0, Y: 0, Z: 0}}); err != nil {
+	if err := st.LoadLightStateFromDB(ctx); err != nil {
+		t.Fatal(err)
+	}
+	userSum, err := st.Create(ctx, "user-model", []wiremodel.Light{{ID: 0, X: 0, Y: 0, Z: 0}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dev, err := st.CreateDevice(ctx, store.DeviceCreate{Name: "wled-strip", BaseURL: "http://192.168.1.50"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AssignDevice(ctx, dev.ID, userSum.ID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -308,9 +328,27 @@ func TestAPIv1FactoryReset_resetsToThreeSamples(t *testing.T) {
 		CORSAllowedOrigins: nil,
 		DBPath:             path,
 	}
-	h := NewSiteHandler(cfg, nil, st, nil)
+	h := NewSiteHandler(cfg, nil, st, nil, nil)
 	srv := httptest.NewServer(h)
 	t.Cleanup(srv.Close)
+
+	resDev, err := http.Get(srv.URL + "/api/v1/devices")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resDev.Body.Close()
+	if resDev.StatusCode != http.StatusOK {
+		t.Fatalf("devices list before reset: status %d", resDev.StatusCode)
+	}
+	var devList struct {
+		Devices []any `json:"devices"`
+	}
+	if err := json.NewDecoder(resDev.Body).Decode(&devList); err != nil {
+		t.Fatal(err)
+	}
+	if len(devList.Devices) != 1 {
+		t.Fatalf("before reset want 1 device, got %d", len(devList.Devices))
+	}
 
 	res, err := http.Post(srv.URL+"/api/v1/system/factory-reset", "application/json", strings.NewReader("{}"))
 	if err != nil {
@@ -326,6 +364,24 @@ func TestAPIv1FactoryReset_resetsToThreeSamples(t *testing.T) {
 	}
 	if err := json.NewDecoder(res.Body).Decode(&okBody); err != nil || !okBody.OK {
 		t.Fatalf("decode ok: err=%v ok=%v", err, okBody.OK)
+	}
+
+	resDev2, err := http.Get(srv.URL + "/api/v1/devices")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resDev2.Body.Close()
+	if resDev2.StatusCode != http.StatusOK {
+		t.Fatalf("devices list after reset: status %d", resDev2.StatusCode)
+	}
+	var devList2 struct {
+		Devices []any `json:"devices"`
+	}
+	if err := json.NewDecoder(resDev2.Body).Decode(&devList2); err != nil {
+		t.Fatal(err)
+	}
+	if len(devList2.Devices) != 0 {
+		t.Fatalf("after reset want 0 devices, got %d", len(devList2.Devices))
 	}
 
 	res2, err := http.Get(srv.URL + "/api/v1/models")
