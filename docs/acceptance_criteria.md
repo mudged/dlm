@@ -546,19 +546,19 @@ Feature: Options factory reset with confirmation (REQ-017)
 
   Scenario: REQ-017 requires prompt and warning before any destructive factory reset
     Parent requirement: REQ-017
-    Given docs/requirements.md defines REQ-017 and REQ-032
+    Given docs/requirements.md defines REQ-017 REQ-033 and REQ-032
     When the REQ-017 business rules about confirmation are read
     Then factory reset must show a blocking prompt before irreversible effects begin
-    And the prompt must warn that all models scenes routines including Python routines and related data will be permanently removed
+    And the prompt must warn that all models scenes routines including Python and shape animation routines and related data will be permanently removed
     And only default sample models and default sample Python routines will remain after completion
     And cancel or dismiss must leave data unchanged
 
   Scenario: REQ-017 requires post-reset state to match fresh samples
     Parent requirement: REQ-017
-    Given docs/requirements.md defines REQ-009 REQ-011 REQ-014 REQ-017 REQ-021 REQ-022 and REQ-032
+    Given docs/requirements.md defines REQ-009 REQ-011 REQ-014 REQ-017 REQ-021 REQ-022 REQ-033 and REQ-032
     When the REQ-017 business rules about outcomes are read
     Then after confirmed factory reset no user-created models or scenes may remain in listings
-    And no routine definitions beyond the three default Python sample routines from REQ-032 may remain and no persisted routine run state from prior entities may remain
+    And no routine definitions beyond the three default Python sample routines from REQ-032 may remain including no user shape animation definitions per REQ-033 and no persisted routine run state from prior entities may remain
     And the model list must satisfy REQ-009 expectations for a fresh seed with three identifiable samples
     And the routine definition list must satisfy REQ-032 expectations for exactly three default Python sample routines
     And per-light defaults for present models must align with REQ-014 and REQ-011
@@ -677,11 +677,11 @@ Feature: Scene spatial API dimensions filters and bulk updates (REQ-020)
 
 Feature: Scene routines Python definitions run stop and scene API (REQ-021)
 
-  Scenario: REQ-021 requires routine definitions with name description and Python kind plus list and delete
+  Scenario: REQ-021 requires routine definitions with name description and Python or shape animation kind plus list and delete
     Parent requirement: REQ-021
-    Given docs/requirements.md defines REQ-021 and REQ-022
+    Given docs/requirements.md defines REQ-021 REQ-022 and REQ-033
     When the REQ-021 scope and business rules about definitions are read
-    Then the product must support creating a routine with name description and routine kind consistent with Python routines
+    Then the product must support creating a routine with name description and routine kind either Python per REQ-022 or shape animation per REQ-033
     And the product must support listing all routine definitions
     And the product must support deleting a routine definition
     And name is required at create time
@@ -696,9 +696,10 @@ Feature: Scene routines Python definitions run stop and scene API (REQ-021)
 
   Scenario: REQ-021 binds running automation to scene API for light state changes
     Parent requirement: REQ-021
-    Given docs/requirements.md defines REQ-011 REQ-020 REQ-021 and REQ-022
+    Given docs/requirements.md defines REQ-011 REQ-020 REQ-021 REQ-022 and REQ-033
     When the REQ-021 business rule about scene API usage during an active run is read
-    Then automated changes to on off hex colour or brightness for lights in that scene must be effected through the Python scene binding and underlying REQ-020 scene API surface
+    Then automated changes to on off hex colour or brightness for lights in that scene from Python runs must be effected through the Python scene binding and underlying REQ-020 scene API surface
+    And automated changes from shape animation runs must use REQ-020 equivalent native paths that preserve REQ-011 semantics without executing user Python
     And canonical stored model coordinates must not be rewritten by routine automation
 
   Scenario: REQ-021 allows volumetric targeting in scene space when scripts use regions
@@ -731,11 +732,11 @@ Feature: Scene routines Python definitions run stop and scene API (REQ-021)
     When the REQ-021 responsive UX notes are read
     Then any UI for list create delete start and stop must be usable on mobile tablet and desktop without hover-only essential steps
 
-  Scenario: REQ-017 factory reset removes routine data per REQ-021 and REQ-022 scope
+  Scenario: REQ-017 factory reset removes routine data per REQ-021 REQ-022 and REQ-033 scope
     Parent requirement: REQ-017
-    Given docs/requirements.md defines REQ-017 REQ-021 REQ-022 and REQ-032
+    Given docs/requirements.md defines REQ-017 REQ-021 REQ-022 REQ-033 and REQ-032
     When the REQ-017 scope about factory reset data removal is read
-    Then factory reset must remove persisted scene routine definitions and any persisted routine run state together with models scenes and related data
+    Then factory reset must remove persisted scene routine definitions including shape animation per REQ-033 and any persisted routine run state together with models scenes and related data
     And factory reset must re-seed exactly the three default Python sample routines defined in REQ-032
 
 Feature: Python scene routines editor API docs and execution (REQ-022)
@@ -815,26 +816,26 @@ Feature: Python scene routines editor API docs and execution (REQ-022)
     Then the editor documentation and run and stop controls must remain usable on mobile tablet and desktop
     And essential steps must not rely on hover-only affordances
 
-Feature: Create routine Python-only path (REQ-023)
+Feature: Create routine kind choice Python or shape animation (REQ-023)
 
-  Scenario: REQ-023 requires new routine creation to be Python-only
+  Scenario: REQ-023 requires new routine creation to offer Python or shape animation only
     Parent requirement: REQ-023
-    Given docs/requirements.md defines REQ-021 REQ-022 and REQ-023
+    Given docs/requirements.md defines REQ-021 REQ-022 REQ-033 and REQ-023
     When the REQ-023 scope and business rules about new routine creation are read
-    Then the user-facing flow to create a new routine definition must not offer a separate non-Python routine kind
-    And the flow must proceed to the Python authoring experience per REQ-022
+    Then the user-facing flow to create a new routine definition must let the user choose Python per REQ-022 or shape animation per REQ-033
+    And the product must not offer any third creatable routine kind beyond those two
 
-  Scenario: REQ-023 forbids implying multiple distinct non-Python executable engines
+  Scenario: REQ-023 limits type control options to the two defined kinds
     Parent requirement: REQ-023
     Given docs/requirements.md defines REQ-023
     When the REQ-023 business rule 2 is read
-    Then if the UI shows a type control its options must not imply multiple distinct executable engines beyond Python
+    Then if the UI shows a type or kind control its options must map only to Python and shape animation
 
-  Scenario: REQ-023 forbids a redundant standalone primary Python-only create button
+  Scenario: REQ-023 forbids redundant duplicate primary create actions for the same flow
     Parent requirement: REQ-023
     Given docs/requirements.md defines REQ-023
     When the REQ-023 business rule 3 is read
-    Then the UI must not require a separate primary action whose sole purpose is to start creating only a Python routine when that is already the only outcome of the main new routine flow
+    Then the UI must not present redundant standalone primary actions that start the same authoring flow
 
   Scenario: REQ-023 ties create flow controls to responsive non-hover-only use
     Parent requirement: REQ-023
@@ -1106,6 +1107,103 @@ Feature: Default seeded Python sample routines (REQ-032)
     Given docs/requirements.md defines REQ-032 and REQ-025
     When docs/architecture.md is read after the architect pass
     Then it names where the REQ-032 initial seed content is defined and how it relates to the default new Python routine template if applicable
+
+Feature: Shape animation routines declarative authoring and run (REQ-033)
+
+  Scenario: REQ-033 defines second routine kind with name description and parameters
+    Parent requirement: REQ-033
+    Given docs/requirements.md defines REQ-033
+    When the REQ-033 scope about persisted definitions is read
+    Then shape animation is a routine kind alongside Python per REQ-021
+    And each definition has required name optional description per architecture and structured parameters in business rules
+
+  Scenario: REQ-033 add and edit includes unified run on scene viewport per REQ-027
+    Parent requirement: REQ-033
+    Given docs/requirements.md defines REQ-027 and REQ-033
+    When the REQ-033 scope about the authoring surface is read
+    Then the shape animation add or edit flow must include the unified region with scene selection run stop live three.js viewport reset scene lights and reset camera
+    And the product must not duplicate scene picker or viewport for that workflow
+
+  Scenario: REQ-033 constrains shapes count type size colour brightness speed position motion and edge behavior
+    Parent requirement: REQ-033
+    Given docs/requirements.md defines REQ-033 REQ-020 and REQ-026
+    When the REQ-033 business rules 2 through 7 are read
+    Then the definition allows between 1 and 20 shapes each sphere or axis-aligned cuboid in scene space
+    And size may be fixed or random uniform between user lower and upper bounds per shape
+    And shape colour may be fixed REQ-011 hex or random with REQ-030 distribution intent
+    And each shape has user-set brightness percent 0 through 100 per REQ-011 for lights inside that shape
+    And motion uses a normalized direction from signed dx dy dz not all zero and scalar speed in SI meters per second where the UI may use centimeters per second with consistent conversion
+    And speed may be fixed positive or random uniform between positive lower and upper bounds on run start and each loop cycle per business rule 10
+    And initial position may be explicit scene coordinates or random against a chosen scene face top bottom left right back or front with whole shape inside the scene volume
+    And per shape edge behavior is one of Pac-Man wrap stop and disappear deflect random angle or deflect inflection angle against scene boundary
+
+  Scenario: REQ-033 assigns lights inside shapes to shape colour brightness and others to background or off
+    Parent requirement: REQ-033
+    Given docs/requirements.md defines REQ-011 REQ-033 and REQ-020
+    When the REQ-033 business rules 1 4 8 and 9 are read
+    Then lights inside at least one active shape receive that shapes winning colour and per-shape brightness per deterministic overlap precedence
+    And lights outside all active shapes receive background colour and brightness or are set off when background mode is none
+
+  Scenario: REQ-033 animation loops until stop or all shapes terminal
+    Parent requirement: REQ-033
+    Given docs/requirements.md defines REQ-033
+    When the REQ-033 business rule 10 is read
+    Then while the run is active the animation repeats in a loop until the user stops or no active shapes remain when all used stop and disappear
+
+  Scenario: REQ-033 preserves canonical model coordinates and uses scene API semantics
+    Parent requirement: REQ-033
+    Given docs/requirements.md defines REQ-005 REQ-015 REQ-020 REQ-021 and REQ-033
+    When the REQ-033 scope and business rules about persistence are read
+    Then shape animation runs must update light state via REQ-020 equivalent operations with REQ-011 semantics
+    And canonical stored model coordinates must not be rewritten
+
+  Scenario: REQ-033 authoring remains responsive without hover-only essential steps
+    Parent requirement: REQ-033
+    Given docs/requirements.md defines REQ-002 and REQ-033
+    When the REQ-033 responsive UX notes are read
+    Then parameter forms and unified viewport controls must be usable on mobile tablet and desktop without hover-only essential steps
+
+Feature: Faint scene boundary cuboid in three.js views (REQ-034)
+
+  Scenario: REQ-034 defines axis-aligned boundary from light extremes plus symmetric margin
+    Parent requirement: REQ-034
+    Given docs/requirements.md defines REQ-034 REQ-010 and REQ-015
+    When the REQ-034 business rules about geometry are read
+    Then the tight boundary must be the axis-aligned min and max of every light position in the viewport coordinate space
+    And models need not be regular cuboids because only light positions define the tight box
+    And the model view must expand the tight box by exactly 0.3 meters on each axis in both directions
+    And the scene view must expand the tight box by the scene persisted margin m on each axis in both directions
+
+  Scenario: REQ-015 stores scene boundary margin m defaulting to 30 cm and allows edit
+    Parent requirement: REQ-034
+    Given docs/requirements.md defines REQ-015 and REQ-034
+    When REQ-015 business rules 12 and 13 are read
+    Then each scene must persist one non-negative finite margin m in SI meters for the visualization boundary
+    And new scenes must default m to 0.3 meters
+    And legacy scenes without m must behave as m equals 0.3 after migration or read fallback
+    And the scene management UI must expose a control to view and change m without hover-only essential apply steps
+
+  Scenario: REQ-034 applies to model view and scene view including embedded scene canvases
+    Parent requirement: REQ-034
+    Given docs/requirements.md defines REQ-034 REQ-010 REQ-015 REQ-027 and REQ-033
+    When the REQ-034 scope is read
+    Then the model three.js view must show the boundary per REQ-034 in model local coordinates
+    And the scene three.js view must show the boundary in derived scene space sx sy sz using that scene current m
+    And embedded scene previews that reuse the same canvas pattern must show the boundary using the same scene m
+
+  Scenario: REQ-034 visual prominence matches faint inter-light wire guidance
+    Parent requirement: REQ-034
+    Given docs/requirements.md defines REQ-010 REQ-019 and REQ-034
+    When the REQ-034 business rules about appearance are read
+    Then the boundary must be faint and subtle similar in visual weight to REQ-010 inter-light segments
+    And it must not be more prominent than those segments or the light spheres
+
+  Scenario: REQ-010 and REQ-015 reference the boundary cuboid requirement
+    Parent requirement: REQ-034
+    Given docs/requirements.md defines REQ-010 REQ-015 and REQ-034
+    When REQ-010 scope and REQ-015 business rule 8 are read
+    Then the model view must require the REQ-034 boundary alongside spheres and chain segments
+    And the scene view must require the REQ-034 boundary alongside per-model chain segments
 ```
 
 ---

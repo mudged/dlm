@@ -136,6 +136,9 @@ func (s *Store) migrate(ctx context.Context) error {
 	if err := s.ensureSceneTables(ctx); err != nil {
 		return err
 	}
+	if err := s.ensureSceneBoundaryMarginColumn(ctx); err != nil {
+		return err
+	}
 	if err := s.migrateLegacyRandomColourRoutines(ctx); err != nil {
 		return fmt.Errorf("migrate legacy routine types: %w", err)
 	}
@@ -181,6 +184,20 @@ func (s *Store) ensureSceneTables(ctx context.Context) error {
 	return s.ensureRoutineTables(ctx)
 }
 
+func (s *Store) ensureSceneBoundaryMarginColumn(ctx context.Context) error {
+	cols, err := s.tableColumns(ctx, "scenes")
+	if err != nil {
+		return err
+	}
+	if cols["boundary_margin_m"] {
+		return nil
+	}
+	if _, err := s.db.ExecContext(ctx, `ALTER TABLE scenes ADD COLUMN boundary_margin_m REAL NOT NULL DEFAULT 0.3`); err != nil {
+		return fmt.Errorf("migrate scenes.boundary_margin_m: %w", err)
+	}
+	return nil
+}
+
 func (s *Store) ensureRoutineTables(ctx context.Context) error {
 	stmts := []string{
 		`CREATE TABLE IF NOT EXISTS routines (
@@ -206,7 +223,24 @@ func (s *Store) ensureRoutineTables(ctx context.Context) error {
 			return fmt.Errorf("migrate routines: %w", err)
 		}
 	}
-	return s.ensurePythonSourceColumn(ctx)
+	if err := s.ensurePythonSourceColumn(ctx); err != nil {
+		return err
+	}
+	return s.ensureDefinitionJSONColumn(ctx)
+}
+
+func (s *Store) ensureDefinitionJSONColumn(ctx context.Context) error {
+	cols, err := s.tableColumns(ctx, "routines")
+	if err != nil {
+		return err
+	}
+	if cols["definition_json"] {
+		return nil
+	}
+	if _, err := s.db.ExecContext(ctx, `ALTER TABLE routines ADD COLUMN definition_json TEXT`); err != nil {
+		return fmt.Errorf("migrate routines.definition_json: %w", err)
+	}
+	return nil
 }
 
 func (s *Store) ensurePythonSourceColumn(ctx context.Context) error {
@@ -391,7 +425,7 @@ func (s *Store) seedDefaultPythonRoutinesTx(ctx context.Context, tx *sql.Tx) err
 		id := uuid.NewString()
 		created := time.Now().UTC().Format(time.RFC3339Nano)
 		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO routines (id, name, description, type, python_source, created_at) VALUES (?, ?, ?, ?, ?, ?)
+			INSERT INTO routines (id, name, description, type, python_source, definition_json, created_at) VALUES (?, ?, ?, ?, ?, NULL, ?)
 		`, id, row.Name, row.Description, RoutineTypePythonSceneScript, row.Source, created); err != nil {
 			return err
 		}

@@ -40,12 +40,20 @@ function sceneSpaceLight(L: SceneItem["lights"][number]): Light {
   };
 }
 
-export function sceneItemsVizSignature(items: SceneItem[]): string {
+export function sceneItemsVizSignature(
+  items: SceneItem[],
+  boundaryMarginM?: number,
+): string {
   const sortedItems = [...items].sort((a, b) => a.model_id.localeCompare(b.model_id));
-  return sortedItems
+  const body = sortedItems
     .map((it) => {
       const lights = it.lights.map(sceneSpaceLight);
       return `${it.model_id}:${modelLightsVizSignature(lights)}`;
     })
     .join("||");
+  const m =
+    typeof boundaryMarginM === "number" && Number.isFinite(boundaryMarginM)
+      ? boundaryMarginM
+      : "";
+  return `${body}|m:${m}`;
 }

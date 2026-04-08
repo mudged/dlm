@@ -1,5 +1,16 @@
 import type { Light } from "@/lib/models";
 
+/** REQ-034 default when API omits `boundary_margin_m` (legacy clients). */
+export const DEFAULT_SCENE_BOUNDARY_MARGIN_M = 0.3;
+
+export function sceneBoundaryMarginM(scene: SceneDetail | null | undefined): number {
+  const v = scene?.boundary_margin_m;
+  if (typeof v !== "number" || !Number.isFinite(v) || v < 0) {
+    return DEFAULT_SCENE_BOUNDARY_MARGIN_M;
+  }
+  return v;
+}
+
 export type SceneSummary = {
   id: string;
   name: string;
@@ -26,7 +37,25 @@ export type SceneDetail = {
   id: string;
   name: string;
   created_at: string;
+  /** REQ-034: symmetric padding (m) for faint boundary cuboid and GET …/dimensions margin_m. */
+  boundary_margin_m?: number;
   items: SceneItem[];
+};
+
+export type SceneDimensionsResponse = {
+  origin: { x: number; y: number; z: number };
+  size: { width: number; height: number; depth: number };
+  max: { x: number; y: number; z: number };
+  margin_m: number;
+};
+
+export type SceneLightFlatRow = {
+  scene_id: string;
+  model_id: string;
+  light_id: number;
+  sx: number;
+  sy: number;
+  sz: number;
 };
 
 export async function fetchScenes(): Promise<SceneSummary[]> {
@@ -37,12 +66,86 @@ export async function fetchScenes(): Promise<SceneSummary[]> {
   return res.json() as Promise<SceneSummary[]>;
 }
 
+export async function fetchSceneDimensions(
+  sceneId: string,
+): Promise<SceneDimensionsResponse> {
+  const res = await fetch(
+    `/api/v1/scenes/${encodeURIComponent(sceneId)}/dimensions`,
+    { cache: "no-store" },
+  );
+  if (!res.ok) {
+    throw new Error(`scene dimensions failed (${res.status})`);
+  }
+  return res.json() as Promise<SceneDimensionsResponse>;
+}
+
+export async function fetchSceneLightsFlat(
+  sceneId: string,
+): Promise<SceneLightFlatRow[]> {
+  const res = await fetch(
+    `/api/v1/scenes/${encodeURIComponent(sceneId)}/lights`,
+    { cache: "no-store" },
+  );
+  if (!res.ok) {
+    throw new Error(`scene lights list failed (${res.status})`);
+  }
+  return res.json() as Promise<SceneLightFlatRow[]>;
+}
+
+export async function patchSceneLightsStateBatch(
+  sceneId: string,
+  updates: {
+    model_id: string;
+    light_id: number;
+    on: boolean;
+    color: string;
+    brightness_pct: number;
+  }[],
+): Promise<void> {
+  const res = await fetch(
+    `/api/v1/scenes/${encodeURIComponent(sceneId)}/lights/state/batch`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ updates }),
+    },
+  );
+  if (!res.ok) {
+    const j = (await res.json().catch(() => null)) as {
+      error?: { message?: string };
+    };
+    throw new Error(
+      j?.error?.message ?? `scene batch update failed (${res.status})`,
+    );
+  }
+}
+
 export async function fetchScene(id: string): Promise<SceneDetail> {
   const res = await fetch(`/api/v1/scenes/${encodeURIComponent(id)}`, {
     cache: "no-store",
   });
   if (!res.ok) {
     throw new Error(`scene load failed (${res.status})`);
+  }
+  return res.json() as Promise<SceneDetail>;
+}
+
+export async function patchSceneBoundaryMargin(
+  sceneId: string,
+  boundaryMarginM: number,
+): Promise<SceneDetail> {
+  const res = await fetch(`/api/v1/scenes/${encodeURIComponent(sceneId)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ boundary_margin_m: boundaryMarginM }),
+  });
+  if (!res.ok) {
+    const j = (await res.json().catch(() => null)) as {
+      error?: { message?: string };
+    };
+    throw new Error(
+      j?.error?.message ?? `scene patch failed (${res.status})`,
+    );
   }
   return res.json() as Promise<SceneDetail>;
 }

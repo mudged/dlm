@@ -142,7 +142,7 @@ func TestStore_SeedDefaultPythonRoutines_idempotent(t *testing.T) {
 func TestStore_CreateRoutine_rejectsRandomColourType(t *testing.T) {
 	ctx := context.Background()
 	s := testDB(t)
-	_, err := s.CreateRoutine(ctx, "x", "", RoutineTypeRandomColourCycleAll, "")
+	_, err := s.CreateRoutine(ctx, "x", "", RoutineTypeRandomColourCycleAll, "", "")
 	if err == nil || !errors.Is(err, ErrRoutineUnknownType) {
 		t.Fatalf("want ErrRoutineUnknownType, got %v", err)
 	}

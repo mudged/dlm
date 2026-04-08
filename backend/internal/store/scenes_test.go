@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"math"
 	"testing"
 
 	"example.com/dlm/backend/internal/wiremodel"
@@ -95,7 +96,7 @@ func TestRoutinesCreateStartStopDelete(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r, err := s.CreateRoutine(ctx, "fx", "d", RoutineTypePythonSceneScript, "pass")
+	r, err := s.CreateRoutine(ctx, "fx", "d", RoutineTypePythonSceneScript, "pass", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -249,16 +250,18 @@ func TestScenes_SpatialQueriesAndDimensions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if dims.Origin.X != 0 || dims.Origin.Y != 0 || dims.Origin.Z != 0 {
+	// Default boundary_margin_m = 0.3 m (REQ-034). Padded AABB is unclamped at 0 so it matches
+	// the faint boundary wireframe and shape-animation bounds (min can be negative on Y/Z here).
+	if dims.Origin.X != 9.7 || dims.Origin.Y != -0.3 || dims.Origin.Z != -0.3 {
 		t.Fatalf("origin = %+v", dims.Origin)
 	}
-	if dims.Max.X != 13 || dims.Max.Y != 3 || dims.Max.Z != 3 {
+	if dims.Max.X != 12.3 || dims.Max.Y != 2.3 || dims.Max.Z != 2.3 {
 		t.Fatalf("max = %+v", dims.Max)
 	}
-	if dims.Size.Width != 13 || dims.Size.Height != 3 || dims.Size.Depth != 3 {
+	if math.Abs(dims.Size.Width-2.6) > 1e-9 || math.Abs(dims.Size.Height-2.6) > 1e-9 || math.Abs(dims.Size.Depth-2.6) > 1e-9 {
 		t.Fatalf("size = %+v", dims.Size)
 	}
-	if dims.MarginM != 1 {
+	if dims.MarginM != 0.3 {
 		t.Fatalf("margin_m = %v", dims.MarginM)
 	}
 

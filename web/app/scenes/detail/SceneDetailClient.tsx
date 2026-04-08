@@ -21,13 +21,19 @@ import {
   addSceneModel,
   deleteScene,
   fetchScene,
+  patchSceneBoundaryMargin,
   patchSceneModelOffsets,
   removeSceneModel,
+  sceneBoundaryMarginM,
   type SceneDetail,
 } from "@/lib/scenes";
+import { mergeSceneLightBatchIntoItems } from "@/lib/scenesMerge";
+import type { BatchLightUpdate } from "@/lib/shapeAnimationEngine";
 import { PythonRoutineHost } from "@/components/PythonRoutineHost";
+import { ShapeAnimationRoutineHost } from "@/components/ShapeAnimationRoutineHost";
 import {
   ROUTINE_TYPE_PYTHON_SCENE_SCRIPT,
+  ROUTINE_TYPE_SHAPE_ANIMATION,
   fetchRoutine,
   fetchRoutines,
   fetchSceneRoutineRuns,
@@ -57,6 +63,10 @@ export function SceneDetailClient() {
   const [selectedRoutineId, setSelectedRoutineId] = useState("");
   const [pythonSource, setPythonSource] = useState<string | null>(null);
   const [pythonRunnerErr, setPythonRunnerErr] = useState<string | null>(null);
+  const [shapeDefinitionJson, setShapeDefinitionJson] = useState<string | null>(null);
+  const [shapeRunnerErr, setShapeRunnerErr] = useState<string | null>(null);
+  const [boundaryMarginCmDraft, setBoundaryMarginCmDraft] = useState("30");
+  const boundaryMarginDraftInitRef = useRef<string | null>(null);
 
   const load = useCallback(async () => {
     if (!id) {
@@ -84,9 +94,44 @@ export function SceneDetailClient() {
     }
   }, [id]);
 
+  const onShapeLightsPreview = useCallback(
+    (updates: BatchLightUpdate[]) => {
+      if (updates.length === 0 || !id) {
+        return;
+      }
+      setScene((prev) => {
+        if (!prev || prev.id !== id) {
+          return prev;
+        }
+        return {
+          ...prev,
+          items: mergeSceneLightBatchIntoItems(prev.items, updates),
+        };
+      });
+    },
+    [id],
+  );
+
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    boundaryMarginDraftInitRef.current = null;
+  }, [id]);
+
+  useEffect(() => {
+    if (!scene || !id || scene.id !== id) {
+      return;
+    }
+    if (boundaryMarginDraftInitRef.current === scene.id) {
+      return;
+    }
+    setBoundaryMarginCmDraft(
+      String(Math.round(sceneBoundaryMarginM(scene) * 100)),
+    );
+    boundaryMarginDraftInitRef.current = scene.id;
+  }, [scene, id]);
 
   // REQ-029: push-style refresh when scene light state changes externally (complements polling while routines run).
   const sceneSSESkipFirst = useRef(true);
@@ -120,10 +165,14 @@ export function SceneDetailClient() {
     const t = window.setInterval(() => {
       void (async () => {
         try {
-          const s = await fetchScene(id);
-          setScene(s);
           const runs = await fetchSceneRoutineRuns(id);
           setRoutineRuns(runs);
+          const shapeActive =
+            runs[0]?.routine_type === ROUTINE_TYPE_SHAPE_ANIMATION;
+          if (!shapeActive) {
+            const s = await fetchScene(id);
+            setScene(s);
+          }
         } catch {
           /* ignore poll errors */
         }
@@ -135,7 +184,10 @@ export function SceneDetailClient() {
   const firstRun = routineRuns[0];
   const isPythonRun =
     firstRun?.routine_type === ROUTINE_TYPE_PYTHON_SCENE_SCRIPT;
+  const isShapeRun =
+    firstRun?.routine_type === ROUTINE_TYPE_SHAPE_ANIMATION;
   const pythonRoutineId = firstRun?.routine_id;
+  const shapeRoutineId = firstRun?.routine_id;
 
   useEffect(() => {
     if (!pythonRoutineId || !isPythonRun) {
@@ -163,6 +215,37 @@ export function SceneDetailClient() {
       cancelled = true;
     };
   }, [pythonRoutineId, isPythonRun]);
+
+  useEffect(() => {
+    if (!shapeRoutineId || !isShapeRun) {
+      setShapeDefinitionJson(null);
+      setShapeRunnerErr(null);
+      return;
+    }
+    let cancelled = false;
+    setShapeRunnerErr(null);
+    void fetchRoutine(shapeRoutineId)
+      .then((r) => {
+        if (!cancelled) {
+          try {
+            setShapeDefinitionJson(JSON.stringify(r.definition_json ?? {}));
+          } catch {
+            setShapeDefinitionJson("{}");
+          }
+        }
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setShapeDefinitionJson(null);
+          setShapeRunnerErr(
+            e instanceof Error ? e.message : "Could not load shape routine",
+          );
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [shapeRoutineId, isShapeRun]);
 
   const inSceneIds = useMemo(() => {
     if (!scene) {
@@ -239,6 +322,31 @@ export function SceneDetailClient() {
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Update failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onApplyBoundaryMargin() {
+    if (!id || !scene) {
+      return;
+    }
+    const cm = Number(boundaryMarginCmDraft);
+    if (!Number.isFinite(cm) || cm < 0 || cm > 1000) {
+      setError("Boundary padding must be a number from 0 to 1000 cm");
+      return;
+    }
+    const m = cm / 100;
+    setBusy(true);
+    setError(null);
+    try {
+      const updated = await patchSceneBoundaryMargin(id, m);
+      setScene(updated);
+      setBoundaryMarginCmDraft(String(Math.round(m * 100)));
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : "Could not update boundary padding",
+      );
     } finally {
       setBusy(false);
     }
@@ -357,6 +465,9 @@ export function SceneDetailClient() {
                 {isPythonRun ? (
                   <span className="ml-2 text-xs text-slate-500">(script)</span>
                 ) : null}
+                {isShapeRun ? (
+                  <span className="ml-2 text-xs text-slate-500">(shapes)</span>
+                ) : null}
               </p>
               <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                 {isPythonRun ? (
@@ -368,6 +479,21 @@ export function SceneDetailClient() {
                     onClick={() =>
                       router.push(
                         `/routines/python?id=${encodeURIComponent(routineRuns[0].routine_id)}&scene=${encodeURIComponent(id)}`,
+                      )
+                    }
+                  >
+                    Edit routine
+                  </Button>
+                ) : null}
+                {isShapeRun ? (
+                  <Button
+                    type="button"
+                    icon={faPenToSquare}
+                    className="min-h-11 w-full sm:w-auto"
+                    disabled={busy}
+                    onClick={() =>
+                      router.push(
+                        `/routines/shape?id=${encodeURIComponent(routineRuns[0].routine_id)}&scene=${encodeURIComponent(id)}`,
                       )
                     }
                   >
@@ -401,6 +527,30 @@ export function SceneDetailClient() {
                     sceneId={id}
                     source={pythonSource}
                     onWorkerMessage={(m) => setPythonRunnerErr(m)}
+                  />
+                )}
+              </div>
+            ) : null}
+            {isShapeRun && firstRun && id ? (
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-600 dark:bg-slate-950/50">
+                {shapeRunnerErr ? (
+                  <p className="mb-2 text-xs text-red-600 dark:text-red-400">
+                    {shapeRunnerErr}
+                  </p>
+                ) : null}
+                {shapeDefinitionJson === null ? (
+                  <p className="text-xs text-slate-600 dark:text-slate-400">
+                    Loading shape definition…
+                  </p>
+                ) : (
+                  <ShapeAnimationRoutineHost
+                    sceneId={id}
+                    runId={firstRun.id}
+                    definitionJson={shapeDefinitionJson}
+                    onSceneRefresh={() => void load()}
+                    onLightsPreview={onShapeLightsPreview}
+                    onError={(m) => setShapeRunnerErr(m)}
+                    onStopped={() => void load()}
                   />
                 )}
               </div>
@@ -460,11 +610,37 @@ export function SceneDetailClient() {
             Reset camera
           </Button>
         </div>
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="flex flex-col gap-1 text-xs text-slate-600 dark:text-slate-400">
+            <span>Scene boundary padding (cm)</span>
+            <input
+              type="number"
+              min={0}
+              max={1000}
+              step={1}
+              className="h-9 w-24 rounded-md border border-slate-300 bg-white px-2 text-sm text-slate-900 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
+              value={boundaryMarginCmDraft}
+              onChange={(e) => setBoundaryMarginCmDraft(e.target.value)}
+              disabled={busy}
+              aria-label="Scene boundary padding in centimeters"
+            />
+          </label>
+          <Button
+            type="button"
+            icon={faCheck}
+            className="h-9"
+            disabled={busy}
+            onClick={() => void onApplyBoundaryMargin()}
+          >
+            Apply padding
+          </Button>
+        </div>
         <p className="text-xs text-slate-500 dark:text-slate-400">
           Drag to rotate; scroll or pinch to zoom. Tap a light to pin details.
         </p>
         <SceneLightsCanvas
           items={scene.items}
+          boundaryMarginM={sceneBoundaryMarginM(scene)}
           cameraPersistenceKey={scene.id}
           cameraResetVersion={cameraResetVersion}
         />

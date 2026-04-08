@@ -14,7 +14,12 @@ import (
 )
 
 const sceneCoordEps = 1e-9
-const sceneBoundsMarginM = 1.0
+
+// DefaultSceneBoundaryMarginM is REQ-034 / REQ-015 default padding (30 cm).
+const DefaultSceneBoundaryMarginM = 0.3
+
+// MaxSceneBoundaryMarginM caps user-editable scene boundary padding (architecture §3.13).
+const MaxSceneBoundaryMarginM = 10.0
 
 // ErrSceneNotFound is returned when a scene id does not exist.
 var ErrSceneNotFound = errors.New("scene not found")
@@ -88,10 +93,11 @@ type SceneItemDetail struct {
 
 // SceneDetail is the full GET /scenes/{id} payload.
 type SceneDetail struct {
-	ID        string            `json:"id"`
-	Name      string            `json:"name"`
-	CreatedAt time.Time         `json:"created_at"`
-	Items     []SceneItemDetail `json:"items"`
+	ID                 string            `json:"id"`
+	Name               string            `json:"name"`
+	CreatedAt          time.Time         `json:"created_at"`
+	BoundaryMarginM    float64           `json:"boundary_margin_m"`
+	Items              []SceneItemDetail `json:"items"`
 }
 
 // ScenePoint is a point in scene space.
@@ -631,7 +637,9 @@ func (s *Store) CreateScene(ctx context.Context, name string, modelIDs []string)
 
 	id := uuid.NewString()
 	created := time.Now().UTC().Format(time.RFC3339Nano)
-	if _, err := tx.ExecContext(ctx, `INSERT INTO scenes (id, name, created_at) VALUES (?, ?, ?)`, id, name, created); err != nil {
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO scenes (id, name, created_at, boundary_margin_m) VALUES (?, ?, ?, ?)
+	`, id, name, created, DefaultSceneBoundaryMarginM); err != nil {
 		if isUniqueConstraint(err) {
 			return nil, ErrDuplicateSceneName
 		}
@@ -707,12 +715,57 @@ func (s *Store) ListModelIDsInScene(ctx context.Context, sceneID string) ([]stri
 	return out, rows.Err()
 }
 
+func scanSceneBoundaryMarginM(ns sql.NullFloat64) float64 {
+	if !ns.Valid || math.IsNaN(ns.Float64) || math.IsInf(ns.Float64, 0) || ns.Float64 < 0 {
+		return DefaultSceneBoundaryMarginM
+	}
+	return ns.Float64
+}
+
+func (s *Store) getSceneBoundaryMarginM(ctx context.Context, sceneID string) (float64, error) {
+	row := s.db.QueryRowContext(ctx, `SELECT boundary_margin_m FROM scenes WHERE id = ?`, sceneID)
+	var ns sql.NullFloat64
+	if err := row.Scan(&ns); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, ErrSceneNotFound
+		}
+		return 0, err
+	}
+	return scanSceneBoundaryMarginM(ns), nil
+}
+
+// PatchSceneBoundaryMarginM updates REQ-034 scene padding (SI meters).
+func (s *Store) PatchSceneBoundaryMarginM(ctx context.Context, sceneID string, marginM float64) error {
+	if math.IsNaN(marginM) || math.IsInf(marginM, 0) {
+		return fmt.Errorf("boundary_margin_m must be a finite number")
+	}
+	if marginM < 0 {
+		return fmt.Errorf("boundary_margin_m must be >= 0")
+	}
+	if marginM > MaxSceneBoundaryMarginM {
+		return fmt.Errorf("boundary_margin_m must be <= %g", MaxSceneBoundaryMarginM)
+	}
+	res, err := s.db.ExecContext(ctx, `UPDATE scenes SET boundary_margin_m = ? WHERE id = ?`, marginM, sceneID)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrSceneNotFound
+	}
+	return nil
+}
+
 // GetScene returns scene metadata and all models with scene-space lights.
 func (s *Store) GetScene(ctx context.Context, sceneID string) (*SceneDetail, error) {
-	row := s.db.QueryRowContext(ctx, `SELECT id, name, created_at FROM scenes WHERE id = ?`, sceneID)
+	row := s.db.QueryRowContext(ctx, `SELECT id, name, created_at, boundary_margin_m FROM scenes WHERE id = ?`, sceneID)
 	var d SceneDetail
 	var created string
-	if err := row.Scan(&d.ID, &d.Name, &created); err != nil {
+	var bm sql.NullFloat64
+	if err := row.Scan(&d.ID, &d.Name, &created, &bm); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrSceneNotFound
 		}
@@ -726,6 +779,7 @@ func (s *Store) GetScene(ctx context.Context, sceneID string) (*SceneDetail, err
 		}
 	}
 	d.CreatedAt = t.UTC()
+	d.BoundaryMarginM = scanSceneBoundaryMarginM(bm)
 
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT sm.model_id, sm.offset_x, sm.offset_y, sm.offset_z, m.name
@@ -953,13 +1007,38 @@ func (s *Store) RemoveSceneModel(ctx context.Context, sceneID, modelID string) e
 }
 
 // GetSceneDimensions returns scene-space dimensions used for region queries.
+// Extents are the axis-aligned bounding box of all lights in scene space (sx,sy,sz),
+// expanded by the scene's boundary_margin_m on each axis (REQ-034, REQ-033 motion).
 func (s *Store) GetSceneDimensions(ctx context.Context, sceneID string) (*SceneDimensions, error) {
+	marginM, err := s.getSceneBoundaryMarginM(ctx, sceneID)
+	if err != nil {
+		return nil, err
+	}
 	lights, err := s.listSceneLightsTx(ctx, nil, sceneID)
 	if err != nil {
 		return nil, err
 	}
-	var mx, my, mz float64
-	for _, L := range lights {
+	if len(lights) == 0 {
+		m := marginM
+		return &SceneDimensions{
+			Origin:  ScenePoint{X: 0, Y: 0, Z: 0},
+			Size:    SceneDimensionsSize{Width: m, Height: m, Depth: m},
+			Max:     ScenePoint{X: m, Y: m, Z: m},
+			MarginM: marginM,
+		}, nil
+	}
+	mnX, mnY, mnZ := lights[0].Sx, lights[0].Sy, lights[0].Sz
+	mx, my, mz := mnX, mnY, mnZ
+	for _, L := range lights[1:] {
+		if L.Sx < mnX {
+			mnX = L.Sx
+		}
+		if L.Sy < mnY {
+			mnY = L.Sy
+		}
+		if L.Sz < mnZ {
+			mnZ = L.Sz
+		}
 		if L.Sx > mx {
 			mx = L.Sx
 		}
@@ -970,14 +1049,23 @@ func (s *Store) GetSceneDimensions(ctx context.Context, sceneID string) (*SceneD
 			mz = L.Sz
 		}
 	}
-	maxX := mx + sceneBoundsMarginM
-	maxY := my + sceneBoundsMarginM
-	maxZ := mz + sceneBoundsMarginM
+	// Unclamped padded AABB: must match REQ-034 faint boundary cuboid and shape-animation
+	// physics (SceneLightsCanvas uses min(sx,sy,sz)−m with no floor at 0).
+	minX := mnX - marginM
+	minY := mnY - marginM
+	minZ := mnZ - marginM
+	maxX := mx + marginM
+	maxY := my + marginM
+	maxZ := mz + marginM
 	return &SceneDimensions{
-		Origin:  ScenePoint{X: 0, Y: 0, Z: 0},
-		Size:    SceneDimensionsSize{Width: maxX, Height: maxY, Depth: maxZ},
+		Origin: ScenePoint{X: minX, Y: minY, Z: minZ},
+		Size: SceneDimensionsSize{
+			Width:  maxX - minX,
+			Height: maxY - minY,
+			Depth:  maxZ - minZ,
+		},
 		Max:     ScenePoint{X: maxX, Y: maxY, Z: maxZ},
-		MarginM: sceneBoundsMarginM,
+		MarginM: marginM,
 	}, nil
 }
 

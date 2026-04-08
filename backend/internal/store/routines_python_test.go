@@ -12,7 +12,7 @@ func TestRoutines_PythonCreatePatchList(t *testing.T) {
 	ctx := context.Background()
 	s := testDB(t)
 
-	r, err := s.CreateRoutine(ctx, "py1", "desc", RoutineTypePythonSceneScript, "print(1)")
+	r, err := s.CreateRoutine(ctx, "py1", "desc", RoutineTypePythonSceneScript, "print(1)", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -30,12 +30,12 @@ func TestRoutines_PythonCreatePatchList(t *testing.T) {
 		t.Fatalf("get %+v err %v", got, err)
 	}
 
-	updated, err := s.PatchRoutine(ctx, r.ID, nil, nil, ptr("x = 1"))
+	updated, err := s.PatchRoutine(ctx, r.ID, nil, nil, ptr("x = 1"), nil)
 	if err != nil || updated.PythonSource != "x = 1" {
 		t.Fatalf("patch %+v err %v", updated, err)
 	}
 
-	if _, err := s.PatchRoutine(ctx, r.ID, ptr("py1b"), nil, nil); err != nil {
+	if _, err := s.PatchRoutine(ctx, r.ID, ptr("py1b"), nil, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -52,7 +52,7 @@ func TestRoutines_PythonPatchBlockedWhenRunning(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r, err := s.CreateRoutine(ctx, "py", "", RoutineTypePythonSceneScript, "pass")
+	r, err := s.CreateRoutine(ctx, "py", "", RoutineTypePythonSceneScript, "pass", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,13 +60,13 @@ func TestRoutines_PythonPatchBlockedWhenRunning(t *testing.T) {
 	if err != nil || already || runID == "" {
 		t.Fatalf("start %v %v %v", runID, already, err)
 	}
-	if _, err := s.PatchRoutine(ctx, r.ID, nil, nil, ptr("y=2")); err != ErrRoutineRunActive {
+	if _, err := s.PatchRoutine(ctx, r.ID, nil, nil, ptr("y=2"), nil); err != ErrRoutineRunActive {
 		t.Fatalf("want ErrRoutineRunActive, got %v", err)
 	}
 	if err := s.StopRoutineRun(ctx, sc.ID, runID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.PatchRoutine(ctx, r.ID, nil, nil, ptr("y=2")); err != nil {
+	if _, err := s.PatchRoutine(ctx, r.ID, nil, nil, ptr("y=2"), nil); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -81,8 +81,28 @@ func TestRoutines_PatchNonPythonNotEditable(t *testing.T) {
 	`, id, "legacy", "", RoutineTypeRandomColourCycleAll, "", created); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.PatchRoutine(ctx, id, nil, nil, ptr("x")); err != ErrRoutineNotEditable {
+	if _, err := s.PatchRoutine(ctx, id, nil, nil, ptr("x"), nil); err != ErrRoutineNotEditable {
 		t.Fatalf("got %v", err)
+	}
+}
+
+func TestRoutines_ShapeAnimationCreatePatch(t *testing.T) {
+	ctx := context.Background()
+	s := testDB(t)
+	def := `{"version":1,"background":{"mode":"lights_on","color":"#112233","brightness_pct":50},"shapes":[{"kind":"sphere","size":{"mode":"fixed","radius_m":0.1},"color":{"mode":"fixed","color":"#ff0000"},"brightness_pct":100,"placement":{"mode":"fixed","center_m":{"x":1,"y":1,"z":1}},"motion":{"direction":{"dx":1,"dy":0,"dz":0},"speed":{"mode":"fixed","m_s":0.05}},"edge_behavior":"wrap"}]}`
+	r, err := s.CreateRoutine(ctx, "sh1", "d", RoutineTypeShapeAnimation, "", def)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Type != RoutineTypeShapeAnimation || r.PythonSource != "" {
+		t.Fatalf("routine %+v", r)
+	}
+	if len(r.DefinitionJSON) == 0 {
+		t.Fatal("expected definition_json")
+	}
+	updated, err := s.PatchRoutine(ctx, r.ID, ptr("sh1b"), nil, nil, ptr(def))
+	if err != nil || updated.Name != "sh1b" {
+		t.Fatalf("patch %+v err %v", updated, err)
 	}
 }
 
