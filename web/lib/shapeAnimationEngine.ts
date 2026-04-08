@@ -98,7 +98,8 @@ export type ShapeAnimationSim = {
   shapes: SimShape[];
 };
 
-const DT = 1 / 20;
+/** Physics step (s). 60 Hz for smoother motion than 20 Hz; architecture default tick. */
+const DT = 1 / 60;
 
 export function makeRng(seed: number): RNG {
   let s = seed >>> 0;

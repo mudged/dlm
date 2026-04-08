@@ -159,6 +159,11 @@ type SavedOrbit = {
 };
 
 const GHOST_OPACITY = 0.32;
+const GHOST_LERP_PER_S = 22;
+
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
 
 function hexToThreeColor(hex: string): THREE.Color {
   const c = new THREE.Color();
@@ -517,62 +522,135 @@ export default function SceneLightsCanvas({
 
     const ghostGroup = new THREE.Group();
     scene.add(ghostGroup);
-    let lastGhostKey = "";
+    type GhostInterp = {
+      cx: number;
+      cy: number;
+      cz: number;
+      radius: number;
+      w: number;
+      h: number;
+      d: number;
+      kind: "sphere" | "cuboid";
+    };
+    const ghostInterp: GhostInterp[] = [];
+    const ghostMeshes: THREE.Mesh[] = [];
+    let lastGhostFrame = performance.now();
+
+    function popGhostMesh() {
+      const mesh = ghostMeshes.pop();
+      ghostInterp.pop();
+      if (!mesh) {
+        return;
+      }
+      ghostGroup.remove(mesh);
+      mesh.geometry.dispose();
+      (mesh.material as THREE.Material).dispose();
+    }
+
+    function pushGhostMesh(g: GhostShapeOverlay) {
+      const col = hexToThreeColor(g.color);
+      const mat = new THREE.MeshBasicMaterial({
+        color: col,
+        transparent: true,
+        opacity: GHOST_OPACITY,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      });
+      const tcx = g.kind === "sphere" ? g.px : g.px + g.w / 2;
+      const tcy = g.kind === "sphere" ? g.py : g.py + g.h / 2;
+      const tcz = g.kind === "sphere" ? g.pz : g.pz + g.d / 2;
+      const tr = Math.max(g.radius, 1e-6);
+      const tw = Math.max(g.w, 1e-6);
+      const th = Math.max(g.h, 1e-6);
+      const td = Math.max(g.d, 1e-6);
+      let mesh: THREE.Mesh;
+      if (g.kind === "sphere") {
+        const geo = new THREE.SphereGeometry(1, 24, 18);
+        mesh = new THREE.Mesh(geo, mat);
+        mesh.userData = { kind: "sphere" as const };
+        mesh.scale.setScalar(tr);
+      } else {
+        const geo = new THREE.BoxGeometry(1, 1, 1);
+        mesh = new THREE.Mesh(geo, mat);
+        mesh.userData = { kind: "cuboid" as const };
+        mesh.scale.set(tw, th, td);
+      }
+      mesh.position.set(tcx, tcy, tcz);
+      mesh.renderOrder = 2;
+      ghostGroup.add(mesh);
+      ghostMeshes.push(mesh);
+      ghostInterp.push({
+        cx: tcx,
+        cy: tcy,
+        cz: tcz,
+        radius: tr,
+        w: tw,
+        h: th,
+        d: td,
+        kind: g.kind,
+      });
+    }
 
     function syncShapeGhosts() {
       if (!shapeGhostsSourceRef) {
-        if (ghostGroup.children.length > 0) {
-          while (ghostGroup.children.length > 0) {
-            const ch = ghostGroup.children[0]!;
-            ghostGroup.remove(ch);
-            if (ch instanceof THREE.Mesh) {
-              ch.geometry.dispose();
-              (ch.material as THREE.Material).dispose();
-            }
-          }
+        while (ghostMeshes.length > 0) {
+          popGhostMesh();
         }
-        lastGhostKey = "";
         return;
       }
       const list = shapeGhostsSourceRef.current ?? [];
-      const key = JSON.stringify(list);
-      if (key === lastGhostKey) {
-        return;
+
+      while (ghostMeshes.length > list.length) {
+        popGhostMesh();
       }
-      lastGhostKey = key;
-      while (ghostGroup.children.length > 0) {
-        const ch = ghostGroup.children[0]!;
-        ghostGroup.remove(ch);
-        if (ch instanceof THREE.Mesh) {
-          ch.geometry.dispose();
-          (ch.material as THREE.Material).dispose();
+
+      for (let i = 0; i < list.length; i++) {
+        const g = list[i]!;
+        const ex = ghostMeshes[i];
+        const kindOk =
+          ex && (ex.userData as { kind?: string }).kind === g.kind;
+        if (!kindOk) {
+          while (ghostMeshes.length > i) {
+            popGhostMesh();
+          }
+          for (let j = i; j < list.length; j++) {
+            pushGhostMesh(list[j]!);
+          }
+          break;
         }
       }
-      for (const g of list) {
-        const col = hexToThreeColor(g.color);
-        const mat = new THREE.MeshBasicMaterial({
-          color: col,
-          transparent: true,
-          opacity: GHOST_OPACITY,
-          depthWrite: false,
-          side: THREE.DoubleSide,
-        });
+
+      const now = performance.now();
+      const dt = Math.min(0.08, Math.max(0, (now - lastGhostFrame) / 1000));
+      lastGhostFrame = now;
+      const k = 1 - Math.exp(-GHOST_LERP_PER_S * dt);
+
+      for (let i = 0; i < list.length; i++) {
+        const g = list[i]!;
+        const tcx = g.kind === "sphere" ? g.px : g.px + g.w / 2;
+        const tcy = g.kind === "sphere" ? g.py : g.py + g.h / 2;
+        const tcz = g.kind === "sphere" ? g.pz : g.pz + g.d / 2;
+        const tr = Math.max(g.radius, 1e-6);
+        const tw = Math.max(g.w, 1e-6);
+        const th = Math.max(g.h, 1e-6);
+        const td = Math.max(g.d, 1e-6);
+
+        const interp = ghostInterp[i]!;
+        interp.cx = lerp(interp.cx, tcx, k);
+        interp.cy = lerp(interp.cy, tcy, k);
+        interp.cz = lerp(interp.cz, tcz, k);
+        interp.radius = lerp(interp.radius, tr, k);
+        interp.w = lerp(interp.w, tw, k);
+        interp.h = lerp(interp.h, th, k);
+        interp.d = lerp(interp.d, td, k);
+
+        const m = ghostMeshes[i]!;
+        m.position.set(interp.cx, interp.cy, interp.cz);
+        (m.material as THREE.MeshBasicMaterial).color.copy(hexToThreeColor(g.color));
         if (g.kind === "sphere") {
-          const geo = new THREE.SphereGeometry(Math.max(g.radius, 1e-6), 24, 18);
-          const mesh = new THREE.Mesh(geo, mat);
-          mesh.position.set(g.px, g.py, g.pz);
-          mesh.renderOrder = 2;
-          ghostGroup.add(mesh);
+          m.scale.setScalar(interp.radius);
         } else {
-          const geo = new THREE.BoxGeometry(
-            Math.max(g.w, 1e-6),
-            Math.max(g.h, 1e-6),
-            Math.max(g.d, 1e-6),
-          );
-          const mesh = new THREE.Mesh(geo, mat);
-          mesh.position.set(g.px + g.w / 2, g.py + g.h / 2, g.pz + g.d / 2);
-          mesh.renderOrder = 2;
-          ghostGroup.add(mesh);
+          m.scale.set(interp.w, interp.h, interp.d);
         }
       }
     }
@@ -633,13 +711,8 @@ export default function SceneLightsCanvas({
         (lineSegments.material as THREE.Material).dispose();
       }
       disposeGrid();
-      while (ghostGroup.children.length > 0) {
-        const ch = ghostGroup.children[0]!;
-        ghostGroup.remove(ch);
-        if (ch instanceof THREE.Mesh) {
-          ch.geometry.dispose();
-          (ch.material as THREE.Material).dispose();
-        }
+      while (ghostMeshes.length > 0) {
+        popGhostMesh();
       }
       scene.remove(ghostGroup);
       renderer.dispose();

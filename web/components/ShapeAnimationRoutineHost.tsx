@@ -7,6 +7,7 @@ import {
   initShapeAnimationSim,
   makeRng,
   tickShapeAnimationSim,
+  type BatchLightUpdate,
   type SceneDimensions,
   type SceneLightFlat,
   type ShapeAnimationSim,
@@ -30,6 +31,13 @@ export function ShapeAnimationRoutineHost(props: {
   onStopped?: () => void;
   /** Called after each physics tick with current sim (e.g. editor ghost overlays). */
   onSimTick?: (sim: ShapeAnimationSim) => void;
+  /**
+   * Called synchronously each tick with the same updates sent to the API so parents
+   * can merge into local scene state for smooth 3D updates without waiting for refetch.
+   */
+  onLightsPreview?: (updates: BatchLightUpdate[]) => void;
+  /** Only refetch full scene from API every N ticks (reduces jank). Default 3. */
+  sceneRefreshStride?: number;
 }) {
   const {
     sceneId,
@@ -39,6 +47,8 @@ export function ShapeAnimationRoutineHost(props: {
     onError,
     onStopped,
     onSimTick,
+    onLightsPreview,
+    sceneRefreshStride = 3,
   } = props;
   const stoppedRef = useRef(false);
 
@@ -67,6 +77,8 @@ export function ShapeAnimationRoutineHost(props: {
       }
 
       const tickMs = Math.round(SHAPE_ANIMATION_DT_SEC * 1000);
+      let tickCount = 0;
+      let lightsCache: SceneLightFlat[] | null = null;
 
       const runTick = () => {
         if (stoppedRef.current) {
@@ -76,12 +88,19 @@ export function ShapeAnimationRoutineHost(props: {
           try {
             const { allShapesStopped } = tickShapeAnimationSim(sim, dims, rng);
             onSimTick?.(sim);
-            const lights = (await fetchSceneLightsFlat(sceneId)) as SceneLightFlat[];
-            const updates = buildBatchUpdatesFromSim(sim, lights);
+            tickCount += 1;
+            const needFetch = lightsCache === null || tickCount % sceneRefreshStride === 0;
+            if (needFetch) {
+              lightsCache = (await fetchSceneLightsFlat(sceneId)) as SceneLightFlat[];
+            }
+            const updates = buildBatchUpdatesFromSim(sim, lightsCache!);
+            onLightsPreview?.(updates);
             if (updates.length > 0) {
               await patchSceneLightsStateBatch(sceneId, updates);
             }
-            onSceneRefresh?.();
+            if (tickCount % sceneRefreshStride === 0) {
+              onSceneRefresh?.();
+            }
             if (allShapesStopped) {
               stoppedRef.current = true;
               if (timer) {
@@ -112,7 +131,17 @@ export function ShapeAnimationRoutineHost(props: {
         clearInterval(timer);
       }
     };
-  }, [sceneId, runId, definitionJson, onSceneRefresh, onError, onStopped, onSimTick]);
+  }, [
+    sceneId,
+    runId,
+    definitionJson,
+    onSceneRefresh,
+    onError,
+    onStopped,
+    onSimTick,
+    onLightsPreview,
+    sceneRefreshStride,
+  ]);
 
   return (
     <p className="text-xs text-emerald-800 dark:text-emerald-200">

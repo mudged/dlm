@@ -25,10 +25,81 @@ type Props = {
   disabled?: boolean;
 };
 
-const inputCls =
-  "min-h-9 rounded border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-900";
+/** Valid #rrggbb for <input type="color"> (fallback if hex invalid). */
+function colorPickerValue(hex: string): string {
+  const t = hex.trim();
+  if (/^#[0-9A-Fa-f]{6}$/.test(t)) {
+    return t.toLowerCase();
+  }
+  if (/^[0-9A-Fa-f]{6}$/.test(t)) {
+    return `#${t.toLowerCase()}`;
+  }
+  return "#888888";
+}
+
 const labelCls = "text-slate-600 dark:text-slate-400";
-const selectCls = `${inputCls} w-full`;
+const selectCls =
+  "min-h-9 w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-900";
+
+function ColorField(props: {
+  label: string;
+  value: string;
+  onChange: (hex: string) => void;
+  disabled?: boolean;
+}) {
+  const { label, value, onChange, disabled } = props;
+  const pickerVal = colorPickerValue(value);
+  return (
+    <div className="flex flex-col gap-1 text-xs">
+      <span className={labelCls}>{label}</span>
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          type="color"
+          aria-label={`${label} picker`}
+          disabled={disabled}
+          value={pickerVal}
+          onChange={(e) => onChange(e.target.value)}
+          className="h-9 w-14 cursor-pointer rounded border border-slate-300 bg-white p-0.5 dark:border-slate-600"
+        />
+        <input
+          type="text"
+          spellCheck={false}
+          disabled={disabled}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          maxLength={7}
+          className="h-9 w-[5.5rem] rounded border border-slate-300 bg-white px-1.5 font-mono text-sm dark:border-slate-600 dark:bg-slate-900"
+        />
+      </div>
+    </div>
+  );
+}
+
+function BrightnessField(props: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <label className="flex flex-col gap-1 text-xs">
+      <span className={labelCls}>{props.label}</span>
+      <input
+        type="number"
+        inputMode="numeric"
+        min={0}
+        max={100}
+        step={1}
+        size={3}
+        maxLength={3}
+        disabled={props.disabled}
+        value={props.value}
+        onChange={(e) => props.onChange(e.target.value)}
+        className="h-9 w-[3.25rem] rounded border border-slate-300 bg-white px-1 text-center text-sm tabular-nums dark:border-slate-600 dark:bg-slate-900"
+      />
+    </label>
+  );
+}
 
 export function ShapeRoutineDefinitionForm({ state, onChange, disabled }: Props) {
   function setShapes(shapes: ShapeFormRow[]) {
@@ -46,8 +117,8 @@ export function ShapeRoutineDefinitionForm({ state, onChange, disabled }: Props)
         <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-300">
           Background
         </h3>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <label className="flex flex-col gap-1 text-xs">
+        <div className="mt-3 flex flex-wrap gap-4">
+          <label className="flex min-w-[12rem] flex-col gap-1 text-xs">
             <span className={labelCls}>Mode</span>
             <select
               className={selectCls}
@@ -66,29 +137,18 @@ export function ShapeRoutineDefinitionForm({ state, onChange, disabled }: Props)
           </label>
           {state.backgroundMode === "lights_on" ? (
             <>
-              <label className="flex flex-col gap-1 text-xs">
-                <span className={labelCls}>Colour (hex)</span>
-                <input
-                  className={inputCls}
-                  disabled={disabled}
-                  value={state.backgroundColor}
-                  onChange={(e) => onChange({ ...state, backgroundColor: e.target.value })}
-                />
-              </label>
-              <label className="flex flex-col gap-1 text-xs">
-                <span className={labelCls}>Brightness (%)</span>
-                <input
-                  type="number"
-                  min={0}
-                  max={100}
-                  className={inputCls}
-                  disabled={disabled}
-                  value={state.backgroundBrightness_pct}
-                  onChange={(e) =>
-                    onChange({ ...state, backgroundBrightness_pct: e.target.value })
-                  }
-                />
-              </label>
+              <ColorField
+                label="Background colour"
+                value={state.backgroundColor}
+                disabled={disabled}
+                onChange={(hex) => onChange({ ...state, backgroundColor: hex })}
+              />
+              <BrightnessField
+                label="Brightness (%)"
+                value={state.backgroundBrightness_pct}
+                disabled={disabled}
+                onChange={(v) => onChange({ ...state, backgroundBrightness_pct: v })}
+              />
             </>
           ) : null}
         </div>
@@ -129,8 +189,8 @@ export function ShapeRoutineDefinitionForm({ state, onChange, disabled }: Props)
             </Button>
           </div>
 
-          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <label className="flex flex-col gap-1 text-xs">
+          <div className="mt-3 flex flex-wrap gap-3">
+            <label className="flex min-w-[8rem] flex-col gap-1 text-xs">
               <span className={labelCls}>Kind</span>
               <select
                 className={selectCls}
@@ -144,7 +204,7 @@ export function ShapeRoutineDefinitionForm({ state, onChange, disabled }: Props)
                 <option value="cuboid">Cuboid</option>
               </select>
             </label>
-            <label className="flex flex-col gap-1 text-xs">
+            <label className="flex min-w-[10rem] flex-col gap-1 text-xs">
               <span className={labelCls}>Size mode</span>
               <select
                 className={selectCls}
@@ -160,7 +220,7 @@ export function ShapeRoutineDefinitionForm({ state, onChange, disabled }: Props)
                 <option value="random_uniform">Random (uniform)</option>
               </select>
             </label>
-            <label className="flex flex-col gap-1 text-xs">
+            <label className="flex min-w-[8rem] flex-col gap-1 text-xs">
               <span className={labelCls}>Colour</span>
               <select
                 className={selectCls}
@@ -174,95 +234,90 @@ export function ShapeRoutineDefinitionForm({ state, onChange, disabled }: Props)
                 <option value="random">Random</option>
               </select>
             </label>
-            <label className="flex flex-col gap-1 text-xs">
-              <span className={labelCls}>Brightness (%)</span>
-              <input
-                type="number"
-                min={0}
-                max={100}
-                className={inputCls}
-                disabled={disabled}
-                value={row.brightness_pct}
-                onChange={(e) => updateRow(i, { brightness_pct: e.target.value })}
-              />
-            </label>
+            <BrightnessField
+              label="Brightness (%)"
+              value={row.brightness_pct}
+              disabled={disabled}
+              onChange={(v) => updateRow(i, { brightness_pct: v })}
+            />
           </div>
 
           {row.colorMode === "fixed" ? (
-            <label className="mt-3 flex max-w-xs flex-col gap-1 text-xs">
-              <span className={labelCls}>Shape colour (hex)</span>
-              <input
-                className={inputCls}
-                disabled={disabled}
+            <div className="mt-3">
+              <ColorField
+                label="Shape colour"
                 value={row.color}
-                onChange={(e) => updateRow(i, { color: e.target.value })}
+                disabled={disabled}
+                onChange={(hex) => updateRow(i, { color: hex })}
               />
-            </label>
+            </div>
           ) : null}
 
-          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mt-3 flex flex-wrap gap-3">
             {row.kind === "sphere" ? (
               row.sizeMode === "fixed" ? (
-                <label className="flex flex-col gap-1 text-xs sm:col-span-2">
+                <label className="flex flex-col gap-1 text-xs">
                   <span className={labelCls}>Radius (m)</span>
                   <input
-                    className={inputCls}
+                    type="number"
+                    inputMode="decimal"
+                    step="any"
                     disabled={disabled}
                     value={row.radius_m}
                     onChange={(e) => updateRow(i, { radius_m: e.target.value })}
+                    className="h-9 w-20 rounded border border-slate-300 bg-white px-1.5 text-sm tabular-nums dark:border-slate-600 dark:bg-slate-900"
                   />
                 </label>
               ) : (
                 <>
                   <label className="flex flex-col gap-1 text-xs">
-                    <span className={labelCls}>Min radius (m)</span>
+                    <span className={labelCls}>Min r (m)</span>
                     <input
-                      className={inputCls}
+                      type="number"
+                      inputMode="decimal"
+                      step="any"
                       disabled={disabled}
                       value={row.radius_min_m}
                       onChange={(e) => updateRow(i, { radius_min_m: e.target.value })}
+                      className="h-9 w-20 rounded border border-slate-300 bg-white px-1.5 text-sm tabular-nums dark:border-slate-600 dark:bg-slate-900"
                     />
                   </label>
                   <label className="flex flex-col gap-1 text-xs">
-                    <span className={labelCls}>Max radius (m)</span>
+                    <span className={labelCls}>Max r (m)</span>
                     <input
-                      className={inputCls}
+                      type="number"
+                      inputMode="decimal"
+                      step="any"
                       disabled={disabled}
                       value={row.radius_max_m}
                       onChange={(e) => updateRow(i, { radius_max_m: e.target.value })}
+                      className="h-9 w-20 rounded border border-slate-300 bg-white px-1.5 text-sm tabular-nums dark:border-slate-600 dark:bg-slate-900"
                     />
                   </label>
                 </>
               )
             ) : row.sizeMode === "fixed" ? (
               <>
-                <label className="flex flex-col gap-1 text-xs">
-                  <span className={labelCls}>Width (m)</span>
-                  <input
-                    className={inputCls}
-                    disabled={disabled}
-                    value={row.width_m}
-                    onChange={(e) => updateRow(i, { width_m: e.target.value })}
-                  />
-                </label>
-                <label className="flex flex-col gap-1 text-xs">
-                  <span className={labelCls}>Height (m)</span>
-                  <input
-                    className={inputCls}
-                    disabled={disabled}
-                    value={row.height_m}
-                    onChange={(e) => updateRow(i, { height_m: e.target.value })}
-                  />
-                </label>
-                <label className="flex flex-col gap-1 text-xs">
-                  <span className={labelCls}>Depth (m)</span>
-                  <input
-                    className={inputCls}
-                    disabled={disabled}
-                    value={row.depth_m}
-                    onChange={(e) => updateRow(i, { depth_m: e.target.value })}
-                  />
-                </label>
+                {(
+                  [
+                    ["width_m", "Width (m)", row.width_m],
+                    ["height_m", "Height (m)", row.height_m],
+                    ["depth_m", "Depth (m)", row.depth_m],
+                  ] as const
+                ).map(([key, lab, val]) => (
+                  <label key={key} className="flex flex-col gap-1 text-xs">
+                    <span className={labelCls}>{lab}</span>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      step="any"
+                      disabled={disabled}
+                      value={val}
+                      onChange={(e) => updateRow(i, { [key]: e.target.value })}
+                      className="h-9 w-20 rounded border border-slate-300 bg-white px-1.5 text-sm tabular-nums dark:border-slate-600 dark:bg-slate-900"
+                    />
+                  </label>
+                ))}
               </>
             ) : (
               <>
@@ -270,16 +325,22 @@ export function ShapeRoutineDefinitionForm({ state, onChange, disabled }: Props)
                   <span className={labelCls}>W min / max (m)</span>
                   <div className="flex gap-1">
                     <input
-                      className={`${inputCls} flex-1`}
+                      type="number"
+                      inputMode="decimal"
+                      step="any"
                       disabled={disabled}
                       value={row.width_min_m}
                       onChange={(e) => updateRow(i, { width_min_m: e.target.value })}
+                      className="h-9 w-[4.25rem] rounded border border-slate-300 bg-white px-1 text-sm tabular-nums dark:border-slate-600 dark:bg-slate-900"
                     />
                     <input
-                      className={`${inputCls} flex-1`}
+                      type="number"
+                      inputMode="decimal"
+                      step="any"
                       disabled={disabled}
                       value={row.width_max_m}
                       onChange={(e) => updateRow(i, { width_max_m: e.target.value })}
+                      className="h-9 w-[4.25rem] rounded border border-slate-300 bg-white px-1 text-sm tabular-nums dark:border-slate-600 dark:bg-slate-900"
                     />
                   </div>
                 </label>
@@ -287,16 +348,22 @@ export function ShapeRoutineDefinitionForm({ state, onChange, disabled }: Props)
                   <span className={labelCls}>H min / max (m)</span>
                   <div className="flex gap-1">
                     <input
-                      className={`${inputCls} flex-1`}
+                      type="number"
+                      inputMode="decimal"
+                      step="any"
                       disabled={disabled}
                       value={row.height_min_m}
                       onChange={(e) => updateRow(i, { height_min_m: e.target.value })}
+                      className="h-9 w-[4.25rem] rounded border border-slate-300 bg-white px-1 text-sm tabular-nums dark:border-slate-600 dark:bg-slate-900"
                     />
                     <input
-                      className={`${inputCls} flex-1`}
+                      type="number"
+                      inputMode="decimal"
+                      step="any"
                       disabled={disabled}
                       value={row.height_max_m}
                       onChange={(e) => updateRow(i, { height_max_m: e.target.value })}
+                      className="h-9 w-[4.25rem] rounded border border-slate-300 bg-white px-1 text-sm tabular-nums dark:border-slate-600 dark:bg-slate-900"
                     />
                   </div>
                 </label>
@@ -304,16 +371,22 @@ export function ShapeRoutineDefinitionForm({ state, onChange, disabled }: Props)
                   <span className={labelCls}>D min / max (m)</span>
                   <div className="flex gap-1">
                     <input
-                      className={`${inputCls} flex-1`}
+                      type="number"
+                      inputMode="decimal"
+                      step="any"
                       disabled={disabled}
                       value={row.depth_min_m}
                       onChange={(e) => updateRow(i, { depth_min_m: e.target.value })}
+                      className="h-9 w-[4.25rem] rounded border border-slate-300 bg-white px-1 text-sm tabular-nums dark:border-slate-600 dark:bg-slate-900"
                     />
                     <input
-                      className={`${inputCls} flex-1`}
+                      type="number"
+                      inputMode="decimal"
+                      step="any"
                       disabled={disabled}
                       value={row.depth_max_m}
                       onChange={(e) => updateRow(i, { depth_max_m: e.target.value })}
+                      className="h-9 w-[4.25rem] rounded border border-slate-300 bg-white px-1 text-sm tabular-nums dark:border-slate-600 dark:bg-slate-900"
                     />
                   </div>
                 </label>
@@ -321,8 +394,8 @@ export function ShapeRoutineDefinitionForm({ state, onChange, disabled }: Props)
             )}
           </div>
 
-          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            <label className="flex flex-col gap-1 text-xs">
+          <div className="mt-3 flex flex-wrap gap-3">
+            <label className="flex min-w-[12rem] flex-col gap-1 text-xs">
               <span className={labelCls}>Placement</span>
               <select
                 className={selectCls}
@@ -339,7 +412,7 @@ export function ShapeRoutineDefinitionForm({ state, onChange, disabled }: Props)
               </select>
             </label>
             {row.placementMode === "random_face" ? (
-              <label className="flex flex-col gap-1 text-xs">
+              <label className="flex min-w-[8rem] flex-col gap-1 text-xs">
                 <span className={labelCls}>Face</span>
                 <select
                   className={selectCls}
@@ -356,96 +429,75 @@ export function ShapeRoutineDefinitionForm({ state, onChange, disabled }: Props)
               </label>
             ) : row.kind === "sphere" ? (
               <>
-                <label className="flex flex-col gap-1 text-xs">
-                  <span className={labelCls}>Center X (m)</span>
-                  <input
-                    className={inputCls}
-                    disabled={disabled}
-                    value={row.center_x}
-                    onChange={(e) => updateRow(i, { center_x: e.target.value })}
-                  />
-                </label>
-                <label className="flex flex-col gap-1 text-xs">
-                  <span className={labelCls}>Center Y (m)</span>
-                  <input
-                    className={inputCls}
-                    disabled={disabled}
-                    value={row.center_y}
-                    onChange={(e) => updateRow(i, { center_y: e.target.value })}
-                  />
-                </label>
-                <label className="flex flex-col gap-1 text-xs">
-                  <span className={labelCls}>Center Z (m)</span>
-                  <input
-                    className={inputCls}
-                    disabled={disabled}
-                    value={row.center_z}
-                    onChange={(e) => updateRow(i, { center_z: e.target.value })}
-                  />
-                </label>
+                {(
+                  [
+                    ["center_x", "Center X (m)", row.center_x],
+                    ["center_y", "Center Y (m)", row.center_y],
+                    ["center_z", "Center Z (m)", row.center_z],
+                  ] as const
+                ).map(([key, lab, val]) => (
+                  <label key={key} className="flex flex-col gap-1 text-xs">
+                    <span className={labelCls}>{lab}</span>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      step="any"
+                      disabled={disabled}
+                      value={val}
+                      onChange={(e) => updateRow(i, { [key]: e.target.value })}
+                      className="h-9 w-[4.5rem] rounded border border-slate-300 bg-white px-1 text-sm tabular-nums dark:border-slate-600 dark:bg-slate-900"
+                    />
+                  </label>
+                ))}
               </>
             ) : (
               <>
-                <label className="flex flex-col gap-1 text-xs">
-                  <span className={labelCls}>Min corner X (m)</span>
-                  <input
-                    className={inputCls}
-                    disabled={disabled}
-                    value={row.min_corner_x}
-                    onChange={(e) => updateRow(i, { min_corner_x: e.target.value })}
-                  />
-                </label>
-                <label className="flex flex-col gap-1 text-xs">
-                  <span className={labelCls}>Min corner Y (m)</span>
-                  <input
-                    className={inputCls}
-                    disabled={disabled}
-                    value={row.min_corner_y}
-                    onChange={(e) => updateRow(i, { min_corner_y: e.target.value })}
-                  />
-                </label>
-                <label className="flex flex-col gap-1 text-xs">
-                  <span className={labelCls}>Min corner Z (m)</span>
-                  <input
-                    className={inputCls}
-                    disabled={disabled}
-                    value={row.min_corner_z}
-                    onChange={(e) => updateRow(i, { min_corner_z: e.target.value })}
-                  />
-                </label>
+                {(
+                  [
+                    ["min_corner_x", "Min corner X (m)", row.min_corner_x],
+                    ["min_corner_y", "Min corner Y (m)", row.min_corner_y],
+                    ["min_corner_z", "Min corner Z (m)", row.min_corner_z],
+                  ] as const
+                ).map(([key, lab, val]) => (
+                  <label key={key} className="flex flex-col gap-1 text-xs">
+                    <span className={labelCls}>{lab}</span>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      step="any"
+                      disabled={disabled}
+                      value={val}
+                      onChange={(e) => updateRow(i, { [key]: e.target.value })}
+                      className="h-9 w-[4.5rem] rounded border border-slate-300 bg-white px-1 text-sm tabular-nums dark:border-slate-600 dark:bg-slate-900"
+                    />
+                  </label>
+                ))}
               </>
             )}
           </div>
 
-          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <label className="flex flex-col gap-1 text-xs">
-              <span className={labelCls}>Direction dx</span>
-              <input
-                className={inputCls}
-                disabled={disabled}
-                value={row.motion_dx}
-                onChange={(e) => updateRow(i, { motion_dx: e.target.value })}
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-xs">
-              <span className={labelCls}>Direction dy</span>
-              <input
-                className={inputCls}
-                disabled={disabled}
-                value={row.motion_dy}
-                onChange={(e) => updateRow(i, { motion_dy: e.target.value })}
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-xs">
-              <span className={labelCls}>Direction dz</span>
-              <input
-                className={inputCls}
-                disabled={disabled}
-                value={row.motion_dz}
-                onChange={(e) => updateRow(i, { motion_dz: e.target.value })}
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-xs">
+          <div className="mt-3 flex flex-wrap gap-3">
+            {(
+              [
+                ["motion_dx", "dx", row.motion_dx],
+                ["motion_dy", "dy", row.motion_dy],
+                ["motion_dz", "dz", row.motion_dz],
+              ] as const
+            ).map(([key, lab, val]) => (
+              <label key={key} className="flex flex-col gap-1 text-xs">
+                <span className={labelCls}>Direction {lab}</span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  step="any"
+                  disabled={disabled}
+                  value={val}
+                  onChange={(e) => updateRow(i, { [key]: e.target.value })}
+                  className="h-9 w-[4.5rem] rounded border border-slate-300 bg-white px-1 text-sm tabular-nums dark:border-slate-600 dark:bg-slate-900"
+                />
+              </label>
+            ))}
+            <label className="flex min-w-[10rem] flex-col gap-1 text-xs">
               <span className={labelCls}>Speed mode</span>
               <select
                 className={selectCls}
@@ -462,18 +514,21 @@ export function ShapeRoutineDefinitionForm({ state, onChange, disabled }: Props)
               </select>
             </label>
           </div>
-          <div className="mt-2 grid gap-3 sm:grid-cols-2">
+          <div className="mt-2 flex flex-wrap gap-3">
             {row.speedMode === "fixed" ? (
               <label className="flex flex-col gap-1 text-xs">
                 <span className={labelCls}>Speed (m/s)</span>
                 <input
-                  className={inputCls}
+                  type="number"
+                  inputMode="decimal"
+                  step="any"
                   disabled={disabled}
                   value={row.m_s}
                   onChange={(e) => updateRow(i, { m_s: e.target.value })}
+                  className="h-9 w-24 rounded border border-slate-300 bg-white px-1.5 text-sm tabular-nums dark:border-slate-600 dark:bg-slate-900"
                 />
                 <span className="text-[0.65rem] text-slate-500">
-                  ≈ {(Number(row.m_s) || 0) * 100} cm/s (when value is numeric)
+                  ≈ {(Number(row.m_s) || 0) * 100} cm/s (when numeric)
                 </span>
               </label>
             ) : (
@@ -481,19 +536,25 @@ export function ShapeRoutineDefinitionForm({ state, onChange, disabled }: Props)
                 <label className="flex flex-col gap-1 text-xs">
                   <span className={labelCls}>Min speed (m/s)</span>
                   <input
-                    className={inputCls}
+                    type="number"
+                    inputMode="decimal"
+                    step="any"
                     disabled={disabled}
                     value={row.min_m_s}
                     onChange={(e) => updateRow(i, { min_m_s: e.target.value })}
+                    className="h-9 w-24 rounded border border-slate-300 bg-white px-1.5 text-sm tabular-nums dark:border-slate-600 dark:bg-slate-900"
                   />
                 </label>
                 <label className="flex flex-col gap-1 text-xs">
                   <span className={labelCls}>Max speed (m/s)</span>
                   <input
-                    className={inputCls}
+                    type="number"
+                    inputMode="decimal"
+                    step="any"
                     disabled={disabled}
                     value={row.max_m_s}
                     onChange={(e) => updateRow(i, { max_m_s: e.target.value })}
+                    className="h-9 w-24 rounded border border-slate-300 bg-white px-1.5 text-sm tabular-nums dark:border-slate-600 dark:bg-slate-900"
                   />
                 </label>
               </>

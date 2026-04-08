@@ -26,9 +26,11 @@ import {
 import {
   ghostOverlaysFromSim,
   ghostShapesFromDefinition,
+  type BatchLightUpdate,
   type GhostShapeOverlay,
   type ShapeAnimationSim,
 } from "@/lib/shapeAnimationEngine";
+import { mergeSceneLightBatchIntoItems } from "@/lib/scenesMerge";
 import {
   ROUTINE_TYPE_SHAPE_ANIMATION,
   createRoutine,
@@ -214,6 +216,21 @@ export default function ShapeRoutineEditorClient() {
 
   const onSimTick = useCallback((sim: ShapeAnimationSim) => {
     ghostRef.current = ghostOverlaysFromSim(sim);
+  }, []);
+
+  const onLightsPreview = useCallback((updates: BatchLightUpdate[]) => {
+    if (updates.length === 0) {
+      return;
+    }
+    setTargetScene((prev) => {
+      if (!prev) {
+        return prev;
+      }
+      return {
+        ...prev,
+        items: mergeSceneLightBatchIntoItems(prev.items, updates),
+      };
+    });
   }, []);
 
   async function onSave() {
@@ -511,6 +528,7 @@ export default function ShapeRoutineEditorClient() {
               runId={activeRun.run_id}
               definitionJson={definitionJsonForHost}
               onSceneRefresh={() => void refreshTargetScene()}
+              onLightsPreview={onLightsPreview}
               onError={(m) => setError(m)}
               onStopped={() => {
                 setActiveRun(null);

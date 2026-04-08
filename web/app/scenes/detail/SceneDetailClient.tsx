@@ -25,6 +25,8 @@ import {
   removeSceneModel,
   type SceneDetail,
 } from "@/lib/scenes";
+import { mergeSceneLightBatchIntoItems } from "@/lib/scenesMerge";
+import type { BatchLightUpdate } from "@/lib/shapeAnimationEngine";
 import { PythonRoutineHost } from "@/components/PythonRoutineHost";
 import { ShapeAnimationRoutineHost } from "@/components/ShapeAnimationRoutineHost";
 import {
@@ -88,6 +90,24 @@ export function SceneDetailClient() {
     }
   }, [id]);
 
+  const onShapeLightsPreview = useCallback(
+    (updates: BatchLightUpdate[]) => {
+      if (updates.length === 0 || !id) {
+        return;
+      }
+      setScene((prev) => {
+        if (!prev || prev.id !== id) {
+          return prev;
+        }
+        return {
+          ...prev,
+          items: mergeSceneLightBatchIntoItems(prev.items, updates),
+        };
+      });
+    },
+    [id],
+  );
+
   useEffect(() => {
     void load();
   }, [load]);
@@ -124,10 +144,14 @@ export function SceneDetailClient() {
     const t = window.setInterval(() => {
       void (async () => {
         try {
-          const s = await fetchScene(id);
-          setScene(s);
           const runs = await fetchSceneRoutineRuns(id);
           setRoutineRuns(runs);
+          const shapeActive =
+            runs[0]?.routine_type === ROUTINE_TYPE_SHAPE_ANIMATION;
+          if (!shapeActive) {
+            const s = await fetchScene(id);
+            setScene(s);
+          }
         } catch {
           /* ignore poll errors */
         }
@@ -478,6 +502,7 @@ export function SceneDetailClient() {
                     runId={firstRun.id}
                     definitionJson={shapeDefinitionJson}
                     onSceneRefresh={() => void load()}
+                    onLightsPreview={onShapeLightsPreview}
                     onError={(m) => setShapeRunnerErr(m)}
                     onStopped={() => void load()}
                   />
