@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildBatchUpdatesFromSim,
+  ghostShapesFromDefinition,
   initShapeAnimationSim,
   makeRng,
   tickShapeAnimationSim,
@@ -37,6 +38,15 @@ describe("shapeAnimationEngine", () => {
       true,
     );
     expect(updates[1]!.color).toBe(sim.background.color);
+  });
+
+  it("ghostShapesFromDefinition returns overlays for default definition", () => {
+    const def = JSON.stringify(SHAPE_ANIMATION_DEFAULT_DEFINITION);
+    const dims = { max: { x: 4, y: 4, z: 4 } };
+    const ghosts = ghostShapesFromDefinition(def, dims);
+    expect(ghosts.length).toBe(1);
+    expect(ghosts[0]!.kind).toBe("sphere");
+    expect(ghosts[0]!.radius).toBeGreaterThan(0);
   });
 
   it("tick advances without throwing", () => {

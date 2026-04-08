@@ -7,16 +7,28 @@ import {
   faCopy,
   faFloppyDisk,
   faLightbulb,
-  faRotate,
   faTrash,
 } from "@fortawesome/free-solid-svg-icons";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { ShapeAnimationRoutineHost } from "@/components/ShapeAnimationRoutineHost";
-import { SHAPE_ANIMATION_DEFAULT_DEFINITION } from "@/lib/shapeAnimationDefault";
+import { ShapeRoutineDefinitionForm } from "@/components/ShapeRoutineDefinitionForm";
+import {
+  definitionJsonStringFromForm,
+  definitionObjectFromForm,
+  shapeFormStateFromDefault,
+  shapeFormStateFromUnknown,
+  type ShapeAnimationFormState,
+} from "@/lib/shapeAnimationDefinitionForm";
+import {
+  ghostOverlaysFromSim,
+  ghostShapesFromDefinition,
+  type GhostShapeOverlay,
+  type ShapeAnimationSim,
+} from "@/lib/shapeAnimationEngine";
 import {
   ROUTINE_TYPE_SHAPE_ANIMATION,
   createRoutine,
@@ -29,6 +41,7 @@ import {
 } from "@/lib/routines";
 import {
   fetchScene,
+  fetchSceneDimensions,
   fetchScenes,
   patchSceneLightsStateScene,
   type SceneDetail,
@@ -47,8 +60,8 @@ export default function ShapeRoutineEditorClient() {
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [jsonText, setJsonText] = useState(
-    JSON.stringify(SHAPE_ANIMATION_DEFAULT_DEFINITION, null, 2),
+  const [formState, setFormState] = useState<ShapeAnimationFormState>(() =>
+    shapeFormStateFromDefault(),
   );
   const [routineId, setRoutineId] = useState<string | null>(idParam);
   const [loaded, setLoaded] = useState(() => Boolean(idParam));
@@ -58,11 +71,32 @@ export default function ShapeRoutineEditorClient() {
   const [scenesList, setScenesList] = useState<SceneSummary[] | null>(null);
   const [targetSceneId, setTargetSceneId] = useState("");
   const [targetScene, setTargetScene] = useState<SceneDetail | null>(null);
+  const [sceneDims, setSceneDims] = useState<{ max: { x: number; y: number; z: number } } | null>(
+    null,
+  );
   const [activeRun, setActiveRun] = useState<{
     run_id: string;
     scene_id: string;
   } | null>(null);
   const [cameraResetVersion, setCameraResetVersion] = useState(0);
+
+  const ghostRef = useRef<GhostShapeOverlay[]>([]);
+
+  const definitionJsonString = useMemo(() => {
+    try {
+      return definitionJsonStringFromForm(formState);
+    } catch {
+      return "";
+    }
+  }, [formState]);
+
+  const readonlyJsonText = useMemo(() => {
+    try {
+      return JSON.stringify(definitionObjectFromForm(formState), null, 2);
+    } catch {
+      return "// Fix form validation errors to see JSON";
+    }
+  }, [formState]);
 
   const load = useCallback(async (rid: string) => {
     setError(null);
@@ -76,7 +110,12 @@ export default function ShapeRoutineEditorClient() {
       setName(r.name);
       setDescription(r.description);
       if (r.definition_json != null) {
-        setJsonText(JSON.stringify(r.definition_json, null, 2));
+        try {
+          setFormState(shapeFormStateFromUnknown(r.definition_json));
+        } catch {
+          setFormState(shapeFormStateFromDefault());
+          setError("Could not parse saved definition; loaded defaults. Re-save to fix.");
+        }
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Load failed");
@@ -87,7 +126,7 @@ export default function ShapeRoutineEditorClient() {
 
   useEffect(() => {
     if (!idParam) {
-      router.replace("/routines/new?kind=shape");
+      router.replace("/routines/new?type=shape");
       return;
     }
     void load(idParam);
@@ -116,6 +155,7 @@ export default function ShapeRoutineEditorClient() {
   useEffect(() => {
     if (!targetSceneId) {
       setTargetScene(null);
+      setSceneDims(null);
       return;
     }
     let cancelled = false;
@@ -128,6 +168,16 @@ export default function ShapeRoutineEditorClient() {
       } catch {
         if (!cancelled) {
           setTargetScene(null);
+        }
+      }
+      try {
+        const d = await fetchSceneDimensions(targetSceneId);
+        if (!cancelled) {
+          setSceneDims({ max: d.max });
+        }
+      } catch {
+        if (!cancelled) {
+          setSceneDims(null);
         }
       }
     })();
@@ -148,9 +198,23 @@ export default function ShapeRoutineEditorClient() {
     }
   }, [targetSceneId]);
 
-  function parseDefinitionOrThrow(): unknown {
-    return JSON.parse(jsonText) as unknown;
-  }
+  const showShapeHost = activeRun && activeRun.scene_id === targetSceneId;
+  const definitionJsonForHost = definitionJsonString;
+
+  useEffect(() => {
+    if (showShapeHost && activeRun) {
+      return;
+    }
+    if (!sceneDims || !definitionJsonString) {
+      ghostRef.current = [];
+      return;
+    }
+    ghostRef.current = ghostShapesFromDefinition(definitionJsonString, sceneDims);
+  }, [showShapeHost, activeRun, sceneDims, definitionJsonString]);
+
+  const onSimTick = useCallback((sim: ShapeAnimationSim) => {
+    ghostRef.current = ghostOverlaysFromSim(sim);
+  }, []);
 
   async function onSave() {
     setBusy(true);
@@ -160,7 +224,7 @@ export default function ShapeRoutineEditorClient() {
       if (!n) {
         throw new Error("Please enter a name.");
       }
-      const parsed = parseDefinitionOrThrow();
+      const parsed = definitionObjectFromForm(formState);
       if (!routineId) {
         throw new Error("Routine id missing.");
       }
@@ -170,13 +234,7 @@ export default function ShapeRoutineEditorClient() {
         definition_json: parsed,
       });
     } catch (e) {
-      setError(
-        e instanceof SyntaxError
-          ? "Invalid JSON in definition."
-          : e instanceof Error
-            ? e.message
-            : "Save failed",
-      );
+      setError(e instanceof Error ? e.message : "Save failed");
     } finally {
       setBusy(false);
     }
@@ -189,7 +247,7 @@ export default function ShapeRoutineEditorClient() {
     setBusy(true);
     setError(null);
     try {
-      const parsed = parseDefinitionOrThrow();
+      const parsed = definitionObjectFromForm(formState);
       const dup = await createRoutine({
         name: `${name.trim() || "routine"} (copy)`,
         description,
@@ -225,7 +283,11 @@ export default function ShapeRoutineEditorClient() {
 
   async function onStartRun() {
     if (!routineId || !targetSceneId) {
-      setError("Pick a room first.");
+      setError("Pick a scene first.");
+      return;
+    }
+    if (!definitionJsonForHost) {
+      setError("Fix the form: definition is invalid.");
       return;
     }
     setBusy(true);
@@ -271,19 +333,10 @@ export default function ShapeRoutineEditorClient() {
       });
       await refreshTargetScene();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Reset room lights failed");
+      setError(e instanceof Error ? e.message : "Reset scene lights failed");
     } finally {
       setBusy(false);
     }
-  }
-
-  const showShapeHost = activeRun && activeRun.scene_id === targetSceneId;
-
-  let definitionJsonForHost = "";
-  try {
-    definitionJsonForHost = JSON.stringify(parseDefinitionOrThrow());
-  } catch {
-    definitionJsonForHost = "";
   }
 
   if (!loaded) {
@@ -302,9 +355,10 @@ export default function ShapeRoutineEditorClient() {
             Shape animation routine
           </h1>
           <p className="mt-1 max-w-2xl text-sm text-slate-600 dark:text-slate-400">
-            Edit the JSON definition (version, background, shapes). Run from here
-            or from a scene page. Animation runs in your browser and updates lights
-            via the scene API.
+            Configure background and shapes with the form below. The JSON is read-only and
+            matches what the server stores. Run from here or from a scene page; animation
+            updates lights via the scene API. Ghost shapes in the 3D view are only shown on
+            this editor page.
           </p>
         </div>
         <Link
@@ -370,50 +424,41 @@ export default function ShapeRoutineEditorClient() {
 
       <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900/40">
         <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
-          Definition JSON
+          Definition
         </h2>
         <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
-          Must match the server schema (version 1, background, shapes array). Invalid JSON
-          or fields will fail on save.
+          Edit fields below. Values are validated on save (same rules as the API).
         </p>
-        <textarea
-          value={jsonText}
-          onChange={(e) => setJsonText(e.target.value)}
-          spellCheck={false}
-          className="mt-3 h-72 w-full rounded border border-slate-300 bg-slate-50 p-2 font-mono text-xs dark:border-slate-600 dark:bg-slate-950"
-        />
-        <div className="mt-2">
-          <Button
-            type="button"
-            icon={faRotate}
-            className="bg-slate-200 text-slate-900 hover:bg-slate-300 dark:bg-slate-700 dark:text-slate-100 dark:hover:bg-slate-600"
-            onClick={() => {
-              try {
-                const o = JSON.parse(jsonText) as unknown;
-                setJsonText(JSON.stringify(o, null, 2));
-              } catch {
-                setError("Format: fix JSON syntax first.");
-              }
-            }}
-          >
-            Format JSON
-          </Button>
+        <div className="mt-4">
+          <ShapeRoutineDefinitionForm state={formState} onChange={setFormState} disabled={busy} />
         </div>
       </section>
 
       <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900/40">
         <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
-          Run and watch the room
+          Definition JSON (read-only)
+        </h2>
+        <pre
+          className="mt-3 max-h-64 overflow-auto rounded border border-slate-200 bg-slate-50 p-3 font-mono text-[11px] leading-relaxed text-slate-800 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-200"
+          aria-readonly="true"
+        >
+          {readonlyJsonText}
+        </pre>
+      </section>
+
+      <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900/40">
+        <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+          Run and watch the scene
         </h2>
         <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
           <label className="flex min-w-[200px] flex-1 flex-col gap-1 text-xs">
-            <span className="text-slate-600 dark:text-slate-400">Room</span>
+            <span className="text-slate-600 dark:text-slate-400">Scene</span>
             <select
               value={targetSceneId}
               onChange={(e) => setTargetSceneId(e.target.value)}
               className="min-h-11 rounded border border-slate-300 bg-white px-2 py-2 text-sm dark:border-slate-600 dark:bg-slate-900"
             >
-              <option value="">Select a room…</option>
+              <option value="">Select a scene…</option>
               {(scenesList ?? []).map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name}
@@ -425,7 +470,7 @@ export default function ShapeRoutineEditorClient() {
             <Button
               type="button"
               icon={faCirclePlay}
-              disabled={busy || !routineId || !targetSceneId}
+              disabled={busy || !routineId || !targetSceneId || !definitionJsonForHost}
               onClick={() => void onStartRun()}
             >
               Start
@@ -447,7 +492,7 @@ export default function ShapeRoutineEditorClient() {
             disabled={busy || !targetSceneId}
             onClick={() => void onResetSceneLights()}
           >
-            Reset room lights
+            Reset scene lights
           </Button>
           <Button
             type="button"
@@ -471,6 +516,7 @@ export default function ShapeRoutineEditorClient() {
                 setActiveRun(null);
                 void refreshTargetScene();
               }}
+              onSimTick={onSimTick}
             />
           </div>
         ) : null}
@@ -480,13 +526,19 @@ export default function ShapeRoutineEditorClient() {
               items={targetScene.items}
               cameraPersistenceKey={`shape-unified-${targetScene.id}`}
               cameraResetVersion={cameraResetVersion}
+              shapeGhostsSourceRef={ghostRef}
             />
           </div>
         ) : targetSceneId ? (
-          <p className="mt-3 text-xs text-slate-500">Could not load this room or it is empty.</p>
+          <p className="mt-3 text-xs text-slate-500">
+            Could not load this scene or it has no lights.
+          </p>
         ) : (
-          <p className="mt-3 text-xs text-slate-500">Pick a room to see the 3D view.</p>
+          <p className="mt-3 text-xs text-slate-500">Pick a scene to see the 3D view.</p>
         )}
+        <p className="mt-2 text-[0.65rem] text-slate-500 dark:text-slate-400">
+          Semi-transparent shapes in the viewport preview volume placement (editor only).
+        </p>
       </section>
     </div>
   );

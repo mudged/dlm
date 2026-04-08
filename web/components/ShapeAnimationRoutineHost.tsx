@@ -9,6 +9,7 @@ import {
   tickShapeAnimationSim,
   type SceneDimensions,
   type SceneLightFlat,
+  type ShapeAnimationSim,
 } from "@/lib/shapeAnimationEngine";
 import {
   fetchSceneDimensions,
@@ -27,9 +28,18 @@ export function ShapeAnimationRoutineHost(props: {
   onSceneRefresh?: () => void;
   onError?: (message: string) => void;
   onStopped?: () => void;
+  /** Called after each physics tick with current sim (e.g. editor ghost overlays). */
+  onSimTick?: (sim: ShapeAnimationSim) => void;
 }) {
-  const { sceneId, runId, definitionJson, onSceneRefresh, onError, onStopped } =
-    props;
+  const {
+    sceneId,
+    runId,
+    definitionJson,
+    onSceneRefresh,
+    onError,
+    onStopped,
+    onSimTick,
+  } = props;
   const stoppedRef = useRef(false);
 
   useEffect(() => {
@@ -65,6 +75,7 @@ export function ShapeAnimationRoutineHost(props: {
         void (async () => {
           try {
             const { allShapesStopped } = tickShapeAnimationSim(sim, dims, rng);
+            onSimTick?.(sim);
             const lights = (await fetchSceneLightsFlat(sceneId)) as SceneLightFlat[];
             const updates = buildBatchUpdatesFromSim(sim, lights);
             if (updates.length > 0) {
@@ -101,7 +112,7 @@ export function ShapeAnimationRoutineHost(props: {
         clearInterval(timer);
       }
     };
-  }, [sceneId, runId, definitionJson, onSceneRefresh, onError, onStopped]);
+  }, [sceneId, runId, definitionJson, onSceneRefresh, onError, onStopped, onSimTick]);
 
   return (
     <p className="text-xs text-emerald-800 dark:text-emerald-200">

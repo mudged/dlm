@@ -1669,6 +1669,18 @@ func TestAcceptance_REQ033_shapeAnimationRoutines(t *testing.T) {
 	if !strings.Contains(newRoutineSrc, "ROUTINE_TYPE_SHAPE_ANIMATION") || !strings.Contains(newRoutineSrc, "SHAPE_ANIMATION_DEFAULT_DEFINITION") {
 		t.Fatal("RoutineNewClient must offer shape_animation create path with default definition (REQ-023 + REQ-033)")
 	}
+	if !strings.Contains(newRoutineSrc, ">Type<") || !strings.Contains(newRoutineSrc, "<select") {
+		t.Fatal("RoutineNewClient must use a Type dropdown for routine kind (REQ-023)")
+	}
+
+	formLib := filepath.Join(root, "web", "lib", "shapeAnimationDefinitionForm.ts")
+	fb, err := os.ReadFile(formLib)
+	if err != nil {
+		t.Fatalf("read %s: %v", formLib, err)
+	}
+	if !strings.Contains(string(fb), "definitionObjectFromForm") {
+		t.Fatal("shapeAnimationDefinitionForm.ts must build definition objects for save (REQ-033)")
+	}
 
 	shapeEditorPath := filepath.Join(root, "web", "app", "routines", "shape", "ShapeRoutineEditorClient.tsx")
 	seb, err := os.ReadFile(shapeEditorPath)
@@ -1678,6 +1690,18 @@ func TestAcceptance_REQ033_shapeAnimationRoutines(t *testing.T) {
 	shapeEd := string(seb)
 	if !strings.Contains(shapeEd, "SceneLightsCanvas") || !strings.Contains(shapeEd, "ShapeAnimationRoutineHost") {
 		t.Fatal("ShapeRoutineEditorClient must embed SceneLightsCanvas and ShapeAnimationRoutineHost (REQ-033 + REQ-027 viewport)")
+	}
+	if !strings.Contains(shapeEd, "ShapeRoutineDefinitionForm") || !strings.Contains(shapeEd, "shapeGhostsSourceRef") {
+		t.Fatal("ShapeRoutineEditorClient must use form authoring and editor-only shape ghost overlays (REQ-033)")
+	}
+
+	canvasPath := filepath.Join(root, "web", "components", "SceneLightsCanvas.tsx")
+	cb, err := os.ReadFile(canvasPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", canvasPath, err)
+	}
+	if !strings.Contains(string(cb), "shapeGhostsSourceRef") || !strings.Contains(string(cb), "GhostShapeOverlay") {
+		t.Fatal("SceneLightsCanvas must support optional shape ghost overlays for the shape editor (REQ-033)")
 	}
 
 	sceneDetailPath := filepath.Join(root, "web", "app", "scenes", "detail", "SceneDetailClient.tsx")

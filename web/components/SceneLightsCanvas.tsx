@@ -1,5 +1,6 @@
 "use client";
 
+import type { MutableRefObject } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
@@ -22,12 +23,18 @@ import {
   VIZ_VIEWPORT_BG_CSS,
 } from "@/lib/vizViewport";
 import { sceneItemsVizSignature } from "@/lib/lightStateSignature";
+import type { GhostShapeOverlay } from "@/lib/shapeAnimationEngine";
 
 type Props = {
   items: SceneItem[];
   cameraPersistenceKey?: string;
   /** Increment to re-apply default framing (REQ-016). */
   cameraResetVersion?: number;
+  /**
+   * When set, each animation frame reads `current` for semi-transparent shape overlays
+   * (shape routine editor / preview only).
+   */
+  shapeGhostsSourceRef?: MutableRefObject<GhostShapeOverlay[] | null>;
 };
 
 type FlatPick = {
@@ -151,10 +158,23 @@ type SavedOrbit = {
   target: THREE.Vector3;
 };
 
+const GHOST_OPACITY = 0.32;
+
+function hexToThreeColor(hex: string): THREE.Color {
+  const c = new THREE.Color();
+  try {
+    c.set(normalizeLightHex(hex));
+  } catch {
+    c.set(0x888888);
+  }
+  return c;
+}
+
 export default function SceneLightsCanvas({
   items,
   cameraPersistenceKey,
   cameraResetVersion = 0,
+  shapeGhostsSourceRef,
 }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasHostRef = useRef<HTMLDivElement>(null);
@@ -495,8 +515,71 @@ export default function SceneLightsCanvas({
 
     container.appendChild(canvasEl);
 
+    const ghostGroup = new THREE.Group();
+    scene.add(ghostGroup);
+    let lastGhostKey = "";
+
+    function syncShapeGhosts() {
+      if (!shapeGhostsSourceRef) {
+        if (ghostGroup.children.length > 0) {
+          while (ghostGroup.children.length > 0) {
+            const ch = ghostGroup.children[0]!;
+            ghostGroup.remove(ch);
+            if (ch instanceof THREE.Mesh) {
+              ch.geometry.dispose();
+              (ch.material as THREE.Material).dispose();
+            }
+          }
+        }
+        lastGhostKey = "";
+        return;
+      }
+      const list = shapeGhostsSourceRef.current ?? [];
+      const key = JSON.stringify(list);
+      if (key === lastGhostKey) {
+        return;
+      }
+      lastGhostKey = key;
+      while (ghostGroup.children.length > 0) {
+        const ch = ghostGroup.children[0]!;
+        ghostGroup.remove(ch);
+        if (ch instanceof THREE.Mesh) {
+          ch.geometry.dispose();
+          (ch.material as THREE.Material).dispose();
+        }
+      }
+      for (const g of list) {
+        const col = hexToThreeColor(g.color);
+        const mat = new THREE.MeshBasicMaterial({
+          color: col,
+          transparent: true,
+          opacity: GHOST_OPACITY,
+          depthWrite: false,
+          side: THREE.DoubleSide,
+        });
+        if (g.kind === "sphere") {
+          const geo = new THREE.SphereGeometry(Math.max(g.radius, 1e-6), 24, 18);
+          const mesh = new THREE.Mesh(geo, mat);
+          mesh.position.set(g.px, g.py, g.pz);
+          mesh.renderOrder = 2;
+          ghostGroup.add(mesh);
+        } else {
+          const geo = new THREE.BoxGeometry(
+            Math.max(g.w, 1e-6),
+            Math.max(g.h, 1e-6),
+            Math.max(g.d, 1e-6),
+          );
+          const mesh = new THREE.Mesh(geo, mat);
+          mesh.position.set(g.px + g.w / 2, g.py + g.h / 2, g.pz + g.d / 2);
+          mesh.renderOrder = 2;
+          ghostGroup.add(mesh);
+        }
+      }
+    }
+
     let raf = 0;
     const tick = () => {
+      syncShapeGhosts();
       controls.update();
       renderer.render(scene, camera);
       raf = requestAnimationFrame(tick);
@@ -550,13 +633,22 @@ export default function SceneLightsCanvas({
         (lineSegments.material as THREE.Material).dispose();
       }
       disposeGrid();
+      while (ghostGroup.children.length > 0) {
+        const ch = ghostGroup.children[0]!;
+        ghostGroup.remove(ch);
+        if (ch instanceof THREE.Mesh) {
+          ch.geometry.dispose();
+          (ch.material as THREE.Material).dispose();
+        }
+      }
+      scene.remove(ghostGroup);
       renderer.dispose();
       if (canvasEl.parentNode === container) {
         container.removeChild(canvasEl);
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- vizSig covers scene geometry+state (REQ-031)
-  }, [vizSig, cameraPersistenceKey, flatKey, cameraResetVersion]);
+  }, [vizSig, cameraPersistenceKey, flatKey, cameraResetVersion, shapeGhostsSourceRef]);
 
   const tip = pinned ?? hover;
   const totalLights = items.reduce((a, it) => a + it.lights.length, 0);

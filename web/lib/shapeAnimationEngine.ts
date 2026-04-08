@@ -451,3 +451,51 @@ export function buildBatchUpdatesFromSim(
 }
 
 export const SHAPE_ANIMATION_DT_SEC = DT;
+
+/** Semi-transparent editor/run overlay meshes (scene space). */
+export type GhostShapeOverlay = {
+  kind: "sphere" | "cuboid";
+  px: number;
+  py: number;
+  pz: number;
+  radius: number;
+  w: number;
+  h: number;
+  d: number;
+  color: string;
+};
+
+function overlaysFromSim(sim: ShapeAnimationSim): GhostShapeOverlay[] {
+  return sim.shapes
+    .filter((s) => s.active)
+    .map((s) => ({
+      kind: s.kind,
+      px: s.px,
+      py: s.py,
+      pz: s.pz,
+      radius: s.radius,
+      w: s.w,
+      h: s.h,
+      d: s.d,
+      color: s.currentColor,
+    }));
+}
+
+/** Initial shape positions/sizes for the shape routine editor preview (deterministic RNG). */
+export function ghostShapesFromDefinition(
+  definitionJson: string,
+  dims: SceneDimensions,
+): GhostShapeOverlay[] {
+  const rng = makeRng(1);
+  try {
+    const sim = initShapeAnimationSim(definitionJson, dims, rng);
+    return overlaysFromSim(sim);
+  } catch {
+    return [];
+  }
+}
+
+/** Live positions during an active run (updated each tick by `ShapeAnimationRoutineHost`). */
+export function ghostOverlaysFromSim(sim: ShapeAnimationSim): GhostShapeOverlay[] {
+  return overlaysFromSim(sim);
+}
