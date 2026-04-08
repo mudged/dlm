@@ -1,5 +1,16 @@
 import type { Light } from "@/lib/models";
 
+/** REQ-034 default when API omits `boundary_margin_m` (legacy clients). */
+export const DEFAULT_SCENE_BOUNDARY_MARGIN_M = 0.3;
+
+export function sceneBoundaryMarginM(scene: SceneDetail | null | undefined): number {
+  const v = scene?.boundary_margin_m;
+  if (typeof v !== "number" || !Number.isFinite(v) || v < 0) {
+    return DEFAULT_SCENE_BOUNDARY_MARGIN_M;
+  }
+  return v;
+}
+
 export type SceneSummary = {
   id: string;
   name: string;
@@ -26,6 +37,8 @@ export type SceneDetail = {
   id: string;
   name: string;
   created_at: string;
+  /** REQ-034: symmetric padding (m) for faint boundary cuboid and GET …/dimensions margin_m. */
+  boundary_margin_m?: number;
   items: SceneItem[];
 };
 
@@ -113,6 +126,26 @@ export async function fetchScene(id: string): Promise<SceneDetail> {
   });
   if (!res.ok) {
     throw new Error(`scene load failed (${res.status})`);
+  }
+  return res.json() as Promise<SceneDetail>;
+}
+
+export async function patchSceneBoundaryMargin(
+  sceneId: string,
+  boundaryMarginM: number,
+): Promise<SceneDetail> {
+  const res = await fetch(`/api/v1/scenes/${encodeURIComponent(sceneId)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ boundary_margin_m: boundaryMarginM }),
+  });
+  if (!res.ok) {
+    const j = (await res.json().catch(() => null)) as {
+      error?: { message?: string };
+    };
+    throw new Error(
+      j?.error?.message ?? `scene patch failed (${res.status})`,
+    );
   }
   return res.json() as Promise<SceneDetail>;
 }

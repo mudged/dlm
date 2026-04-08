@@ -15,6 +15,7 @@ import {
   LIGHT_SPHERE_GLOW_RADIUS_FACTOR,
   SPHERE_RADIUS_M,
 } from "@/lib/wireSegments";
+import { paddedAabbWireframePositions } from "@/lib/aabbWireframe";
 import {
   configureVizWebGLRenderer,
   VIZ_VIEWPORT_BG,
@@ -48,6 +49,8 @@ const VIZ_GREY = 0xd0d0d0;
 const LINE_OPACITY = 0.15;
 const OFF_SPHERE_OPACITY = 0.15;
 const HOVER_DECIMALS = 4;
+/** REQ-034 model view: fixed 0.3 m padding on tight light AABB. */
+const MODEL_BOUNDARY_PAD_M = 0.3;
 
 function lightOn(L: Light): boolean {
   return L.on !== false;
@@ -300,6 +303,21 @@ function ModelLightsCanvas({
       scene.add(lineSegments);
     }
 
+    const boundaryPos = paddedAabbWireframePositions(sorted, MODEL_BOUNDARY_PAD_M);
+    let boundaryLines: THREE.LineSegments | null = null;
+    if (boundaryPos && boundaryPos.length > 0) {
+      const bg = new THREE.BufferGeometry();
+      bg.setAttribute("position", new THREE.BufferAttribute(boundaryPos, 3));
+      const bm = new THREE.LineBasicMaterial({
+        color: VIZ_GREY,
+        transparent: true,
+        opacity: LINE_OPACITY,
+        depthWrite: false,
+      });
+      boundaryLines = new THREE.LineSegments(bg, bm);
+      scene.add(boundaryLines);
+    }
+
     const raycaster = new THREE.Raycaster();
     const ndc = new THREE.Vector2();
 
@@ -481,6 +499,10 @@ function ModelLightsCanvas({
       if (lineSegments) {
         lineSegments.geometry.dispose();
         (lineSegments.material as THREE.Material).dispose();
+      }
+      if (boundaryLines) {
+        boundaryLines.geometry.dispose();
+        (boundaryLines.material as THREE.Material).dispose();
       }
       disposeGrid();
       renderer.dispose();

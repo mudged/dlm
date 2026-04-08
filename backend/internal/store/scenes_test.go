@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"math"
 	"testing"
 
 	"example.com/dlm/backend/internal/wiremodel"
@@ -249,17 +250,17 @@ func TestScenes_SpatialQueriesAndDimensions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// AABB of lights (10..12, 0..2, 0..2) minus margin on min side (sx min 10 → 9); Y/Z min stay 0.
-	if dims.Origin.X != 9 || dims.Origin.Y != 0 || dims.Origin.Z != 0 {
+	// Default boundary_margin_m = 0.3 m (REQ-034). AABB of lights (10..12, 0..2, 0..2) padded.
+	if dims.Origin.X != 9.7 || dims.Origin.Y != 0 || dims.Origin.Z != 0 {
 		t.Fatalf("origin = %+v", dims.Origin)
 	}
-	if dims.Max.X != 13 || dims.Max.Y != 3 || dims.Max.Z != 3 {
+	if dims.Max.X != 12.3 || dims.Max.Y != 2.3 || dims.Max.Z != 2.3 {
 		t.Fatalf("max = %+v", dims.Max)
 	}
-	if dims.Size.Width != 4 || dims.Size.Height != 3 || dims.Size.Depth != 3 {
+	if math.Abs(dims.Size.Width-2.6) > 1e-9 || dims.Size.Height != 2.3 || dims.Size.Depth != 2.3 {
 		t.Fatalf("size = %+v", dims.Size)
 	}
-	if dims.MarginM != 1 {
+	if dims.MarginM != 0.3 {
 		t.Fatalf("margin_m = %v", dims.MarginM)
 	}
 

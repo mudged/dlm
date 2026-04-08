@@ -3,6 +3,7 @@ package httpapi
 import (
 	"encoding/json"
 	"io"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -61,6 +62,40 @@ func TestScenes_createAndGet(t *testing.T) {
 	if gr.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(gr.Body)
 		t.Fatalf("get scene %d %s", gr.StatusCode, b)
+	}
+	var detail struct {
+		BoundaryMarginM float64 `json:"boundary_margin_m"`
+	}
+	if err := json.NewDecoder(gr.Body).Decode(&detail); err != nil {
+		t.Fatal(err)
+	}
+	if math.Abs(detail.BoundaryMarginM-store.DefaultSceneBoundaryMarginM) > 1e-9 {
+		t.Fatalf("boundary_margin_m = %v", detail.BoundaryMarginM)
+	}
+
+	patchBody := `{"boundary_margin_m":0.5}`
+	pr, err := http.NewRequest(http.MethodPatch, srv.URL+"/api/v1/scenes/"+sc.ID, strings.NewReader(patchBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pr.Header.Set("Content-Type", "application/json")
+	pres, err := http.DefaultClient.Do(pr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pres.Body.Close()
+	if pres.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(pres.Body)
+		t.Fatalf("patch scene %d %s", pres.StatusCode, b)
+	}
+	var patched struct {
+		BoundaryMarginM float64 `json:"boundary_margin_m"`
+	}
+	if err := json.NewDecoder(pres.Body).Decode(&patched); err != nil {
+		t.Fatal(err)
+	}
+	if patched.BoundaryMarginM != 0.5 {
+		t.Fatalf("patched boundary_margin_m = %v", patched.BoundaryMarginM)
 	}
 }
 
@@ -237,16 +272,16 @@ func TestScenes_spatialEndpointsDimensionsAndQueries(t *testing.T) {
 	if err := json.NewDecoder(dr.Body).Decode(&dims); err != nil {
 		t.Fatal(err)
 	}
-	if dims.Origin.X != 9 || dims.Origin.Y != 0 || dims.Origin.Z != 0 {
+	if dims.Origin.X != 9.7 || dims.Origin.Y != 0 || dims.Origin.Z != 0 {
 		t.Fatalf("origin = %+v", dims.Origin)
 	}
-	if dims.Max.X != 13 || dims.Max.Y != 3 || dims.Max.Z != 3 {
+	if dims.Max.X != 12.3 || dims.Max.Y != 2.3 || dims.Max.Z != 2.3 {
 		t.Fatalf("max = %+v", dims.Max)
 	}
-	if dims.Size.Width != 4 || dims.Size.Height != 3 || dims.Size.Depth != 3 {
+	if math.Abs(dims.Size.Width-2.6) > 1e-9 || dims.Size.Height != 2.3 || dims.Size.Depth != 2.3 {
 		t.Fatalf("size = %+v", dims.Size)
 	}
-	if dims.MarginM != 1 {
+	if dims.MarginM != 0.3 {
 		t.Fatalf("margin_m = %v", dims.MarginM)
 	}
 

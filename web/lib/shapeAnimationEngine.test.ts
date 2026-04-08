@@ -76,13 +76,13 @@ describe("shapeAnimationEngine", () => {
       ],
     });
     const dims = sceneDimensionsFromApiResponse({
-      origin: { x: 9, y: 0, z: 0 },
-      max: { x: 13, y: 3, z: 3 },
+      origin: { x: 9.7, y: 0, z: 0 },
+      max: { x: 12.3, y: 2.3, z: 2.3 },
     });
     const rng = makeRng(1);
     const sim = initShapeAnimationSim(def, dims, rng);
-    expect(sim.shapes[0]!.px).toBeGreaterThan(12);
-    expect(sim.shapes[0]!.px).toBeLessThanOrEqual(13);
+    expect(sim.shapes[0]!.px).toBeGreaterThan(11.9);
+    expect(sim.shapes[0]!.px).toBeLessThanOrEqual(12.3);
   });
 
   it("tick advances without throwing", () => {

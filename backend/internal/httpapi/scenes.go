@@ -32,6 +32,10 @@ type patchSceneModelBody struct {
 	OffsetZ int `json:"offset_z"`
 }
 
+type patchSceneBody struct {
+	BoundaryMarginM float64 `json:"boundary_margin_m"`
+}
+
 type sceneCuboidBody struct {
 	Position   store.ScenePoint          `json:"position"`
 	Dimensions store.SceneDimensionsSize `json:"dimensions"`
@@ -189,6 +193,53 @@ func (a *apiDeps) getScene(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusNotFound, "not_found", "scene not found")
 		return
 	}
+	if err != nil {
+		writeAPIError(w, http.StatusInternalServerError, "internal_error", "could not load scene")
+		return
+	}
+	writeJSON(w, http.StatusOK, d)
+}
+
+func (a *apiDeps) patchScene(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPatch {
+		writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	id := r.PathValue("id")
+	if id == "" {
+		writeAPIError(w, http.StatusBadRequest, "bad_request", "missing scene id")
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxSceneJSONBytes)
+	raw, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeAPIError(w, http.StatusBadRequest, "bad_request", "could not read body")
+		return
+	}
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.DisallowUnknownFields()
+	var body patchSceneBody
+	if err := dec.Decode(&body); err != nil {
+		writeAPIError(w, http.StatusBadRequest, "bad_request", "invalid JSON")
+		return
+	}
+	if dec.More() {
+		writeAPIError(w, http.StatusBadRequest, "bad_request", "invalid JSON")
+		return
+	}
+	if err := a.store.PatchSceneBoundaryMarginM(r.Context(), id, body.BoundaryMarginM); errors.Is(err, store.ErrSceneNotFound) {
+		writeAPIError(w, http.StatusNotFound, "not_found", "scene not found")
+		return
+	} else if err != nil {
+		msg := err.Error()
+		if strings.Contains(msg, "boundary_margin_m") {
+			writeAPIError(w, http.StatusBadRequest, "validation_failed", msg)
+			return
+		}
+		writeAPIError(w, http.StatusInternalServerError, "internal_error", "could not update scene")
+		return
+	}
+	d, err := a.store.GetScene(r.Context(), id)
 	if err != nil {
 		writeAPIError(w, http.StatusInternalServerError, "internal_error", "could not load scene")
 		return

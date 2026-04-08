@@ -6,7 +6,10 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { boundingFromLights } from "@/lib/lightBounds";
 import type { Light } from "@/lib/models";
-import type { SceneItem } from "@/lib/scenes";
+import {
+  DEFAULT_SCENE_BOUNDARY_MARGIN_M,
+  type SceneItem,
+} from "@/lib/scenes";
 import {
   additiveGlowShellMaterialForOnLight,
   meshStandardMaterialForOnLight,
@@ -17,6 +20,7 @@ import {
   LIGHT_SPHERE_GLOW_RADIUS_FACTOR,
   SPHERE_RADIUS_M,
 } from "@/lib/wireSegments";
+import { paddedAabbWireframePositions } from "@/lib/aabbWireframe";
 import {
   configureVizWebGLRenderer,
   VIZ_VIEWPORT_BG,
@@ -27,6 +31,8 @@ import type { GhostShapeOverlay } from "@/lib/shapeAnimationEngine";
 
 type Props = {
   items: SceneItem[];
+  /** REQ-034: scene padding (m) for faint boundary cuboid; defaults to 0.3. */
+  boundaryMarginM?: number;
   cameraPersistenceKey?: string;
   /** Increment to re-apply default framing (REQ-016). */
   cameraResetVersion?: number;
@@ -177,6 +183,7 @@ function hexToThreeColor(hex: string): THREE.Color {
 
 export default function SceneLightsCanvas({
   items,
+  boundaryMarginM = DEFAULT_SCENE_BOUNDARY_MARGIN_M,
   cameraPersistenceKey,
   cameraResetVersion = 0,
   shapeGhostsSourceRef,
@@ -191,7 +198,10 @@ export default function SceneLightsCanvas({
   pinnedRef.current = pinned;
 
   const flatKey = items.map((i) => i.model_id).join("|");
-  const vizSig = useMemo(() => sceneItemsVizSignature(items), [items]);
+  const vizSig = useMemo(
+    () => sceneItemsVizSignature(items, boundaryMarginM),
+    [items, boundaryMarginM],
+  );
 
   useEffect(() => {
     setPinned(null);
@@ -387,6 +397,22 @@ export default function SceneLightsCanvas({
       });
       lineSegments = new THREE.LineSegments(lg, lm);
       scene.add(lineSegments);
+    }
+
+    const scenePts = framingLights.map((L) => ({ x: L.x, y: L.y, z: L.z }));
+    const bPos = paddedAabbWireframePositions(scenePts, boundaryMarginM);
+    let boundaryLines: THREE.LineSegments | null = null;
+    if (bPos && bPos.length > 0) {
+      const bg = new THREE.BufferGeometry();
+      bg.setAttribute("position", new THREE.BufferAttribute(bPos, 3));
+      const bm = new THREE.LineBasicMaterial({
+        color: VIZ_GREY,
+        transparent: true,
+        opacity: LINE_OPACITY,
+        depthWrite: false,
+      });
+      boundaryLines = new THREE.LineSegments(bg, bm);
+      scene.add(boundaryLines);
     }
 
     const raycaster = new THREE.Raycaster();
@@ -710,6 +736,10 @@ export default function SceneLightsCanvas({
         lineSegments.geometry.dispose();
         (lineSegments.material as THREE.Material).dispose();
       }
+      if (boundaryLines) {
+        boundaryLines.geometry.dispose();
+        (boundaryLines.material as THREE.Material).dispose();
+      }
       disposeGrid();
       while (ghostMeshes.length > 0) {
         popGhostMesh();
@@ -721,7 +751,14 @@ export default function SceneLightsCanvas({
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- vizSig covers scene geometry+state (REQ-031)
-  }, [vizSig, cameraPersistenceKey, flatKey, cameraResetVersion, shapeGhostsSourceRef]);
+  }, [
+    vizSig,
+    boundaryMarginM,
+    cameraPersistenceKey,
+    flatKey,
+    cameraResetVersion,
+    shapeGhostsSourceRef,
+  ]);
 
   const tip = pinned ?? hover;
   const totalLights = items.reduce((a, it) => a + it.lights.length, 0);

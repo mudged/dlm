@@ -136,6 +136,9 @@ func (s *Store) migrate(ctx context.Context) error {
 	if err := s.ensureSceneTables(ctx); err != nil {
 		return err
 	}
+	if err := s.ensureSceneBoundaryMarginColumn(ctx); err != nil {
+		return err
+	}
 	if err := s.migrateLegacyRandomColourRoutines(ctx); err != nil {
 		return fmt.Errorf("migrate legacy routine types: %w", err)
 	}
@@ -179,6 +182,20 @@ func (s *Store) ensureSceneTables(ctx context.Context) error {
 		return err
 	}
 	return s.ensureRoutineTables(ctx)
+}
+
+func (s *Store) ensureSceneBoundaryMarginColumn(ctx context.Context) error {
+	cols, err := s.tableColumns(ctx, "scenes")
+	if err != nil {
+		return err
+	}
+	if cols["boundary_margin_m"] {
+		return nil
+	}
+	if _, err := s.db.ExecContext(ctx, `ALTER TABLE scenes ADD COLUMN boundary_margin_m REAL NOT NULL DEFAULT 0.3`); err != nil {
+		return fmt.Errorf("migrate scenes.boundary_margin_m: %w", err)
+	}
+	return nil
 }
 
 func (s *Store) ensureRoutineTables(ctx context.Context) error {

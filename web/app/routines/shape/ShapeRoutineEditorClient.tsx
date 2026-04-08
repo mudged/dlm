@@ -48,6 +48,7 @@ import {
   fetchSceneDimensions,
   fetchScenes,
   patchSceneLightsStateScene,
+  sceneBoundaryMarginM,
   type SceneDetail,
   type SceneSummary,
 } from "@/lib/scenes";
@@ -542,6 +543,7 @@ export default function ShapeRoutineEditorClient() {
           <div className="mt-4 min-h-[280px] w-full sm:min-h-[320px]">
             <SceneLightsCanvas
               items={targetScene.items}
+              boundaryMarginM={sceneBoundaryMarginM(targetScene)}
               cameraPersistenceKey={`shape-unified-${targetScene.id}`}
               cameraResetVersion={cameraResetVersion}
               shapeGhostsSourceRef={ghostRef}
