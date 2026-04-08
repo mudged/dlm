@@ -395,7 +395,7 @@ As a user, when I **view** a model, I want **every** light drawn as a **2 cm whi
 
 **Scope**
 
-- In scope: On the **model view** / **detail** experience (the same flow as **viewing** a single model in **REQ-006**), the product MUST render the model’s light positions in **3D** using **three.js** (the JavaScript library from https://threejs.org/ , typically consumed as the `three` package). **Every** light returned for the model MUST be **drawn** (no deliberate omission, decimation, or level-of-detail that hides lights). **Each** light MUST appear as a **sphere** of **2 cm** diameter (**0.02 m**; **SI meters** per **REQ-005**). **Default** sphere appearance (no per-light state or **REQ-012** default) MUST be **white** with **solid** (opaque) **fill**. **Straight line segments** MUST connect **only** **consecutive** lights in **ascending id order**, consistent with **REQ-005** adjacency (one segment per pair **(i, i+1)** for **i = 0 … n − 2** when **n > 1**). Segments MUST use **`#D0D0D0`** (**canonical `#RRGGBB` light grey**, softer than mid-grey so the wire reads as **ambient** rather than **emphasis**) and **85% transparent**—i.e. **15% opaque** (e.g. alpha **0.15** in an **0–1** opacity scale)—and **thin** enough that they read as **subtle** guidance, **barely visible**, and **less prominent** than the light **spheres** (including **on** lights at **100%** brightness). **Pointer hover** over a light’s sphere MUST reveal that light’s **id** and **x**, **y**, **z**. **Touch** and **tablet** users MUST have an **equivalent** way to discover id and coordinates (**REQ-002**).
+- In scope: On the **model view** / **detail** experience (the same flow as **viewing** a single model in **REQ-006**), the product MUST render the model’s light positions in **3D** using **three.js** (the JavaScript library from https://threejs.org/ , typically consumed as the `three` package). **Every** light returned for the model MUST be **drawn** (no deliberate omission, decimation, or level-of-detail that hides lights). **Each** light MUST appear as a **sphere** of **2 cm** diameter (**0.02 m**; **SI meters** per **REQ-005**). **Default** sphere appearance (no per-light state or **REQ-012** default) MUST be **white** with **solid** (opaque) **fill**. **Straight line segments** MUST connect **only** **consecutive** lights in **ascending id order**, consistent with **REQ-005** adjacency (one segment per pair **(i, i+1)** for **i = 0 … n − 2** when **n > 1**). Segments MUST use **`#D0D0D0`** (**canonical `#RRGGBB` light grey**, softer than mid-grey so the wire reads as **ambient** rather than **emphasis**) and **85% transparent**—i.e. **15% opaque** (e.g. alpha **0.15** in an **0–1** opacity scale)—and **thin** enough that they read as **subtle** guidance, **barely visible**, and **less prominent** than the light **spheres** (including **on** lights at **100%** brightness). **Pointer hover** over a light’s sphere MUST reveal that light’s **id** and **x**, **y**, **z**. **Touch** and **tablet** users MUST have an **equivalent** way to discover id and coordinates (**REQ-002**). The **model** **three.js** **view** MUST **also** **show** **the** **faint** **axis-aligned** **boundary** **cuboid** **per** **REQ-034** **(**tight** **AABB** **on** **light** **`x,y,z`** **plus** **0.3** **m** **padding**)**.
 - Out of scope: Non-three.js renderers; **export** of screenshots or video; **editing** positions in the 3D view; segments between **non-consecutive** ids (e.g. skipping **i+1**); **animated** or **pulsing** hover chrome beyond showing the required data.
 
 **Business rules**
@@ -416,7 +416,7 @@ As a user, when I **view** a model, I want **every** light drawn as a **2 cm whi
 
 **Dependencies**
 
-- REQ-001, REQ-002, REQ-006, REQ-005
+- REQ-001, REQ-002, REQ-006, REQ-005, REQ-034
 
 **Open questions**
 
@@ -627,7 +627,7 @@ As a user, I want **scenes** that group **one or more** light **models** in a sh
 5. Each **persisted** **placement** (**offsets** **ox**, **oy**, **oz**) MUST be **integers** **≥ 0**. For **every** light, the **composed** **scene-space** coordinates MUST satisfy **x, y, z ≥ 0**; **no** light **position** may lie **outside** that **non-negative** **region** (**fully** or **partially**). The system MUST **reject** or **block** **invalid** placements (**including** **user** **edits** **after** **create**) with **clear** feedback.
 6. When **adding** a model to a scene that **already** contains **at least one** model, the **default** **initial** placement MUST position the **new** model **to the** **right** of the **existing** **layout**—i.e. **offset** along the **scene** axis that **architecture** defines as **“right”** in the **default** **camera**/**viewer** **convention**—so it sits **beside** the **current** **combined** **axis-aligned** **footprint** **without** **overlap** at **default** (exact **gap** or **touching** rule per architecture). The **scene** **volume** MUST **grow** (or **otherwise** **adjust**) **automatically** to **satisfy** **rules** **5** and **7**.
 7. The **scene**’s **display** volume MUST **automatically** **size** so that it **encloses** **all** placed model geometry with a **margin** of **at least 1 meter** beyond the **axis-aligned bounds** of **all** light positions in **scene** space (how **1 m** is **allocated** across **faces** is architecture).
-8. When viewing a scene, the product MUST use **three.js** as a **direct** front-end dependency (**REQ-010**) and MUST render **all** lights of **all** assigned models **without** omission when **n ≤ 1000** per model (**REQ-005**), with **segments** only between **consecutive** **ids** **within** the **same** model (**REQ-005**), **not** between models, **using** **derived** **scene-space** **positions** (**rule** **4**).
+8. When viewing a scene, the product MUST use **three.js** as a **direct** front-end dependency (**REQ-010**) and MUST render **all** lights of **all** assigned models **without** omission when **n ≤ 1000** per model (**REQ-005**), with **segments** only between **consecutive** **ids** **within** the **same** model (**REQ-005**), **not** between models, **using** **derived** **scene-space** **positions** (**rule** **4**). The **scene** **three.js** **view** MUST **also** **show** **the** **faint** **axis-aligned** **boundary** **cuboid** **per** **REQ-034** **(**tight** **AABB** **on** **all** **lights’** **`sx,sy,sz`** **plus** **0.3** **m** **padding**)**.
 9. **Per-light** **state** (**REQ-011**, **REQ-012**) MUST apply in the scene view **per model** as in the single-model view (colours, brightness, on/off, and **timely** updates).
 10. **Removing** a model when **more than one** model remains MUST **persist** **without** deleting the scene. **Removing** the **last** **remaining** model MUST **not** **silently** delete the scene: the user MUST **first** **confirm** a **clear** **explanation** that **removing** this **last** model will **delete** the **entire** scene (and **that** the scene will **disappear** from **lists**). On **confirm**, the system MUST **delete** the scene (and **remove** the model assignment). On **cancel**, the scene MUST **remain** **unchanged**. This **confirm** flow MUST be **usable** without **hover-only** **essential** steps (**REQ-002**).
 11. The scene view MUST provide **affordances** to **add** a **model** (from those available per **REQ-006**) and to **remove** a model, subject to **rules** **6** and **10**; the user MUST be able to **adjust** placements for models **already** in the scene (**subject** to **rule** **5**); **successful** changes MUST **persist** per architecture **without** **altering** **stored** **model** **light** **coordinates** (**rule** **4**).
@@ -640,7 +640,7 @@ As a user, I want **scenes** that group **one or more** light **models** in a sh
 
 **Dependencies**
 
-- REQ-002, REQ-005, REQ-006, REQ-010, REQ-011, REQ-012
+- REQ-002, REQ-005, REQ-006, REQ-010, REQ-011, REQ-012, REQ-034
 
 **Open questions**
 
@@ -1441,5 +1441,48 @@ As an end user, I want to **define** **and** **edit** **shape** **animation** **
 **Open questions**
 
 - **Exact** **policy** **when** **two** **faces** **are** **hit** **in** **one** **tick** **(**inflection** **and** **random** **deflect**)**.
+
+---
+
+### REQ-034 — Three.js scene and model views: faint axis-aligned boundary cuboid (30 cm pad)
+
+| Field | Value |
+|-------|-------|
+| **ID** | REQ-034 |
+| **Title** | Three.js scene and model views: faint axis-aligned boundary cuboid (30 cm pad) |
+| **Priority** | Must |
+| **Actor(s)** | End user |
+
+**User story**
+
+As a user viewing a **model** or a **scene** in **three.js**, I want a **faint** outline of the **axis-aligned bounding cuboid** that **encloses** the relevant lights **plus** a **fixed** **0.3 m** (**30 cm**) **margin** on **every** **side**, so that I see **where** the **lit** **volume** **ends** **without** **cluttering** the view (**similar** **visual** **weight** **to** the **inter-light** **wire** **segments** **in** **REQ-010**).
+
+**Scope**
+
+- In scope: On **every** **three.js** **viewport** **that** **visualizes** **lights** **for** **a** **single** **model** **(**REQ-010**)** **or** **for** **a** **composite** **scene** **(**REQ-015**)** — **including** **embedded** **scene** **previews** **where** **architecture** **reuses** **the** **same** **canvas** **(**e.g.** **REQ-027** **unified** **run**/**watch** **region**, **REQ-033** **shape** **authoring** **viewport**)** — **the** **product** **MUST** **draw** **one** **closed** **cuboid** **(**12** **edges** **or** **equivalent** **wireframe** **box**)** **in** **the** **same** **coordinate** **space** **as** **the** **lights** **(**model** **local** **`x,y,z`** **for** **the** **model** **view**;** **derived** **scene-space** **`sx,sy,sz`** **for** **the** **scene** **view**)**. **Appearance** **MUST** **be** **subtle** **(**faint**)** **and** **MUST** **read** **as** **guidance** **only** **—** **not** **more** **prominent** **than** **the** **REQ-010** **inter-light** **segments** **(**architecture** **may** **reuse** **the** **same** **colour**/**opacity** **recipe** **or** **document** **a** **closely** **matched** **alternative**)**. **Geometry** **rule** **(**business** **rules** **below**)** **is** **independent** **of** **whether** **underlying** **models** **are** **“regular”** **cuboids** **;** **only** **light** **positions** **matter**.
+- Out of scope: **Editing** **the** **boundary** **by** **hand**; **per-face** **different** **margins**; **rotated** **(**non-axis-aligned**)** **bounding** **prisms**; **changing** **REQ-020** **/** **scene** **dimensions** **API** **margins** **(**unless** **architecture** **explicitly** **aligns** **them**)**; **export** **or** **measurement** **tools**.
+
+**Business rules**
+
+1. **Tight** **axis-aligned** **box** **from** **lights** **only** **:** **Compute** **per-axis** **minimum** **and** **maximum** **over** **all** **light** **positions** **used** **in** **that** **viewport** **(**for** **a** **model** **view** **:** **canonical** **`x,y,z`** **of** **every** **light** **in** **the** **model** **;** **for** **a** **scene** **view** **:** **`sx,sy,sz`** **of** **every** **light** **in** **the** **scene** **)**. **Ignore** **non-finite** **values** **(**treat** **as** **errors** **per** **architecture** **if** **they** **cannot** **occur** **)**. **If** **there** **are** **no** **lights**, **no** **boundary** **cuboid** **is** **required** **(**or** **architecture** **defines** **a** **degenerate** **case**)**.
+2. **Padding** **:** **Expand** **the** **tight** **box** **by** **exactly** **0.3** **SI** **meters** **(**30** **cm**)** **along** **each** **axis** **in** **both** **directions** **(**i.e.** **subtract** **0.3** **from** **each** **minimum** **coordinate** **and** **add** **0.3** **to** **each** **maximum** **coordinate** **after** **the** **tight** **AABB** **is** **known**)**. **Result** **is** **the** **visual** **boundary** **cuboid** **(**closed** **box** **—** **architecture** **documents** **edge** **inclusion** **for** **rendering** **only**)**.
+3. **Drawing** **:** **The** **boundary** **MUST** **appear** **whenever** **the** **viewport** **shows** **the** **corresponding** **model** **or** **scene** **(**including** **after** **camera** **reset** **per** **REQ-016**)** **and** **MUST** **update** **when** **light** **positions** **or** **scene** **composition** **change** **(**e.g.** **placement** **offsets**, **add**/**remove** **model**)** **without** **requiring** **a** **full** **page** **reload** **(**same** **timeliness** **class** **as** **REQ-012** **for** **state-driven** **rebuilds**)**.
+4. **Prominence** **:** **The** **boundary** **MUST** **remain** **visually** **subtle** **(**faint**)** **—** **user** **can** **discern** **it** **against** **the** **REQ-019** **fixed** **dark-grey** **viewport** **but** **it** **MUST** **not** **dominate** **light** **spheres** **or** **the** **inter-light** **wire**.
+5. **Coordinate** **consistency** **:** **Scene** **boundary** **MUST** **use** **the** **same** **scene-space** **interpretation** **as** **REQ-015** **/** **REQ-020** **(**derived** **`sx`**, **`sy`**, **`sz`** **)** **so** **it** **aligns** **with** **where** **lights** **are** **drawn**.
+
+**Responsive / UX notes** *(when UI is involved)*
+
+- Mobile: Boundary **visible** **on** **small** **canvases** **;** **does** **not** **require** **extra** **gestures** **to** **see**.
+- Tablet: Same as mobile.
+- Desktop: Same; **optional** **future** **toggle** **to** **hide** **boundary** **is** **out** **of** **scope** **unless** **added** **later**.
+
+**Dependencies**
+
+- REQ-002, REQ-010, REQ-012, REQ-015, REQ-019, REQ-016 (camera reset must not permanently remove boundary), REQ-027 (scene preview reuse), REQ-033 (shape routine scene viewport)
+
+**Open questions**
+
+- Whether **REQ-020** **/** **server** **scene** **dimensions** **should** **eventually** **use** **the** **same** **0.3** **m** **visual** **padding** **(**architect** **trade-off** **vs** **current** **API** **margin** **semantics**)**.
+- **Exact** **line** **width** **/** **material** **(**dashed** **vs** **solid** **edges**)** **—** **architecture**.
 
 ---

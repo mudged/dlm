@@ -1162,6 +1162,38 @@ Feature: Shape animation routines declarative authoring and run (REQ-033)
     Given docs/requirements.md defines REQ-002 and REQ-033
     When the REQ-033 responsive UX notes are read
     Then parameter forms and unified viewport controls must be usable on mobile tablet and desktop without hover-only essential steps
+
+Feature: Faint scene boundary cuboid in three.js views (REQ-034)
+
+  Scenario: REQ-034 defines axis-aligned boundary from light extremes plus 30 cm pad
+    Parent requirement: REQ-034
+    Given docs/requirements.md defines REQ-034 REQ-010 and REQ-015
+    When the REQ-034 business rules about geometry are read
+    Then the tight boundary must be the axis-aligned min and max of every light position in the viewport coordinate space
+    And the drawn cuboid must expand that tight box by 0.3 meters on each side along every axis
+    And models need not be regular cuboids because only light positions define the tight box
+
+  Scenario: REQ-034 applies to model view and scene view including embedded scene canvases
+    Parent requirement: REQ-034
+    Given docs/requirements.md defines REQ-034 REQ-010 REQ-015 REQ-027 and REQ-033
+    When the REQ-034 scope is read
+    Then the model three.js view must show the boundary per REQ-034 in model local coordinates
+    And the scene three.js view must show the boundary in derived scene space sx sy sz
+    And embedded scene previews that reuse the same canvas pattern must show the boundary
+
+  Scenario: REQ-034 visual prominence matches faint inter-light wire guidance
+    Parent requirement: REQ-034
+    Given docs/requirements.md defines REQ-010 REQ-019 and REQ-034
+    When the REQ-034 business rules about appearance are read
+    Then the boundary must be faint and subtle similar in visual weight to REQ-010 inter-light segments
+    And it must not be more prominent than those segments or the light spheres
+
+  Scenario: REQ-010 and REQ-015 reference the boundary cuboid requirement
+    Parent requirement: REQ-034
+    Given docs/requirements.md defines REQ-010 REQ-015 and REQ-034
+    When REQ-010 scope and REQ-015 business rule 8 are read
+    Then the model view must require the REQ-034 boundary alongside spheres and chain segments
+    And the scene view must require the REQ-034 boundary alongside per-model chain segments
 ```
 
 ---
