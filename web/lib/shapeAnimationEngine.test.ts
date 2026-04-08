@@ -56,6 +56,15 @@ describe("shapeAnimationEngine", () => {
     expect(ghosts[0]!.radius).toBeGreaterThan(0);
   });
 
+  it("uses negative origin when API returns padded min below zero (matches REQ-034 wireframe)", () => {
+    const dims = sceneDimensionsFromApiResponse({
+      origin: { x: 0, y: -0.3, z: -0.3 },
+      max: { x: 3, y: 2, z: 2 },
+    });
+    expect(dims.min.y).toBe(-0.3);
+    expect(dims.min.z).toBe(-0.3);
+  });
+
   it("uses non-zero origin for axis-aligned scene bounds (random_face right)", () => {
     const def = JSON.stringify({
       version: 1,

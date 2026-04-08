@@ -250,14 +250,15 @@ func TestScenes_SpatialQueriesAndDimensions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Default boundary_margin_m = 0.3 m (REQ-034). AABB of lights (10..12, 0..2, 0..2) padded.
-	if dims.Origin.X != 9.7 || dims.Origin.Y != 0 || dims.Origin.Z != 0 {
+	// Default boundary_margin_m = 0.3 m (REQ-034). Padded AABB is unclamped at 0 so it matches
+	// the faint boundary wireframe and shape-animation bounds (min can be negative on Y/Z here).
+	if dims.Origin.X != 9.7 || dims.Origin.Y != -0.3 || dims.Origin.Z != -0.3 {
 		t.Fatalf("origin = %+v", dims.Origin)
 	}
 	if dims.Max.X != 12.3 || dims.Max.Y != 2.3 || dims.Max.Z != 2.3 {
 		t.Fatalf("max = %+v", dims.Max)
 	}
-	if math.Abs(dims.Size.Width-2.6) > 1e-9 || dims.Size.Height != 2.3 || dims.Size.Depth != 2.3 {
+	if math.Abs(dims.Size.Width-2.6) > 1e-9 || math.Abs(dims.Size.Height-2.6) > 1e-9 || math.Abs(dims.Size.Depth-2.6) > 1e-9 {
 		t.Fatalf("size = %+v", dims.Size)
 	}
 	if dims.MarginM != 0.3 {

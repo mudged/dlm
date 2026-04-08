@@ -1049,18 +1049,11 @@ func (s *Store) GetSceneDimensions(ctx context.Context, sceneID string) (*SceneD
 			mz = L.Sz
 		}
 	}
+	// Unclamped padded AABB: must match REQ-034 faint boundary cuboid and shape-animation
+	// physics (SceneLightsCanvas uses min(sx,sy,sz)−m with no floor at 0).
 	minX := mnX - marginM
 	minY := mnY - marginM
 	minZ := mnZ - marginM
-	if minX < 0 {
-		minX = 0
-	}
-	if minY < 0 {
-		minY = 0
-	}
-	if minZ < 0 {
-		minZ = 0
-	}
 	maxX := mx + marginM
 	maxY := my + marginM
 	maxZ := mz + marginM
