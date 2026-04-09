@@ -22,7 +22,11 @@ import {
   VIZ_VIEWPORT_BG,
   VIZ_VIEWPORT_BG_CSS,
 } from "@/lib/vizViewport";
-import { sceneItemsVizSignature } from "@/lib/lightStateSignature";
+import {
+  sceneItemsStructureSignature,
+  sceneItemsVizSignature,
+} from "@/lib/lightStateSignature";
+import { createInterLightWireLineMaterial } from "@/lib/vizWireMaterial";
 import type { GhostShapeOverlay } from "@/lib/shapeAnimationEngine";
 
 type Props = {
@@ -62,7 +66,6 @@ type TooltipState = { pick: PickData; cx: number; cy: number };
 
 const TAP_PX = 10;
 const VIZ_GREY = 0xd0d0d0;
-const LINE_OPACITY = 0.15;
 const OFF_SPHERE_OPACITY = 0.15;
 const HOVER_DECIMALS = 4;
 
@@ -158,6 +161,12 @@ type SavedOrbit = {
   target: THREE.Vector3;
 };
 
+type SceneVizRuntime = {
+  onParts: { mesh: THREE.Mesh; glow: THREE.Mesh; si: number }[];
+  standardMaterialForOnLight: (L: Light) => THREE.MeshStandardMaterial;
+  glowMaterialForOnLight: (L: Light) => THREE.MeshBasicMaterial;
+};
+
 const GHOST_OPACITY = 0.32;
 const GHOST_LERP_PER_S = 22;
 
@@ -192,6 +201,13 @@ export default function SceneLightsCanvas({
 
   const flatKey = items.map((i) => i.model_id).join("|");
   const vizSig = useMemo(() => sceneItemsVizSignature(items), [items]);
+  const structureSig = useMemo(
+    () => sceneItemsStructureSignature(items),
+    [items],
+  );
+  const vizRuntimeRef = useRef<SceneVizRuntime | null>(null);
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
 
   useEffect(() => {
     setPinned(null);
@@ -205,7 +221,7 @@ export default function SceneLightsCanvas({
       return;
     }
 
-    const sorted = flattenItems(items);
+    const sorted = flattenItems(itemsRef.current);
     const n = sorted.length;
 
     const scene = new THREE.Scene();
@@ -331,7 +347,7 @@ export default function SceneLightsCanvas({
       }
     }
 
-    const onMeshes: THREE.Mesh[] = [];
+    const onParts: { mesh: THREE.Mesh; glow: THREE.Mesh; si: number }[] = [];
     let instOff: THREE.InstancedMesh | null = null;
     const dummy = new THREE.Object3D();
 
@@ -351,7 +367,7 @@ export default function SceneLightsCanvas({
         mesh.userData.sortedIdx = si;
         mesh.renderOrder = 1;
         scene.add(mesh);
-        onMeshes.push(mesh);
+        onParts.push({ mesh, glow, si });
       }
     }
 
@@ -369,22 +385,23 @@ export default function SceneLightsCanvas({
       scene.add(instOff);
     }
 
-    const pickTargets: THREE.Object3D[] = [...onMeshes];
+    const pickTargets: THREE.Object3D[] = onParts.map((p) => p.mesh);
     if (instOff) {
       pickTargets.push(instOff);
     }
 
-    const segPos = mergeWirePositions(items);
+    vizRuntimeRef.current = {
+      onParts,
+      standardMaterialForOnLight,
+      glowMaterialForOnLight,
+    };
+
+    const segPos = mergeWirePositions(itemsRef.current);
     let lineSegments: THREE.LineSegments | null = null;
     if (segPos.length > 0) {
       const lg = new THREE.BufferGeometry();
       lg.setAttribute("position", new THREE.BufferAttribute(segPos, 3));
-      const lm = new THREE.LineBasicMaterial({
-        color: VIZ_GREY,
-        transparent: true,
-        opacity: LINE_OPACITY,
-        depthWrite: false,
-      });
+      const lm = createInterLightWireLineMaterial();
       lineSegments = new THREE.LineSegments(lg, lm);
       scene.add(lineSegments);
     }
@@ -433,7 +450,8 @@ export default function SceneLightsCanvas({
       if (si === undefined) {
         return null;
       }
-      return toPickData(sorted[si]!);
+      const sortedLive = flattenItems(itemsRef.current);
+      return toPickData(sortedLive[si]!);
     }
 
     let rafHover = 0;
@@ -677,6 +695,7 @@ export default function SceneLightsCanvas({
     tick();
 
     return () => {
+      vizRuntimeRef.current = null;
       if (cameraPersistenceKey !== undefined) {
         orbitRef.current = {
           key: cameraPersistenceKey,
@@ -720,8 +739,39 @@ export default function SceneLightsCanvas({
         container.removeChild(canvasEl);
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- vizSig covers scene geometry+state (REQ-031)
-  }, [vizSig, cameraPersistenceKey, flatKey, cameraResetVersion, shapeGhostsSourceRef]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- structureSig + flatKey (REQ-041)
+  }, [
+    structureSig,
+    cameraPersistenceKey,
+    flatKey,
+    cameraResetVersion,
+    shapeGhostsSourceRef,
+  ]);
+
+  useEffect(() => {
+    const rt = vizRuntimeRef.current;
+    if (!rt || rt.onParts.length === 0) {
+      return;
+    }
+    const sorted = flattenItems(items);
+    const { onParts, standardMaterialForOnLight, glowMaterialForOnLight } = rt;
+    for (const { mesh, glow, si } of onParts) {
+      const e = sorted[si];
+      if (!e) {
+        continue;
+      }
+      const sm = standardMaterialForOnLight(e.L);
+      const gm = glowMaterialForOnLight(e.L);
+      if (mesh.material !== sm) {
+        (mesh.material as THREE.Material).dispose();
+        mesh.material = sm;
+      }
+      if (glow.material !== gm) {
+        (glow.material as THREE.Material).dispose();
+        glow.material = gm;
+      }
+    }
+  }, [items, vizSig]);
 
   const tip = pinned ?? hover;
   const totalLights = items.reduce((a, it) => a + it.lights.length, 0);

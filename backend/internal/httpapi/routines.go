@@ -266,7 +266,7 @@ func (a *apiDeps) postSceneRoutineStart(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	runID, already, err := a.store.StartRoutineRun(r.Context(), sceneID, routineID)
+	runID, err := a.store.StartRoutineRun(r.Context(), sceneID, routineID)
 	if errors.Is(err, store.ErrRoutineNotFound) {
 		writeAPIError(w, http.StatusNotFound, "not_found", "routine not found")
 		return
@@ -292,14 +292,17 @@ func (a *apiDeps) postSceneRoutineStart(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	resp := startRoutineResponse{
+	if a.engine != nil {
+		if err := a.engine.Start(r.Context(), runID, sceneID, routineID); err != nil {
+			_ = a.store.StopRoutineRun(r.Context(), sceneID, runID)
+			writeAPIError(w, http.StatusServiceUnavailable, "routine_engine_failed", err.Error())
+			return
+		}
+	}
+
+	writeJSON(w, http.StatusCreated, startRoutineResponse{
 		RunID: runID, SceneID: sceneID, RoutineID: routineID, Status: store.RoutineStatusRunning,
-	}
-	if already {
-		writeJSON(w, http.StatusOK, resp)
-		return
-	}
-	writeJSON(w, http.StatusCreated, resp)
+	})
 }
 
 func (a *apiDeps) postSceneRoutineRunStop(w http.ResponseWriter, r *http.Request) {
@@ -312,6 +315,9 @@ func (a *apiDeps) postSceneRoutineRunStop(w http.ResponseWriter, r *http.Request
 	if sceneID == "" || runID == "" {
 		writeAPIError(w, http.StatusBadRequest, "bad_request", "missing scene or run id")
 		return
+	}
+	if a.engine != nil {
+		a.engine.Stop(runID)
 	}
 	err := a.store.StopRoutineRun(r.Context(), sceneID, runID)
 	if errors.Is(err, store.ErrRoutineRunNotFound) {

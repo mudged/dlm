@@ -99,9 +99,9 @@ func TestRoutinesCreateStartStopDelete(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runID, already, err := s.StartRoutineRun(ctx, sc.ID, r.ID)
-	if err != nil || already || runID == "" {
-		t.Fatalf("start %+v %v %v", runID, already, err)
+	runID, err := s.StartRoutineRun(ctx, sc.ID, r.ID)
+	if err != nil || runID == "" {
+		t.Fatalf("start %+v %v", runID, err)
 	}
 	runs, err := s.ListRunningRoutineRunsForScene(ctx, sc.ID)
 	if err != nil || len(runs) != 1 || runs[0].ID != runID {
@@ -112,6 +112,32 @@ func TestRoutinesCreateStartStopDelete(t *testing.T) {
 	}
 	if err := s.DeleteRoutine(ctx, r.ID); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestStartRoutineRun_secondStartSameRoutine_returnsConflict(t *testing.T) {
+	ctx := context.Background()
+	s := testDB(t)
+	sum, err := s.Create(ctx, "m1", []wiremodel.Light{{ID: 0, X: 0, Y: 0, Z: 0}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sc, err := s.CreateScene(ctx, "s1", []string{sum.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := s.CreateRoutine(ctx, "fx", "d", RoutineTypePythonSceneScript, "pass", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	runID, err := s.StartRoutineRun(ctx, sc.ID, r.ID)
+	if err != nil || runID == "" {
+		t.Fatalf("first start: %v %q", err, runID)
+	}
+	_, err = s.StartRoutineRun(ctx, sc.ID, r.ID)
+	var c *SceneRoutineConflictError
+	if !errors.As(err, &c) || c.RunID != runID || c.RoutineID != r.ID {
+		t.Fatalf("want SceneRoutineConflictError for duplicate start, got err=%v conflict=%+v", err, c)
 	}
 }
 

@@ -86,6 +86,9 @@ export function ShapeAnimationRoutineHost(props: {
           return;
         }
         void (async () => {
+          if (stoppedRef.current) {
+            return;
+          }
           try {
             const { allShapesStopped } = tickShapeAnimationSim(sim, dims, rng);
             onSimTick?.(sim);
@@ -96,8 +99,14 @@ export function ShapeAnimationRoutineHost(props: {
             }
             const updates = buildBatchUpdatesFromSim(sim, lightsCache!);
             onLightsPreview?.(updates);
+            if (stoppedRef.current) {
+              return;
+            }
             if (updates.length > 0) {
               await patchSceneLightsStateBatch(sceneId, updates);
+            }
+            if (stoppedRef.current) {
+              return;
             }
             if (tickCount % sceneRefreshStride === 0) {
               onSceneRefresh?.();

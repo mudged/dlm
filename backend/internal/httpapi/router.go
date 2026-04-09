@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"io/fs"
 	"log/slog"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 
 	"example.com/dlm/backend/internal/config"
 	"example.com/dlm/backend/internal/devices"
+	"example.com/dlm/backend/internal/routineengine"
 	"example.com/dlm/backend/internal/store"
 )
 
@@ -18,6 +20,7 @@ type apiDeps struct {
 	store  *store.Store
 	rev    *RevisionHub
 	pusher devicePusher
+	engine *routineengine.Engine
 }
 
 // NewSiteHandler wires /health, /api/v1/, and optional static UI from content (Next export).
@@ -39,6 +42,9 @@ func NewSiteHandler(cfg *config.Config, content fs.FS, st *store.Store, rev *Rev
 
 	api := http.NewServeMux()
 	deps := &apiDeps{store: st, rev: rev, pusher: pusher}
+	deps.engine = routineengine.New(st, cfg.HTTPListen, func(ctx context.Context, sceneID string, states []store.ScenePatchedState) {
+		deps.notifyAfterSceneLightPatch(ctx, sceneID, states)
+	}, log)
 	api.HandleFunc("POST /system/factory-reset", deps.postFactoryReset)
 	api.HandleFunc("GET /devices", deps.listDevices)
 	api.HandleFunc("POST /devices", deps.postDevice)

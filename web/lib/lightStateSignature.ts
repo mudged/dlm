@@ -9,6 +9,14 @@ function tripleKey(on: boolean, color: string, brightnessPct: number): string {
 }
 
 /** Stable string for REQ-031: rebuild three.js only when positions or effective light state changes. */
+/** Positions + on/off partition only — color/brightness changes do not rebuild the three.js graph (REQ-041). */
+export function modelLightsStructureSignature(lights: Light[]): string {
+  const sorted = [...lights].sort((a, b) => a.id - b.id);
+  const pos = sorted.map((L) => `${L.id}:${L.x},${L.y},${L.z}`).join(";");
+  const onoff = sorted.map((L) => `${L.id}:${L.on !== false ? 1 : 0}`).join(";");
+  return `${pos}|${onoff}`;
+}
+
 export function modelLightsVizSignature(lights: Light[]): string {
   const sorted = [...lights].sort((a, b) => a.id - b.id);
   const pos = sorted
@@ -46,6 +54,16 @@ export function sceneItemsVizSignature(items: SceneItem[]): string {
     .map((it) => {
       const lights = it.lights.map(sceneSpaceLight);
       return `${it.model_id}:${modelLightsVizSignature(lights)}`;
+    })
+    .join("||");
+}
+
+export function sceneItemsStructureSignature(items: SceneItem[]): string {
+  const sortedItems = [...items].sort((a, b) => a.model_id.localeCompare(b.model_id));
+  return sortedItems
+    .map((it) => {
+      const lights = it.lights.map(sceneSpaceLight);
+      return `${it.model_id}:${modelLightsStructureSignature(lights)}`;
     })
     .join("||");
 }

@@ -529,7 +529,7 @@ func (a *apiDeps) patchSceneLightsStateCuboid(w http.ResponseWriter, r *http.Req
 		out.States = []store.ScenePatchedState{}
 	}
 	if out.UpdatedCount > 0 {
-		a.notifyAfterSceneLightPatch(r.Context(), out.States)
+		a.notifyAfterSceneLightPatch(r.Context(), sceneID, out.States)
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -579,7 +579,7 @@ func (a *apiDeps) patchSceneLightsStateSphere(w http.ResponseWriter, r *http.Req
 		out.States = []store.ScenePatchedState{}
 	}
 	if out.UpdatedCount > 0 {
-		a.notifyAfterSceneLightPatch(r.Context(), out.States)
+		a.notifyAfterSceneLightPatch(r.Context(), sceneID, out.States)
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -626,7 +626,7 @@ func (a *apiDeps) patchSceneLightsStateScene(w http.ResponseWriter, r *http.Requ
 		out.States = []store.ScenePatchedState{}
 	}
 	if out.UpdatedCount > 0 {
-		a.notifyAfterSceneLightPatch(r.Context(), out.States)
+		a.notifyAfterSceneLightPatch(r.Context(), sceneID, out.States)
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -685,7 +685,7 @@ func (a *apiDeps) patchSceneLightsStateBatch(w http.ResponseWriter, r *http.Requ
 		out.States = []store.ScenePatchedState{}
 	}
 	if out.UpdatedCount > 0 {
-		a.notifyAfterSceneLightPatch(r.Context(), out.States)
+		a.notifyAfterSceneLightPatch(r.Context(), sceneID, out.States)
 	}
 	writeJSON(w, http.StatusOK, out)
 }

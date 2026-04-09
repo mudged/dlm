@@ -8,8 +8,8 @@ type WorkerOut =
   | { type: "error"; message: string }
   | { type: "iterationComplete"; sceneId: string };
 
-/** Max wait for cooperative stop before forcing worker shutdown (ms). */
-const T_FORCE_MS = 5000;
+/** Max wait for cooperative stop before forcing worker shutdown (REQ-040 / architecture §3.17, default T_force). */
+const T_FORCE_MS = 1500;
 
 /**
  * Runs the user’s Python in a worker while a scene routine is active.

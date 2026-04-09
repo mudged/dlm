@@ -6,7 +6,7 @@ Copy the **Requirement block** below for each user story. Replace placeholders; 
 
 ## Requirement block
 
-### REQ-000 — <Short title>
+## REQ-000 — <Short title>
 
 | Field | Value |
 |-------|-------|

@@ -55,6 +55,9 @@ func main() {
 		log.Error("load light state from db", "err", err)
 		os.Exit(1)
 	}
+	if err := st.StopAllRunningRoutineRuns(ctx); err != nil {
+		log.Warn("stop stale routine runs", "err", err)
+	}
 
 	ui, err := webdist.StaticFS()
 	if err != nil {

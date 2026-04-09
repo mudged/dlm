@@ -20,7 +20,11 @@ import {
   VIZ_VIEWPORT_BG,
   VIZ_VIEWPORT_BG_CSS,
 } from "@/lib/vizViewport";
-import { modelLightsVizSignature } from "@/lib/lightStateSignature";
+import {
+  modelLightsStructureSignature,
+  modelLightsVizSignature,
+} from "@/lib/lightStateSignature";
+import { createInterLightWireLineMaterial } from "@/lib/vizWireMaterial";
 
 type Props = {
   lights: Light[];
@@ -42,10 +46,15 @@ type PickData = {
 /** Client coordinates for `position: fixed` tooltip (avoids overflow clipping). */
 type TooltipState = { pick: PickData; cx: number; cy: number };
 
+type ModelVizRuntime = {
+  onParts: { mesh: THREE.Mesh; glow: THREE.Mesh; si: number }[];
+  standardMaterialForOnLight: (L: Light) => THREE.MeshStandardMaterial;
+  glowMaterialForOnLight: (L: Light) => THREE.MeshBasicMaterial;
+};
+
 const TAP_PX = 10;
 /** REQ-010: #D0D0D0 at 85% transparency (15% opacity); matches off-sphere styling (REQ-012). */
 const VIZ_GREY = 0xd0d0d0;
-const LINE_OPACITY = 0.15;
 const OFF_SPHERE_OPACITY = 0.15;
 const HOVER_DECIMALS = 4;
 
@@ -112,6 +121,13 @@ function ModelLightsCanvas({
   pinnedRef.current = pinned;
 
   const vizSig = useMemo(() => modelLightsVizSignature(lights), [lights]);
+  const structureSig = useMemo(
+    () => modelLightsStructureSignature(lights),
+    [lights],
+  );
+  const vizRuntimeRef = useRef<ModelVizRuntime | null>(null);
+  const lightsRef = useRef(lights);
+  lightsRef.current = lights;
 
   useEffect(() => {
     setPinned(null);
@@ -245,7 +261,7 @@ function ModelLightsCanvas({
       }
     }
 
-    const onMeshes: THREE.Mesh[] = [];
+    const onParts: { mesh: THREE.Mesh; glow: THREE.Mesh; si: number }[] = [];
     let instOff: THREE.InstancedMesh | null = null;
     const dummy = new THREE.Object3D();
 
@@ -262,7 +278,7 @@ function ModelLightsCanvas({
         mesh.userData.sortedIdx = si;
         mesh.renderOrder = 1;
         scene.add(mesh);
-        onMeshes.push(mesh);
+        onParts.push({ mesh, glow, si });
       }
     }
 
@@ -280,22 +296,23 @@ function ModelLightsCanvas({
       scene.add(instOff);
     }
 
-    const pickTargets: THREE.Object3D[] = [...onMeshes];
+    const pickTargets: THREE.Object3D[] = onParts.map((p) => p.mesh);
     if (instOff) {
       pickTargets.push(instOff);
     }
+
+    vizRuntimeRef.current = {
+      onParts,
+      standardMaterialForOnLight,
+      glowMaterialForOnLight,
+    };
 
     const segPos = buildWireSegmentPositions(lights);
     let lineSegments: THREE.LineSegments | null = null;
     if (segPos.length > 0) {
       const lg = new THREE.BufferGeometry();
       lg.setAttribute("position", new THREE.BufferAttribute(segPos, 3));
-      const lm = new THREE.LineBasicMaterial({
-        color: VIZ_GREY,
-        transparent: true,
-        opacity: LINE_OPACITY,
-        depthWrite: false,
-      });
+      const lm = createInterLightWireLineMaterial();
       lineSegments = new THREE.LineSegments(lg, lm);
       scene.add(lineSegments);
     }
@@ -327,7 +344,8 @@ function ModelLightsCanvas({
       if (si === undefined) {
         return null;
       }
-      const L = sorted[si]!;
+      const sortedLive = [...lightsRef.current].sort((a, b) => a.id - b.id);
+      const L = sortedLive[si]!;
       return {
         id: L.id,
         x: L.x,
@@ -449,6 +467,7 @@ function ModelLightsCanvas({
     tick();
 
     return () => {
+      vizRuntimeRef.current = null;
       if (cameraPersistenceKey !== undefined) {
         orbitRef.current = {
           key: cameraPersistenceKey,
@@ -488,9 +507,36 @@ function ModelLightsCanvas({
         container.removeChild(canvasEl);
       }
     };
-    // vizSig encodes positions + effective state; listing `lights` would rebuild every parent render (REQ-031).
+    // structureSig: positions + on/off partition only (REQ-041 incremental viz).
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional
-  }, [vizSig, cameraPersistenceKey, cameraResetVersion]);
+  }, [structureSig, cameraPersistenceKey, cameraResetVersion]);
+
+  useEffect(() => {
+    const rt = vizRuntimeRef.current;
+    if (!rt || rt.onParts.length === 0) {
+      return;
+    }
+    const sorted = [...lights].sort((a, b) => a.id - b.id);
+    const { onParts, standardMaterialForOnLight, glowMaterialForOnLight } = rt;
+    for (const { mesh, glow, si } of onParts) {
+      const L = sorted[si];
+      if (!L) {
+        continue;
+      }
+      const sm = standardMaterialForOnLight(L);
+      const gm = glowMaterialForOnLight(L);
+      // Do not dispose when sm/gm are the same cached instances already on the mesh — that
+      // invalidates shared cache entries and breaks rendering (REQ-031 viz update path).
+      if (mesh.material !== sm) {
+        (mesh.material as THREE.Material).dispose();
+        mesh.material = sm;
+      }
+      if (glow.material !== gm) {
+        (glow.material as THREE.Material).dispose();
+        glow.material = gm;
+      }
+    }
+  }, [lights, vizSig]);
 
   const tip = pinned ?? hover;
 

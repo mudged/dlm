@@ -21,6 +21,10 @@ import {
   useState,
 } from "react";
 import { Button } from "@/components/ui/Button";
+import {
+  applyModelLightDeltas,
+  parseLightsSSEMessage,
+} from "@/lib/lightDeltas";
 import type { Light, ModelDetail } from "@/lib/models";
 
 const PAGE_SIZE_OPTIONS = [25, 50, 100] as const;
@@ -232,6 +236,51 @@ function BulkLightStatePanel({
     setSaving(true);
     setErr(null);
     try {
+      if (selectedIds.length === 1) {
+        const onlyId = selectedIds[0];
+        const res = await fetch(
+          `/api/v1/models/${encodeURIComponent(modelId)}/lights/${encodeURIComponent(String(onlyId))}/state`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              on,
+              color: color.trim(),
+              brightness_pct: bp,
+            }),
+          },
+        );
+        const j = (await res.json().catch(() => null)) as {
+          id?: number;
+          on?: boolean;
+          color?: string;
+          brightness_pct?: number;
+          error?: { message?: string };
+        };
+        if (!res.ok) {
+          setErr(j?.error?.message ?? `Update failed (${res.status})`);
+          return;
+        }
+        if (
+          j.id === undefined ||
+          j.on === undefined ||
+          j.color === undefined ||
+          j.brightness_pct === undefined
+        ) {
+          setErr("Invalid response from server.");
+          return;
+        }
+        onApplied([
+          {
+            id: j.id,
+            on: j.on,
+            color: j.color,
+            brightness_pct: j.brightness_pct,
+          },
+        ]);
+        return;
+      }
+
       const res = await fetch(
         `/api/v1/models/${encodeURIComponent(modelId)}/lights/state/batch`,
         {
@@ -396,10 +445,10 @@ export function ModelDetailClient() {
     void load();
   }, [load]);
 
-  // REQ-029: Server-Sent Events — refetch model when light state changes from another client or integrator.
-  const sseSkipFirst = useRef(true);
+  // REQ-041: SSE with seq + deltas; merge locally; snapshot on gap or transport error.
+  const sseSeqRef = useRef<number | null>(null);
   useEffect(() => {
-    sseSkipFirst.current = true;
+    sseSeqRef.current = null;
   }, [id]);
   useEffect(() => {
     if (!id || typeof window === "undefined") {
@@ -407,15 +456,33 @@ export function ModelDetailClient() {
     }
     const url = `/api/v1/models/${encodeURIComponent(id)}/lights/events`;
     const es = new EventSource(url);
-    es.onmessage = () => {
-      if (sseSkipFirst.current) {
-        sseSkipFirst.current = false;
+    es.onmessage = (ev) => {
+      const msg = parseLightsSSEMessage(ev.data);
+      if (!msg) {
         return;
       }
-      void load();
+      const prev = sseSeqRef.current;
+      if (prev !== null && msg.seq !== prev + 1) {
+        sseSeqRef.current = msg.seq;
+        void load();
+        return;
+      }
+      sseSeqRef.current = msg.seq;
+      const deltas = msg.deltas ?? [];
+      if (deltas.length === 0) {
+        return;
+      }
+      setModel((m) => {
+        if (!m || m.id !== id) {
+          return m;
+        }
+        return { ...m, lights: applyModelLightDeltas(m.lights, deltas) };
+      });
     };
     es.onerror = () => {
       es.close();
+      sseSeqRef.current = null;
+      void load();
     };
     return () => es.close();
   }, [id, load]);

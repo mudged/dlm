@@ -46,7 +46,11 @@ func (a *apiDeps) postResetLightStates(w http.ResponseWriter, r *http.Request) {
 		states = []store.LightStateDTO{}
 	}
 	if !unchangedAll {
-		a.notifyModelLightsChanged(r.Context(), modelID)
+		deltas := make([]LightsSSEDelta, 0, len(states))
+		for _, st := range states {
+			deltas = append(deltas, lightDTOToDelta(st))
+		}
+		a.notifyModelLightsChanged(r.Context(), modelID, deltas)
 	}
 	resp := map[string]any{"states": states}
 	if unchangedAll {
@@ -153,8 +157,8 @@ func (a *apiDeps) patchLightState(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusInternalServerError, "internal_error", "could not update light state")
 		return
 	}
-	if !unchanged {
-		a.notifyModelLightsChanged(r.Context(), modelID)
+	if !unchanged && st != nil {
+		a.notifyModelLightsChanged(r.Context(), modelID, []LightsSSEDelta{lightDTOToDelta(*st)})
 	}
 	out := map[string]any{
 		"id":             st.ID,
@@ -248,7 +252,11 @@ func (a *apiDeps) patchLightStatesBatch(w http.ResponseWriter, r *http.Request) 
 		states = []store.LightStateDTO{}
 	}
 	if !unchangedAll {
-		a.notifyModelLightsChanged(r.Context(), modelID)
+		deltas := make([]LightsSSEDelta, 0, len(states))
+		for _, st := range states {
+			deltas = append(deltas, lightDTOToDelta(st))
+		}
+		a.notifyModelLightsChanged(r.Context(), modelID, deltas)
 	}
 	resp := map[string]any{"states": states}
 	if unchangedAll {

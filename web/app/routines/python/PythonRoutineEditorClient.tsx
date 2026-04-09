@@ -7,7 +7,6 @@ import { python } from "@codemirror/lang-python";
 import { lintGutter } from "@codemirror/lint";
 import dynamic from "next/dynamic";
 import { PythonCodeMirrorEditor } from "@/components/PythonCodeMirrorEditor";
-import { PythonRoutineHost } from "@/components/PythonRoutineHost";
 import { PythonSceneApiCatalogSection } from "@/components/PythonSceneApiCatalogSection";
 import {
   faArrowsRotate,
@@ -43,6 +42,7 @@ import {
   createRoutine,
   deleteRoutine,
   fetchRoutine,
+  fetchSceneRoutineRuns,
   patchRoutine,
   startSceneRoutine,
   stopSceneRoutineRun,
@@ -351,6 +351,18 @@ export default function PythonRoutineEditorClient() {
     setBusy(true);
     setError(null);
     try {
+      let runId =
+        activeRun?.scene_id === targetSceneId ? activeRun.run_id : null;
+      if (!runId) {
+        const runs = await fetchSceneRoutineRuns(targetSceneId);
+        if (runs.length > 0) {
+          runId = runs[0].id;
+        }
+      }
+      if (runId) {
+        await stopSceneRoutineRun(targetSceneId, runId);
+        setActiveRun(null);
+      }
       await patchSceneLightsStateScene(targetSceneId, {
         on: false,
         color: "#ffffff",
@@ -363,21 +375,6 @@ export default function PythonRoutineEditorClient() {
       setBusy(false);
     }
   }
-
-  const workerSource = activeRun ? code : "";
-  const showWorker =
-    activeRun &&
-    activeRun.scene_id === targetSceneId &&
-    Boolean(workerSource.trim());
-
-  const onWorkerIteration = useCallback(
-    (sid: string) => {
-      if (sid === targetSceneId) {
-        void refreshTargetScene();
-      }
-    },
-    [targetSceneId, refreshTargetScene],
-  );
 
   if (!loaded) {
     return (
@@ -395,10 +392,10 @@ export default function PythonRoutineEditorClient() {
             Python room routine
           </h1>
           <p className="mt-1 max-w-2xl text-sm text-slate-600 dark:text-slate-400">
-            Write short Python here. It runs in your browser and can change lights in a room
-            you pick. Under the code is a list of every command — open one, then press the
-            button to copy the example into your script. Below that you start the script and
-            see the same room in 3D.
+            Write short Python here. After you save and start, it runs on the server (python3)
+            and changes lights in the room you pick. Under the code is a list of every command
+            — open one, then press the button to copy the example into your script. Below that
+            you start the run and watch the same room in 3D (server push).
           </p>
         </div>
         <Link
@@ -597,15 +594,11 @@ export default function PythonRoutineEditorClient() {
             Reset camera
           </Button>
         </div>
-        {showWorker ? (
-          <div className="mt-3">
-            <PythonRoutineHost
-              sceneId={activeRun.scene_id}
-              source={workerSource}
-              onWorkerMessage={(msg) => setError(msg)}
-              onIterationComplete={onWorkerIteration}
-            />
-          </div>
+        {activeRun && activeRun.scene_id === targetSceneId ? (
+          <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
+            Run is active on the server. The 3D view updates from the server; you do not need to
+            keep this page open.
+          </p>
         ) : null}
         {targetScene && targetScene.items.length > 0 ? (
           <div className="mt-4 min-h-[280px] w-full sm:min-h-[320px]">

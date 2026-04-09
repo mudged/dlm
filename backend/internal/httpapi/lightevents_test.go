@@ -78,10 +78,14 @@ func TestModelLightsEvents_streamAfterPatch(t *testing.T) {
 		t.Fatal(err)
 	}
 	var first struct {
-		Seq uint64 `json:"seq"`
+		Seq    uint64 `json:"seq"`
+		Deltas []any  `json:"deltas"`
 	}
 	if err := json.Unmarshal([]byte(firstJSON), &first); err != nil {
 		t.Fatalf("decode first: %v body %q", err, firstJSON)
+	}
+	if first.Deltas == nil {
+		t.Fatalf("expected deltas field in first SSE payload, got %q", firstJSON)
 	}
 
 	patchBody := `{"on":true,"color":"#ff0000","brightness_pct":100}`
@@ -102,13 +106,22 @@ func TestModelLightsEvents_streamAfterPatch(t *testing.T) {
 		t.Fatal(err)
 	}
 	var second struct {
-		Seq uint64 `json:"seq"`
+		Seq    uint64 `json:"seq"`
+		Deltas []struct {
+			LightID       int     `json:"light_id"`
+			On            bool    `json:"on"`
+			Color         string  `json:"color"`
+			BrightnessPct float64 `json:"brightness_pct"`
+		} `json:"deltas"`
 	}
 	if err := json.Unmarshal([]byte(secondJSON), &second); err != nil {
 		t.Fatalf("decode second: %v body %q", err, secondJSON)
 	}
 	if second.Seq != first.Seq+1 {
 		t.Fatalf("expected seq %d got %d", first.Seq+1, second.Seq)
+	}
+	if len(second.Deltas) != 1 || second.Deltas[0].LightID != 0 || !second.Deltas[0].On || second.Deltas[0].Color != "#ff0000" {
+		t.Fatalf("unexpected deltas in second payload: %+v body %q", second.Deltas, secondJSON)
 	}
 	cancel()
 }
@@ -218,10 +231,14 @@ func TestSceneLightsEvents_streamAfterScenePatch(t *testing.T) {
 		t.Fatal(err)
 	}
 	var first struct {
-		Seq uint64 `json:"seq"`
+		Seq    uint64 `json:"seq"`
+		Deltas []any  `json:"deltas"`
 	}
 	if err := json.Unmarshal([]byte(firstJSON), &first); err != nil {
 		t.Fatal(err)
+	}
+	if first.Deltas == nil {
+		t.Fatalf("expected deltas field in first SSE payload, got %q", firstJSON)
 	}
 
 	patch := `{"on":true,"color":"#00ff00","brightness_pct":50}`
@@ -243,13 +260,23 @@ func TestSceneLightsEvents_streamAfterScenePatch(t *testing.T) {
 		t.Fatal(err)
 	}
 	var second struct {
-		Seq uint64 `json:"seq"`
+		Seq    uint64 `json:"seq"`
+		Deltas []struct {
+			ModelID       string  `json:"model_id"`
+			LightID       int     `json:"light_id"`
+			On            bool    `json:"on"`
+			Color         string  `json:"color"`
+			BrightnessPct float64 `json:"brightness_pct"`
+		} `json:"deltas"`
 	}
 	if err := json.Unmarshal([]byte(secondJSON), &second); err != nil {
 		t.Fatal(err)
 	}
 	if second.Seq != first.Seq+1 {
 		t.Fatalf("expected seq %d got %d", first.Seq+1, second.Seq)
+	}
+	if len(second.Deltas) != 1 || second.Deltas[0].ModelID != modelID || second.Deltas[0].LightID != 0 {
+		t.Fatalf("unexpected deltas in second payload: %+v", second.Deltas)
 	}
 	cancel()
 }

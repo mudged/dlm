@@ -1,10 +1,10 @@
 # Architecture
 
-This document defines technical structure and deployment for the product described in `docs/requirements.md` (**REQ-001–REQ-039**).
+This document defines technical structure and deployment for the product described in `docs/requirements.md` (**REQ-001–REQ-041**).
 
-**REQ-034–REQ-039:** **REQ-034** (faint boundary cuboid + **`margin_m`**) is covered in **§3.12–§3.13**, **§4.7**, **§4.9**. **REQ-035–REQ-039** add **WLED devices**, **1:1 assignment**, **Devices UI** (**§4.15**), **server-side routines** (**§3.16–§3.17.2**), **in-memory light state** (**§3.3**, **§3.9**, **§3.21**), and **WLED push** (**§3.19–§3.20**). **The §1 table** is the **concise** trace from each REQ to sections; **if** any **bullet** **below** **still** **reads** **“SQLite** **for** **light** **triples**” **or** **“browser-only** **routine** **engine**”, **treat** **that** **as** **stale** **and** **follow** **the** **§** **links** **in** **the** **REQ-034–REQ-039** **rows** **and** **§3.9**/**§3.16** **instead**.
+**REQ-034–REQ-041:** **REQ-034** (faint boundary cuboid + **`margin_m`**, **same** **line** **style** **as** **inter-light** **wire** **§4.7**) **is** **covered** **in** **§3.12–§3.13**, **§4.7**, **§4.9**. **REQ-035–REQ-039** add **WLED devices**, **1:1 assignment**, **Devices UI** (**§4.15**), **routine** **automation** **on** **the** **Go** **service** **(**`internal/routineengine`** **—** **§3.16–§3.17.2**)** **,** **in-memory light state** (**§3.3**, **§3.9**, **§3.21**), **and** **WLED push** (**§3.19–§3.20**). **REQ-040** (**routine** **stop** **≤** **2** **s**)** **is** **§3.17**/**§3.17.2**. **REQ-041** (**SSE**/**WebSocket-class** **push** **+** **delta** **apply** **for** **shipped** **three.js** **viewports**)** **is** **§3.18**, **§4.3**, **§4.7**, **§4.9**, **§4.13**, **§4.14**. **The** **browser** **is** **an** **observer** **of** **authoritative** **server** **state** **for** **routines** **(**REQ-038** **,** **REQ-021**)** **—** **it** **must** **not** **host** **production** **routine** **loops** **.
 
-**REQ-001–REQ-033** **(summary):** **Go** **+** **embedded** **Next** **static** **export** **;** **models**/**scenes**/**routines** **in** **SQLite** **;** **per-light** **output** **state** **in** **`LightStateStore`** **(**not** **SQLite** **—** **REQ-039**)** **;** **three.js** **views** **§4.7**/**§4.9** **;** **scene** **spatial** **API** **§3.15** **;** **routines** **(**Python** **+** **shape** **animation**)** **run** **on** **the** **server** **(**REQ-038**)** **with** **optional** **`python3`** **subprocess** **§3.17** **.
+**REQ-001–REQ-033** **(summary):** **Go** **+** **embedded** **Next** **static** **export** **;** **models**/**scenes**/**routines** **in** **SQLite** **;** **per-light** **output** **state** **in** **`LightStateStore`** **(**not** **SQLite** **—** **REQ-039**)** **;** **three.js** **views** **§4.7**/**§4.9** **with** **server-push** **observer** **path** **per** **REQ-041** **;** **scene** **spatial** **API** **§3.15** **;** **routine** **automation** **(**Python** **+** **shape** **animation**)** **runs** **inside** **`internal/routineengine`** **:** **supervised** **`python3`** **with** **loopback** **HTTP** **to** **§3.15** **(**§3.17**)** **and** **Go** **`time.Ticker`** **shape** **simulation** **(**§3.17.2**)** **;** **runs** **progress** **headless** **without** **any** **browser** **(**REQ-038**)** **;** **Next.js** **MAY** **use** **Pyodide** **or** **similar** **only** **for** **REQ-022** **editor** **lint**/**format** **—** **not** **for** **applying** **routine** **effects** **;** **stop** **latency** **REQ-040** **§3.17**/**§3.17.2** **.
 
 ## Architectural resolution: REQ-004 (single binary) vs Next.js
 
@@ -44,25 +44,27 @@ This meets REQ-004 rule 1 (**no separate Node.js runtime** in the distribution) 
 | REQ-018 | **§4.11**: **Tailwind** **`dark:`** **variant** on **`html`** (**add**/**remove** **`class="dark"`** **or** **`data-theme="dark"`** **per** **Tailwind** **v4**/**v3** **config**); **before** **any** **stored** **user** **choice**, **derive** **initial** **light**/**dark** **from** **`window.matchMedia('(prefers-color-scheme: dark)')`** **(or** **equivalent**)** **when** **available**; **fallback** **to** **light** **if** **the** **platform** **does** **not** **expose** **a** **scheme**; **after** **the** **user** **toggles** **theme**, **persist** **`light`** **or** **`dark`** **in** **`localStorage`** **key** **`dlm-theme`** **and** **re-apply** **on** **load** **before** **first** **paint** **(inline** **blocking** **script** **in** **`layout`** **recommended** **to** **avoid** **flash**)** **so** **the** **persisted** **value** **overrides** **`prefers-color-scheme`** **until** **cleared** **or** **changed**; **shell** **tokens**: **light** **`bg-white`** **+** **`text-gray-900`**; **dark** **`bg-gray-900`** **+** **`text-white`** (**dark** **grey** **background**, **not** **mandating** **`#000`**); **`AppShell`**: **header** **(burger,** **`faLightbulb`** **regular** **logo,** **exact** **title** **`Domestic Light & Magic`**, **theme** **toggle** **with** **icons)** **+** **collapsible** **left** **`<aside>`** **nav** **+** **`main`**; **Font Awesome** **Free** **`@fortawesome/fontawesome-svg-core`**, **`@fortawesome/react-fontawesome`**, **`@fortawesome/free-regular-svg-icons`**, **`@fortawesome/free-solid-svg-icons`**; **buttons** **and** **button-styled** **controls** **include** **a** **visible** **Font Awesome** **icon** **+** **accessible** **name**. |
 | REQ-019 | **§4.7**, **§4.9**: **`ModelLightsCanvas`** **/** **`SceneLightsCanvas`** **set** **a** **fixed** **dark-grey** **clear** **/** **scene** **background** **and** **matching** **letterbox** **wrapper** **(see** **§4.7** **viewport** **subsection**)** **independent** **of** **`html`** **`dark`** **class**; **does** **not** **replace** **REQ-018** **shell** **tokens** **for** **`main`** **chrome**. |
 | REQ-020 | **§3.2**, **§3.12**, **§3.13**, **§3.15**, **§8.15**: scene-space API for dimensions + full/filtered light retrieval (cuboid/sphere) + transactional bulk updates (cuboid/sphere + **`PATCH …/lights/state/scene`** + **`PATCH …/lights/state/batch`**), all computed from derived scene coordinates (**`sx/sy/sz`**) and validated with explicit geometry rules. |
-| REQ-021 | **§3.2**, **§3.14**, **§3.15**, **§3.16**, **§3.17**, **§3.17.2**, **§4.9**, **§4.11**, **§4.12**, **§4.14**, **§8.16**/**§8.17**/**§8.21**/**§8.22**: **Two** **kinds** **;** **start**/**stop** **persists** **`routine_runs`** **and** **starts**/**stops** **`routineengine`** **supervisor** **(**REQ-038**)** **;** **effects** **only** **through** **§3.15** **(**not** **`/models/.../lights`** **for** **routine** **automation**)** **;** **one** **active** **run** **per** **scene** **;** **409** **while** **running** **on** **destructive** **definition** **mutations**. |
-| REQ-022 | **§3.2**, **§3.15**, **§3.16**, **§3.17** **(**server** **Python** **runner** **+** **REQ-030** **in** **runner** **)** **,** **§4.9**, **§4.11**, **§4.12**, **§4.13** **(**CodeMirror** **6** **editor** **unchanged**)** **,** **§6.2**, **§8.17**: **`python_source`** **stored** **in** **SQLite** **;** **execution** **in** **Go-supervised** **`python3`** **subprocess** **(**or** **documented** **equivalent**)** **with** **`scene`** **shim** **calling** **loopback** **`127.0.0.1`** **§3.15** **(**same** **validation** **as** **browser** **would** **have** **invoked**)** **;** **cooperative** **/** **forced** **stop** **via** **supervisor** **(**§3.17**)** **. **Deployment** **MAY** **require** **`python3`** **on** **`PATH`** **on** **the** **Pi** **(**document** **in** **README**)** **—** **trade-off** **vs** **former** **Pyodide-only** **browser** **execution**. |
+| REQ-021 | **§3.2**, **§3.14**, **§3.15**, **§3.16**, **§3.17**, **§3.17.2**, **§4.9**, **§4.11**, **§4.12**, **§4.14**, **§8.16**/**§8.17**/**§8.21**/**§8.22**: **Two** **kinds** **;** **`internal/routineengine`** **supervises** **runs** **after** **`POST …/start`** **(**REQ-038** **headless**)** **;** **browser** **only** **start**/**stop** **/** **observe** **(**REQ-041**)** **;** **stop** **≤** **2** **s** **(**REQ-040**)** **;** **effects** **only** **through** **§3.15** **semantics** **(**not** **`/models/.../lights`** **for** **routine** **automation**)** **;** **one** **active** **run** **per** **scene** **;** **409** **while** **running** **on** **destructive** **definition** **mutations**. |
+| REQ-022 | **§3.2**, **§3.15**, **§3.16**, **§3.17** **(**supervised** **`python3`** **child** **+** **REQ-030** **in** **CPython** **)** **,** **§4.9**, **§4.11**, **§4.12**, **§4.13** **(**CodeMirror** **6** **editor** **;** **optional** **Pyodide** **for** **lint**/**format** **only**)** **,** **§6.2**, **§8.17**: **`python_source`** **in** **SQLite** **;** **production** **loop** **in** **`python3`** **with** **`scene`** **shim** **calling** **loopback** **§3.15** **;** **cooperative** **/** **`SIGTERM`**/**`SIGKILL`** **within** **REQ-040** **. |
 | REQ-023 | **§4.12** (**create** **flow** **chooses** **Python** **or** **shape** **animation** **—** **exactly** **two** **kinds**; **no** **third** **engine**), **§4.13**, **§4.14**, **§4.9**, **§4.11**; **`POST /api/v1/routines`** **`type`** **`python_scene_script`** **or** **`shape_animation`** **(**§3.16**)**. |
 | REQ-024 | **§4.13** (**`<section id="python-scene-api-catalog">`** **immediately** **below** **editor** **—** **complete** **`scene`** **API** **manifest** **from** **§3.17** **including** **REQ-030** **`scene.random_hex_colour`**, **`scene.max_x`/`max_y`/`max_z`**; **per-entry** **commented** **snippets** **for** **API** **items** **only**; **REQ-032** **default** **routines** **are** **not** **required** **as** **whole-script** **catalog** **rows** **(**REQ-024** **rule** **7**)**; **picker** **+** **insert** **at** **caret** **or** **EOF**). |
 | REQ-025 | **§4.13** (**`PYTHON_ROUTINE_DEFAULT_SOURCE`** **in** **`web/`** **—** **applied** **when** **creating** **`python_scene_script`** **with** **empty** **`python_source`** **and** **optional** **“Reset** **template”**); **uses** **`scene.set_lights_in_sphere`** **with** **`on`**, **`color`**, **`brightness_pct`**; **SHOULD** **use** **`scene.random_hex_colour()`** **for** **the** **demo** **colour** **(**REQ-030**)** **instead** **of** **`import** **random`** **for** **that** **single** **pattern**. |
 | REQ-026 | **§3.15** (**axis** **mapping** **for** **`size.width`**, **`size.height`**, **`size.depth`** **and** **`max.x/y/z`**), **§3.17** (**Python** **`scene.width`**, **`scene.height`**, **`scene.depth`**, **`scene.max_x`**, **`scene.max_y`**, **`scene.max_z`** **from** **`GET …/dimensions`**), **§4.13** (**REQ-024** **API** **reference** **manifest**). |
-| REQ-027 | **§4.13** **and** **§4.14** (**unified** **panel** **per** **kind:** **one** **scene** **`<select>`** **for** **run** **+** **`SceneLightsCanvas`**; **Start**/**Stop**; **Reset** **scene** **lights** **→** **`PATCH …/lights/state/scene`**, **Reset** **camera** **→** **`applyDefaultFraming`**), **§8.18**, **§8.22**; **resolved:** **reset** **lights** **does** **not** **auto-stop** **run**; **viewport** **works** **with** **or** **without** **active** **run**. |
-| REQ-028 | **§4.7** **(**emissive** **mapping** **+** **scene** **lights**)**, **§4.9** **(**composite** **reuse**)**, **§4.13**, **§4.14** **(**unified** **live** **viewports**)**, **§6.5** **(**browser** **GPU** **on** **Pi** **and** **other** **clients**)**, **§8.5**, **§8.7** **(**material** **updates** **after** **PATCH**)**. |
-| REQ-029 | **§3.2** **(**batch**/**bulk** **routes** **listed** **below**)**, **§3.10**, **§3.15**, **§3.18** **(**write** **path**, **connections**, **observer** **strategy**, **optional** **SSE**)**, **§4.3**, **§4.7**, **§4.9**, **§6**, **§7**, **§8.19**, **§9** **(**payload**/**rate** **limits**)**. |
-| REQ-030 | **§3.17** (**`scene.random_hex_colour()`** **—** **local** **`random.randrange(0x1000000)`** **+** **`"#%06x"`** **in** **the** **`python3`** **subprocess**, **same** **distribution** **as** **CPython**/**Pyodide**), **§4.13** (**REQ-024** **manifest** **row** **+** **novice** **sample**; **`pythonRoutineCodemirror`** **completion**), **`web/lib/pythonSceneApiCatalog.ts`**, **`public/dlm-python-scene-worker.mjs`** **(**if** **retained** **for** **optional** **client** **lint**/**preview** **only** **—** **stay** **aligned** **with** **`scene.max_*`** **when** **present**)**. |
+| REQ-027 | **§4.13** **and** **§4.14** (**unified** **panel** **per** **kind:** **one** **scene** **`<select>`** **for** **run** **+** **`SceneLightsCanvas`**; **SSE** **`…/lights/events`** **per** **REQ-041**; **Start**/**Stop**; **Reset** **scene** **lights** **→** **`POST …/routines/runs/…/stop`** **for** **that** **scene** **when** **a** **run** **is** **active** **(**or** **equivalent** **server** **ordering**)** **then** **`PATCH …/lights/state/scene`** **with** **REQ-014** **defaults** **;** **Reset** **camera** **→** **`applyDefaultFraming`**), **§8.18**, **§8.22**; **viewport** **works** **with** **or** **without** **active** **run** **after** **stop**. |
+| REQ-028 | **§4.7** **(**emissive** **mapping** **+** **scene** **lights**)**, **§4.9** **(**composite** **reuse**)**, **§4.13**, **§4.14** **(**unified** **live** **viewports**)**, **§6.5** **(**browser** **GPU** **on** **Pi** **and** **other** **clients**)**, **§8.5**, **§8.7** **(**material** **updates** **after** **PATCH**)** **;** **brightness** **for** **glow** **tracks** **authoritative** **in-memory** **light** **state** **(**REQ-039**)** **—** **not** **durable** **DB** **columns** **. |
+| REQ-029 | **§3.2** **(**batch**/**bulk** **routes** **listed** **below**)**, **§3.10**, **§3.15**, **§3.18** **(**write** **path**, **connections**, **observer** **strategy** **—** **REQ-041** **tightens** **shipped** **UI** **to** **MUST-use** **push** **+** **deltas**)** **,** **§4.3**, **§4.7**, **§4.9**, **§6**, **§7**, **§8.19**, **§9** **(**payload**/**rate** **limits**)**. |
+| REQ-030 | **§3.17** (**`scene.random_hex_colour()`** **—** **local** **`random.randrange(0x1000000)`** **+** **`"#%06x"`** **in** **the** **`python3`** **child** **running** **user** **scripts**, **same** **distribution** **as** **documented** **in** **REQ-030**), **§4.13** (**REQ-024** **manifest** **+** **completions**), **`web/lib/pythonSceneApiCatalog.ts`**, **optional** **`public/dlm-python-scene-worker.mjs`** **for** **editor** **diagnostics** **only** **—** **not** **the** **production** **routine** **runtime** **. |
 | REQ-031 | **§3.9**, **§3.10**, **§3.15**, **§3.16**, **§3.17**, **§3.17.2**, **§3.18**, **§3.19**, **§3.20**, **§4.7**, **§4.9**, **§4.13**, **§4.14**, **§8.7**, **§8.8**, **§8.20** **(**equivalence** **before** **memory** **update**, **device** **push**, **and** **three.js** **redraw**)**. |
 | REQ-032 | **§3.8.1** **(**seed** **three** **`python_scene_script`** **rows** **on** **empty** **`routines`** **+** **factory** **reset**)** **,** **§3.17.1** **(**geometry** **+** **timing** **for** **growing** **sphere** **+** **sweeping** **cuboid** **+** **normative** **behavior** **for** **random** **colour** **cycle** **all** **lights**)** **,** **`web/lib/pythonRoutineSamples.ts`** **(**exports** **`PYTHON_SAMPLE_*`** **for** **all** **three** **bodies** **—** **single** **source** **of** **truth**)** **;** **optional** **toolbar** **“Load** **sample”** **MAY** **reuse** **those** **strings** **but** **REQ-024** **catalog** **must** **not** **be** **the** **only** **delivery** **of** **full** **default** **scripts** **;** **REQ-025** **default** **new-routine** **template** **unchanged** **unless** **product** **replaces** **it** **later**. |
-| REQ-033 | **§3.16** **(**schema** **+** **`POST`/`PATCH`**)**, **§3.17.2** **(**simulation** **engine** **—** **server-side** **Go** **loop** **per** **§3.17.2** **revision**)**, **§4.12**, **§4.14**, **§6.2**, **§8.21**, **§8.22** **(**unified** **viewport** **for** **authoring** **;** **writes** **still** **§3.15** **on** **server**)**. |
-| REQ-034 | **§3.12–§3.13**, **§4.7**, **§4.9**, **§4.14**: **persisted** **`margin_m`** **per** **scene**; **faint** **AABB** **wire** **on** **model** **and** **scene** **canvases** **(**tight** **light** **bounds** **+** **padding**)**. |
+| REQ-033 | **§3.16** **(**schema** **+** **`POST`/`PATCH`**)**, **§3.17.2** **(**Go** **`time.Ticker`** **simulation** **+** **internal** **`BatchPatchSceneLights`** **/** **equivalent** **—** **no** **browser** **`fetch`** **for** **production** **ticks**)** **,** **§4.12**, **§4.14**, **§6.2**, **§8.21**, **§8.22** **(**unified** **viewport** **observes** **SSE**/**GET** **;** **optional** **TS** **ghost** **preview** **only**)** **. |
+| REQ-034 | **§3.12–§3.13**, **§4.7**, **§4.9**, **§4.14**: **persisted** **`margin_m`** **per** **scene**; **faint** **AABB** **wire** **on** **model** **and** **scene** **canvases** **(**tight** **light** **bounds** **+** **padding**)** **using** **the** **same** **`#D0D0D0`** **/** **opacity** **0.15** **line** **recipe** **as** **REQ-010** **chain** **segments** **(**§4.7** **shared** **material** **constants**)**. |
 | REQ-035 | **§3.20**: **device** **registry**, **type** **`wled`**, **mapping** **model** **light** **`idx`** **→** **WLED** **LED** **indices** **(**architecture** **§3.20**)**. |
 | REQ-036 | **§3.20**: **at** **most** **one** **`model_id`** **per** **device** **and** **vice** **versa** **(**nullable** **FK** **+** **UNIQUE** **constraints** **or** **equivalent**)**. |
 | REQ-037 | **§4.11** **nav** **+** **§4.15** **(**Devices** **routes** **/** **pages**)** **—** **Must** **:** **list**, **add** **via** **manual** **`base_url`**/**host**/**port** **(**REQ-035** **MVP**)** **,** **assign**/**unassign** **,** **edit** **name** **,** **delete**/**forget** **(**cascades** **assignment** **per** **§3.20**)** **;** **discovery** **(**`POST …/devices/discover`**)** **optional** **until** **implemented**. |
-| REQ-038 | **§3.16–§3.17.2**: **routine** **runs** **supervised** **by** **Go** **(**`internal/routineengine`** **or** **equivalent**)** **;** **scene** **§3.15** **handlers** **apply** **logical** **state** **then** **§3.20** **pushes** **to** **assigned** **devices** **when** **present** **;** **browser** **not** **required** **for** **progress**. |
+| REQ-038 | **§3.16** **normative** **placement** **paragraph** **+** **§3.17–§3.17.2**: **`internal/routineengine`** **drives** **Python** **and** **shape** **ticks** **on** **the** **server** **;** **each** **commit** **updates** **`LightStateStore`** **then** **§3.20** **when** **assigned** **;** **browser** **observes** **via** **REQ-041** **only** **;** **headless** **operation** **is** **normative** **. |
 | REQ-039 | **§3.3**, **§3.9**, **§3.21**: **`internal/lightstate`** **(**in-memory** **per** **model:** **map** **light** **`idx` →** **state** **triple**)** **;** **normative** **startup** **sync** **and** **unassign** **policies** **(**§3.21**)** **;** **API** **reads**/**writes** **hit** **memory** **first**. |
+| REQ-040 | **§3.17**, **§3.17.2**: **after** **accepted** **`POST …/stop`**, **no** **further** **routine-originated** **state** **mutations** **within** **≤** **2** **SI** **s** **(**`python3`** **child** **`SIGTERM`**/**`SIGKILL`** **after** **`T_force`**, **shape** **`time.Ticker`** **cancelled** **before** **next** **tick**)** **. |
+| REQ-041 | **§3.18** **(**SSE** **event** **schema** **with** **`deltas[]`**)**, **§4.3**, **§4.7**, **§4.9**, **§4.13**, **§4.14**: **shipped** **web** **three.js** **uses** **`EventSource`** **(**or** **WebSocket** **if** **documented**)** **as** **primary** **observer** **after** **initial** **`GET`** **;** **merge** **deltas** **into** **existing** **meshes** **without** **full** **graph** **rebuild** **on** **each** **message** **when** **only** **subset** **changed** **(**§3.19**)**. |
 
 **Assumed Pi context:** Raspberry Pi 4 Model B, **64-bit OS**, **ARM64** userspace. **2–8 GB RAM** — with **no Node** at runtime, **4 GB** is practical for modest traffic; **off-device** `next export` builds recommended.
 
@@ -91,12 +93,12 @@ dlm/
       store/                  # persistence for models, scenes, routines (SQLite, REQ-006); not per-light output state (REQ-039)
       lightstate/             # in-memory authoritative per-light state + load/save hooks (REQ-039, REQ-011)
       devices/                # device registry, WLED client, discovery adapter (REQ-035–REQ-038)
-      routineengine/          # supervises active runs: Python subprocess and shape-animation tick in Go (REQ-038, REQ-021–REQ-033)
+      routineengine/          # REQ-021/038: supervised python3 + Go time.Ticker shape sim; internal §3.15/lightstate calls
       webdist/                # holds embedded payload (see §3.5); populated by build, not hand-edited
         placeholder.txt       # optional tiny file so empty embed works in dev before first UI build
   web/                        # Next.js + Tailwind (source only for runtime; sibling of backend/)
     app/
-    components/               # incl. AppShell, theme toggle, nav (REQ-018 §4.11); ModelLightsCanvas / SceneLightsCanvas (REQ-019 viz backdrop §4.7–§4.9)
+    components/               # incl. AppShell, theme toggle, nav (REQ-018 §4.11); ModelLightsCanvas / SceneLightsCanvas (REQ-019 §4.7–§4.9); start/stop + SSE observe only (REQ-021/038)
     lib/
   docs/
 ```
@@ -116,10 +118,10 @@ dlm/
 - **Module path:** `example.com/dlm/backend` (or successor); unchanged conceptually.
 - **`cmd/server`:** Load config; construct **`http.Server`**; mount **API sub-router** and **static file server** from **`embed`**; graceful **SIGINT/SIGTERM** shutdown.
 - **`internal/config`:** **Env-based** listen address, timeouts, optional **CORS** (primarily for **dev** when UI dev server uses another origin); production **same-origin** reduces CORS; **SQLite** path via **`DLM_DB_PATH`** and/or **`DLM_DATA_DIR`** (**§3.3**).
-- **`internal/httpapi`:** Middleware (**request ID**, **slog**, **recover**, optional **CORS**); **JSON** handlers and error envelope `{ "error": { "code", "message", "details"? } }`; **models**, **light-state** (**via** **`internal/lightstate`**), **scenes**, **scene-region** routes (**§3.15**), **devices** (**§3.20**), **routines**/**routine-runs** (**§3.16**) delegate to **`internal/store`**, **`internal/lightstate`**, **`internal/devices`**, **`internal/routineengine`**, and **`internal/wiremodel`**. **Routine** **automation** **runs** **in** **the** **Go** **process** (**REQ-038**): **Python** **kind** **via** **supervised** **subprocess** **(**§3.17**)** **;** **shape** **animation** **via** **Go** **ticker** **(**§3.17.2**)**. **High-throughput** **and** **connection-reuse** **§3.18** (**REQ-029**).
-- **`internal/lightstate`:** **Authoritative** **in-memory** **per-model** **maps** **`light idx → { on, color, brightness_pct }`** (**REQ-039**, **§3.9**, **§3.21**); **all** **§3.9**/**§3.10**/**§3.11**/**§3.15** **writes** **mutate** **here** **first**, **then** **optional** **WLED** **push** **(**§3.20**)** **;** **emits** **SSE** **seq** **on** **real** **change**.
+- **`internal/httpapi`:** Middleware (**request ID**, **slog**, **recover**, optional **CORS**); **JSON** handlers and error envelope `{ "error": { "code", "message", "details"? } }`; **models**, **light-state** (**via** **`internal/lightstate`**), **scenes**, **scene-region** routes (**§3.15**), **devices** (**§3.20**), **routines**/**routine-runs** (**§3.16**) delegate to **`internal/store`**, **`internal/lightstate`**, **`internal/devices`**, **`internal/wiremodel`**, **and** **`internal/routineengine`** **for** **start**/**stop** **supervision** **. **Routine** **ticks** **run** **in** **`routineengine`** **;** **HTTP** **handlers** **for** **§3.15** **remain** **the** **single** **validation** **surface** **whether** **called** **from** **loopback** **or** **external** **clients** **(**REQ-038**/**REQ-039**)** **. **SSE** **`…/lights/events`** **emit** **REQ-041** **`deltas[]`**. **§3.18** (**REQ-029**, **REQ-041**).
+- **`internal/lightstate`:** **Authoritative** **in-memory** **per-model** **maps** **`light idx → { on, color, brightness_pct }`** (**REQ-039**, **§3.9**, **§3.21**); **all** **§3.9**/**§3.10**/**§3.11**/**§3.15** **writes** **mutate** **here** **first**, **then** **optional** **WLED** **push** **(**§3.20**)** **;** **emits** **SSE** **`data:`** **lines** **with** **monotonic** **`seq`** **and** **per-commit** **`deltas[]`** **(**only** **changed** **lights** **—** **REQ-041**, **§3.18**)** **on** **real** **change**.
 - **`internal/devices`:** **CRUD** **for** **`devices`** **table** **(**§3.20**)** **;** **WLED** **HTTP** **JSON** **API** **client** **;** **optional** **discovery** **adapter** **(**mDNS** **/** **subnet** **probe** **—** **not** **required** **for** **MVP**)** **;** **startup** **/** **post-assign** **sync** **with** **`LightStateStore`** **(**§3.21**)**.
-- **`internal/routineengine`:** **One** **supervisor** **per** **active** **`routine_runs`** **row** **with** **`status=running`** **;** **starts**/**stops** **Python** **worker** **process** **or** **shape** **animation** **loop** **;** **cooperative** **/** **forced** **termination** **(**§3.17**)** **without** **requiring** **any** **browser** **tab**.
+- **`internal/routineengine`:** **One** **supervisor** **per** **active** **`routine_runs`** **row** **(**§3.16**)** **:** **`python3`** **child** **for** **`python_scene_script`** **(**§3.17**)** **;** **Go** **`time.Ticker`** **for** **`shape_animation`** **(**§3.17.2**)** **. **Mutates** **lights** **via** **internal** **calls** **equivalent** **to** **§3.15** **(**or** **loopback** **`127.0.0.1`** **—** **implementor** **choice**)** **so** **REQ-021**/**REQ-039** **semantics** **hold** **. **`cmd/server`** **starts** **the** **scheduler** **on** **process** **boot** **(**resume** **`running`** **rows** **or** **mark** **orphaned** **runs** **stopped** **—** **document** **chosen** **policy**)** **.
 - **`internal/wiremodel`:** Parses and validates uploaded **CSV** per **§3.6**; returns structured errors for HTTP **400** responses (**REQ-007**).
 - **`internal/store`:** **SQLite** repository (see **§3.3**, **§3.12**, **§3.16**); **persists** **models** **(geometry** **only** **for** **lights** **rows** **—** **§3.3**)** **,** **scenes**, **scene_models**, **routines**, **routine_runs**, **devices** **metadata** **;** **does** **not** **store** **per-light** **`on`/`color`/`brightness`** **(**REQ-039**)**. **Idempotent** **seed** **(**§3.8**, **§3.8.1**)** **and** **factory** **reset** **(**§3.14**)** **:** **factory** **reset** **MUST** **`DELETE`** **all** **`devices`** **rows** **(**REQ-017**/**REQ-035**)** **before** **re-seed**.
 - **`internal/samples`:** Pure functions that return **`[]wiremodel.Light`** (sequential **id**s from **0**) for the three canonical shapes: **on-surface** positions, **even** coverage per **§3.8**, consecutive **dᵢ** in band; no I/O (**REQ-009**).
@@ -141,7 +143,7 @@ dlm/
 | API | `PATCH /api/v1/scenes/{id}/models/{modelId}` | **Update** **integer** **offsets** **`{ "offset_x", "offset_y", "offset_z" }`** (all required or **PATCH** **semantics** per implementor—**must** **re-validate** **containment**). **200** with **updated** **placement** + **optional** **derived** **bounds** **metadata**. |
 | API | `DELETE /api/v1/scenes/{id}/models/{modelId}` | **Remove** **model** **from** **scene**. If **> 1** models: **204**. If **this** **is** **the** **last** **model**: **409** **`scene_last_model`** — **no** **mutation**; **message** **states** **that** **confirming** **will** **delete** **the** **entire** **scene**; client **shows** **modal** then calls **`DELETE /api/v1/scenes/{id}`** (**§3.13**). |
 | API | `GET /api/v1/scenes/{id}/dimensions` | Return scene-space dimensions used for region queries: **`origin`**, **`size`**, **`max`**, and **`margin_m`** (see **§3.15**). **REQ-020** |
-| API | `GET /api/v1/scenes/{id}/lights/events` | **SSE** (**`text/event-stream`**): JSON **`data:`** lines **`{ "seq": <uint64> }`** after scene-relevant light state commits (**REQ-029**, **§3.18**). |
+| API | `GET /api/v1/scenes/{id}/lights/events` | **SSE** (**`text/event-stream`**): JSON **`data:`** lines **`{ "seq": <uint64>, "deltas": [ { "model_id", "light_id", "on"?, "color"?, "brightness_pct"? }, … ] }`** after scene-relevant light state commits — **`deltas`** **lists** **only** **lights** **whose** **triple** **changed** **in** **that** **commit** (**REQ-041**, **§3.18**). **Legacy** **`{ "seq" }`** **only** **is** **insufficient** **for** **new** **implementations**. |
 | API | `GET /api/v1/scenes/{id}/lights` | Return all scene lights as a flattened list in scene coordinates (**`sx/sy/sz`**) plus model/light identity. **REQ-020** |
 | API | `POST /api/v1/scenes/{id}/lights/query/cuboid` | Return only lights inside a caller-supplied cuboid in scene space. **REQ-020** |
 | API | `POST /api/v1/scenes/{id}/lights/query/sphere` | Return only lights inside a caller-supplied sphere in scene space. **REQ-020** |
@@ -154,11 +156,11 @@ dlm/
 | API | `POST /api/v1/routines` | Create definition. **Body** **`name`** **(required,** **trimmed** **non-empty)**, **`description`** **(string,** **may** **be** **`""`)**, **`type`**: **`python_scene_script`** **|** **`shape_animation`**. **If** **`python_scene_script`:** **`python_source`** **string** **(**client** **MAY** **substitute** **`PYTHON_ROUTINE_DEFAULT_SOURCE`** **per** **§4.13**)**; **`definition_json`** **omitted** **or** **null**. **If** **`shape_animation`:** **`definition_json`** **required** **object** **—** **server** **validates** **per** **§3.17.2** **(**reject** **`400`** **on** **schema**/**range**/**shape** **count** **errors**)**; **`python_source`** **ignored** **or** **stored** **as** **`""`**. **Unknown** **`type`** → **400**. **201** + full row. **REQ-021**, **REQ-022**, **REQ-023**, **REQ-033** |
 | API | `PATCH /api/v1/routines/{id}` | **JSON** **with** **≥ 1** **field** **among** **`name`**, **`description`**, **`python_source`** **(**only** **when** **`type`** **is** **`python_scene_script`**)**, **`definition_json`** **(**only** **when** **`type`** **is** **`shape_animation`)**. **200** **updated** **row**. **404** **if** **missing**. **409** **`routine_not_editable`** **for** **legacy** **unsupported** **`type`** **rows** **only**. **409** **`routine_run_active`** **if** **a** **`running`** **run** **exists** **for** **this** **`routine_id`**. **REQ-021**, **REQ-022**, **REQ-033** |
 | API | `DELETE /api/v1/routines/{id}` | Delete definition. **204** / **404**. **409** **`routine_run_active`** if a **persisted** **run** **row** **exists** **with** **`status=running`** **for** **this** **`routine_id`** (**§3.16**). **REQ-021** |
-| API | `POST /api/v1/scenes/{id}/routines/{routineId}/start` | Start (or **idempotently** **confirm**) an **automated** **run** **of** **`routineId`** **on** **scene** **`id`**. **201** **`{ "run_id", "scene_id", "routine_id", "status" }`** **or** **200** **if** **already** **running** **same** **pair** **(see** **§3.16**)**. **404** missing scene or routine; **409** **`scene_routine_conflict`** if **another** **routine** **already** **has** **`status=running`** **on** **this** **scene**. **REQ-021** |
+| API | `POST /api/v1/scenes/{id}/routines/{routineId}/start` | Start an **automated** **run** **of** **`routineId`** **on** **scene** **`id`**. **201** **`{ "run_id", "scene_id", "routine_id", "status" }`**. **404** missing scene or routine; **409** **`scene_routine_conflict`** if **this** **scene** **already** **has** **any** **`status=running`** **row** **(**REQ-021** **BR** **5** **—** **including** **when** **the** **caller** **re-posts** **start** **for** **the** **same** **routine** **while** **it** **is** **still** **running**)**. **REQ-021** |
 | API | `POST /api/v1/scenes/{id}/routines/runs/{runId}/stop` | Stop **run** **`runId`** **if** **it** **belongs** **to** **scene** **`id`**. **200** **`{ "run_id", "status": "stopped" }`** **or** **204**. **404** if **mismatch** **or** **unknown**. **REQ-021** |
 | API | `GET /api/v1/scenes/{id}/routines/runs` | **`200`**: **`{ "runs": [ { "id", "routine_id", "routine_name", "status" } ] }`** — **only** **`status=running`** **rows** **for** **this** **scene** (**empty** **array** **or** **one** **element** **per** **§3.16** **concurrency** **rule**). **REQ-021** |
 | API | `GET /api/v1/models/{id}/lights/state` | **All** lights’ **state** for the model (**ordered** by **`id`**). **REQ-011** |
-| API | `GET /api/v1/models/{id}/lights/events` | **SSE** (**`text/event-stream`**): **`data:`** lines **`{ "seq": <uint64> }`** after successful light-state writes for this model (**REQ-029**, **§3.18**). |
+| API | `GET /api/v1/models/{id}/lights/events` | **SSE** (**`text/event-stream`**): **`data:`** lines **`{ "seq": <uint64>, "deltas": [ { "light_id", "on"?, "color"?, "brightness_pct"? }, … ] }`** (**`model_id`** **implicit** **from** **URL**)** after successful light-state writes for this model (**REQ-041**, **§3.18**). |
 | API | `GET /api/v1/models/{id}/lights/{lightId}/state` | **One** light’s **state** (**404** if model or **lightId** missing). **REQ-011** |
 | API | `PATCH /api/v1/models/{id}/lights/{lightId}/state` | **Partial** update of **`on`**, **`color`**, **`brightness_pct`** (JSON body; omitted fields unchanged). **200** returns the **full** **updated** **state** object. **REQ-011** |
 | API | `PATCH /api/v1/models/{id}/lights/state/batch` | **Atomic** partial update of **many** lights: JSON body **`{ "ids": [<int>, …], "on"?, "color"?, "brightness_pct"? }`** with **at least one** of **`on`**, **`color`**, **`brightness_pct`** present; **omitted** fields **unchanged** per row. **200** returns **`{ "states": [ { "id", "on", "color", "brightness_pct" }, … ] }`** sorted by **`id`**. **400** if **`ids`** empty, duplicate ids, any id **∉ [0, n−1]**, or merged values invalid. **REQ-013** (**§3.10**). |
@@ -445,7 +447,7 @@ Requirements demand **both** **even** **2D/area** placement **and** **consecutiv
 
 **Store API (conceptual):** **`FactoryReset(ctx) error`** **in** **`internal/store`** **+** **`LightStateStore.LoadLightStateFromDB()`** **(**or** **equivalent** **full** **rebuild**)** **after** **commit** **:**
 
-1. **`BEGIN IMMEDIATE`** **;** **stop** **all** **`routineengine`** **supervisors** **(**best-effort** **before** **or** **after** **transaction** **—** **document** **ordering**)** **.**
+1. **`BEGIN IMMEDIATE`** **;** **(**shipped** **build** **has** **no** **Go** **routine** **supervisor** **—** **clients** **with** **open** **tabs** **SHOULD** **receive** **errors** **on** **next** **`fetch`** **after** **`routine_runs`** **are** **deleted** **)** **.**
 2. **`DELETE FROM routine_runs`** **.**
 3. **`DELETE FROM routines`** **.**
 4. **`DELETE FROM scene_models`** **.**
@@ -537,7 +539,9 @@ This section extends **REQ-015** scene composition with explicit API contracts f
 - Scene missing → **`404`**.
 - Any transactional failure after validation → **`500`** with generic message (no partial writes committed).
 
-### 3.16 Scene routines — persistence and HTTP (**REQ-021**, **REQ-022**, **REQ-033**)
+### 3.16 Scene routines — persistence and HTTP (**REQ-021**, **REQ-022**, **REQ-033**, **REQ-040**)
+
+**Normative placement (**REQ-021**, **REQ-038**):** `docs/requirements.md` states *what*; this document states *how*. All production routine ticks run inside the single Go server process. **Python** routines use a supervised **`python3`** child whose injected **`scene`** binding issues HTTP to the same listener’s scene spatial API (**§3.15**, typically **loopback** **`127.0.0.1`**) so validation matches external clients. **Shape** animation uses a **Go**-driven periodic simulation (**§3.17.2**) that commits light updates via **internal** calls equivalent to **§3.15** region/bulk routes (**direct** **function** **calls** **preferred** **over** **loopback** **for** **latency**). The browser **never** hosts production routine loops; it **start**/**stop**/**observe** only (**REQ-041**). Supervisor code lives under **`internal/routineengine`** (**§2**). **REQ-030:** **CodeMirror** completions and any **authoring-only** worker **MUST** stay aligned with the documented **`scene`** API names and sync/**async** semantics of **§3.17**.
 
 **Architectural resolution (two creatable kinds):**
 
@@ -545,8 +549,8 @@ This section extends **REQ-015** scene composition with explicit API contracts f
 - **`python_scene_script`:** **`python_source`** **TEXT** **NOT** **NULL** **(**may** **be** **`""`** **before** **client** **template** **substitution**)**; **`definition_json`** **NULL** **or** **absent** **column** **treated** **as** **no** **shape** **definition**.
 - **`shape_animation`:** **`definition_json`** **TEXT** **NOT** **NULL** **storing** **canonical** **JSON** **(**UTF-8**)** **of** **the** **declarative** **spec** **(**§3.17.2**)**; **`python_source`** **stored** **as** **`""`** **or** **omitted** **from** **API** **responses** **as** **documented** **in** **§3.2** **table**.
 - **Legacy** **`random_colour_cycle_all`** **rows** **SHOULD** **be** **removed** **or** **migrated** **to** **`python_scene_script`** **(**§3.17.1** **sample**)** **or** **cleared** **on** **factory** **reset** **(**§3.14**)**.
-- **Server-side** **execution** **(**REQ-038**)** **:** **`POST …/start`** **persists** **`routine_runs.status=running`** **and** **starts** **`routineengine`** **supervisor** **(**§3.17** **/** **§3.17.2**)** **in** **the** **Go** **process** **. **Stopping** **(**`POST …/stop`**)** **sets** **`stopped`** **and** **signals** **supervisor** **shutdown** **. **No** **browser** **is** **required** **for** **the** **run** **to** **progress** **.**
-- **Concurrency:** **At** **most** **one** **`routine_runs`** **row** **with** **`status = 'running'`** **per** **`scene_id`**. **Second** **start** **→** **`409`** **`scene_routine_conflict`**.
+- **Normative** **execution** **(**REQ-021** **,** **REQ-038**)** **:** **`POST …/start`** **persists** **`routine_runs.status=running`** **and** **`internal/routineengine`** **starts** **a** **supervisor** **for** **that** **run** **. **Python** **kind** **:** **spawn** **`python3`** **with** **bootstrap** **+** **`python_source`** **(**§3.17**)** **. **Shape** **kind** **:** **start** **a** **Go** **`time.Ticker`** **(**§3.17.2**)** **that** **calls** **the** **same** **store**/**lightstate** **merge** **paths** **as** **§3.15** **(**internal** **function** **calls** **preferred** **over** **loopback** **HTTP** **for** **latency** **—** **either** **is** **valid** **if** **validation** **is** **identical**)** **. **`POST …/stop`** **sets** **`stopped`** **;** **supervisor** **cooperatively** **stops** **then** **`SIGTERM`**/**`SIGKILL`** **the** **child** **/** **cancels** **the** **ticker** **within** **REQ-040** **. **The** **browser** **never** **hosts** **production** **routine** **loops** **;** **it** **only** **calls** **start**/**stop** **and** **subscribes** **to** **SSE**/**GET** **(**REQ-041**)** **.**
+- **Concurrency:** **At** **most** **one** **`routine_runs`** **row** **with** **`status = 'running'`** **per** **`scene_id`**. **Any** **second** **`POST …/start`** **while** **that** **row** **exists** **(**same** **or** **different** **`routine_id`**) **→** **`409`** **`scene_routine_conflict`** **(**REQ-021** **BR** **5**)** **—** **no** **`200`** **“already** **running”** **success** **for** **duplicate** **starts** **.
 - **Delete** **/** **PATCH** **while** **running:** **`409`** **`routine_run_active`** **when** **any** **`routine_runs`** **row** **for** **that** **`routine_id`** **has** **`status = 'running'`**.
 
 **Tables (logical, SQLite):**
@@ -556,27 +560,27 @@ This section extends **REQ-015** scene composition with explicit API contracts f
 | **`routines`** | `id` (TEXT **UUID** PK), `name`, `description`, `type` (**`python_scene_script`** \| **`shape_animation`** \| **legacy**), `python_source` (TEXT **NOT** **NULL**, **`""`** **allowed**), `definition_json` (TEXT **NULL** — **required** **non-null** **for** **`shape_animation`** **rows**), `created_at` | **Unchanged** **from** **prior** **architecture** **. |
 | **`routine_runs`** | *(unchanged)* | **One** **`running`** **per** **`scene_id`**. |
 
-**Execution model:** **`routineengine`** **owns** **the** **automation** **loop** **. **Python** **kind** **:** **§3.17** **subprocess** **with** **`scene`** **shim** **to** **loopback** **HTTP** **§3.15** **. **Shape** **animation** **:** **§3.17.2** **Go** **`time.Ticker`** **(**or** **`time.AfterFunc`** **pattern**)** **calling** **the** **same** **§3.15** **store**/**lightstate** **code** **paths** **the** **HTTP** **handlers** **use** **(**no** **user** **Python**)** **.**
+**Execution model (**normative**)** **:** **`internal/routineengine`** **owns** **all** **production** **routine** **ticks** **. **Python** **:** **§3.17** **`python3`** **child** **. **Shape** **:** **§3.17.2** **Go** **`time.Ticker`** **+** **internal** **§3.15** **merge** **. **Browser** **:** **observer** **only** **(**REQ-038**)** **.
 
-**REQ-021:** **Neither** **kind** **may** **mutate** **lights** **through** **`PATCH /api/v1/models/{id}/lights/…`** **for** **routine** **effects** **;** **only** **§3.15** **scene** **routes** **(**internal** **or** **HTTP** **—** **same** **validation**)** **.**
+**REQ-021:** **Neither** **kind** **may** **mutate** **lights** **through** **`PATCH /api/v1/models/{id}/lights/…`** **for** **routine** **effects** **;** **only** **§3.15** **scene** **semantics** **(**HTTP** **or** **direct** **store** **calls** **—** **same** **validation**)** **.**
 
 **Start/stop semantics:**
 
-- **`POST …/start`:** **Validate** **scene** **+** **routine**; **`type`** **must** **be** **`python_scene_script`** **or** **`shape_animation`**. **Same** **idempotency** **and** **`409`** **conflict** **rules** **as** **before**. **`201`** **/** **`200`** **shapes** **unchanged**.
-- **`POST …/stop`:** **Unchanged** **(**set** **`stopped`**, **`stopped_at`**)**.
-- **REQ-038** **business** **rule** **6** **(**headless** **control**)** **:** **these** **are** **the** **same** **`/api/v1`** **routes** **the** **web** **UI** **calls** **;** **integrators** **MAY** **use** **`curl`**, **scripts**, **or** **automation** **against** **the** **identical** **URLs** **unless** **a** **documented** **alias** **is** **added** **later** **with** **matching** **semantics** **.**
+- **`POST …/start`:** **Validate** **scene** **+** **routine**; **`type`** **must** **be** **`python_scene_script`** **or** **`shape_animation`**. **If** **no** **`running`** **row** **exists** **for** **`scene_id`**, **create** **one** **and** **return** **`201`**. **If** **a** **`running`** **row** **already** **exists** **for** **`scene_id`**, **return** **`409`** **`scene_routine_conflict`** **without** **starting** **a** **second** **supervisor** **(**REQ-021** **BR** **5**)** **. **Notify** **`routineengine`** **only** **on** **successful** **`201`**. **.
+- **`POST …/stop`:** **Set** **`stopped`**, **`stopped_at`** **;** **signal** **supervisor** **to** **tear** **down** **child**/**ticker** **(**REQ-040**)** **.
+- **REQ-038** **business** **rule** **6** **(**headless** **control**)** **:** **same** **`/api/v1`** **routes** **for** **UI** **and** **integrators** **.
 
 **Scene deletion:** **`ON DELETE CASCADE`** **on** **`routine_runs.scene_id`**.
 
-**UI support:** **§4.12** **(**two-kind** **create** **—** **REQ-023**)**; **§4.13** **(**Python**)**; **§4.14** **(**shape** **animation**)**; **§4.9** **(**scene** **detail** **start**/**stop**)**.
+**UI support:** **§4.12** **(**REQ-023**)**; **§4.13** **(**Python** **editor** **+** **unified** **viewport** **observe** **SSE**)**; **§4.14** **(**shape** **authoring** **+** **optional** **ghost** **preview** **only**)**; **§4.9** **(**scene** **detail** **start**/**stop** **+** **viewport** **—** **no** **production** **routine** **worker** **in** **the** **bundle**)** **.
 
-**Server-side** **shape** **engine:** **In** **scope** **(**REQ-038**/**REQ-033**)** **—** **§3.17.2** **Go** **implementation** **.
+**Shape** **animation** **engine (**production**)** **:** **Go** **package** **(**e.g.** **`internal/routineengine/shapeanim`**) **+** **optional** **reuse** **of** **`web/lib/shapeAnimationEngine.ts`** **logic** **ported** **or** **duplicated** **in** **Go** **for** **parity** **;** **TypeScript** **`shapeAnimationEngine.ts`** **remains** **valid** **for** **authoring** **ghost** **overlays** **only** **.
 
-### 3.17 Python scene routines — editor, server runner, `scene` shim, loop, and forced stop (**REQ-022**, **REQ-026**, **REQ-030**, **REQ-032**, **REQ-038**)
+### 3.17 Python scene routines — editor, supervised `python3` child, `scene` shim, loop, and forced stop (**REQ-022**, **REQ-026**, **REQ-030**, **REQ-032**, **REQ-038**, **REQ-040**)
 
-**Execution placement (revised for REQ-038):** **Python** **routine** **bodies** **execute** **in** **a** **supervised** **`python3`** **child** **process** **spawned** **by** **Go** **(**`internal/routineengine/pythonrun`** **or** **equivalent**)** **. **The** **child** **receives** **a** **minimal** **bootstrap** **that** **installs** **`scene`** **methods** **implemented** **with** **`urllib.request`** **/** **`httpx`** **(**product** **choice**)** **against** **`http://127.0.0.1:{DLM_API_PORT}/api/v1/scenes/{sceneId}/…`** **(**or** **in-process** **handler** **invocation** **via** **Go** **callbacks** **exported** **through** **`cgo`/embedded** **Python** **—** **advanced** **;** **default** **loopback** **HTTP** **keeps** **one** **validation** **path**)** **. **REQ-004** **remains** **satisfied** **(**single** **shipped** **binary**)** **;** **the** **Pi** **host** **MAY** **need** **`python3`** **installed** **(**document** **in** **README** **and** **§6**)** **—** **trade-off** **vs** **former** **Pyodide** **browser-only** **approach** **(**smaller** **web** **bundle** **,** **headless-capable** **)** **.**
+**Execution placement (**production**)** **:** **`internal/routineengine`** **spawns** **`python3`** **(**system** **`PATH`** **on** **Pi** **—** **document** **in** **`README.md`**) **with** **a** **small** **bootstrap** **that** **injects** **`scene`** **and** **runs** **`python_source`** **in** **a** **loop** **. **`scene`** **methods** **are** **thin** **wrappers** **around** **`urllib.request`**/**`httpx`**/**documented** **HTTP** **client** **to** **`http://127.0.0.1:{listenPort}/api/v1/scenes/{sceneId}/…`** **(**§3.15**)** **—** **same** **JSON** **and** **validation** **as** **any** **external** **client** **. **REQ-004** **:** **no** **Node** **runtime** **;** **`python3`** **is** **an** **OS** **dependency** **for** **routine** **execution** **(**not** **bundled** **in** **the** **Go** **binary** **)** **. **Browser** **:** **CodeMirror** **+** **optional** **Pyodide**/**worker** **for** **REQ-022** **lint**/**format** **only** **—** **never** **for** **production** **routine** **runs** **(**REQ-038** **BR** **7**)** **.**
 
-**`scene` API (Python, bound per run):** **Inject** **a** **`scene`** **object** **into** **the** **user’s** **globals** **before** **each** **iteration** **(or** **once** **per** **process** **lifetime** **with** **captured** **`sceneId`)**. **Most** **members** **are** **thin** **wrappers** **around** **`urllib.request`** **/** **`httpx`** **(**or** **equivalent**)** **HTTP** **calls** **to** **`{DLM_BASE_URL}/api/v1/scenes/{sceneId}/…`** **(**§3.15**)** **—** **same** **JSON** **and** **validation** **as** **any** **other** **client**. **REQ-030** **resolved:** **`scene.random_hex_colour()`** **is** **synchronous**, **invokes** **no** **HTTP**, **and** **uses** **only** **the** **standard** **Python** **`random`** **module:** **each** **call** **returns** **`"#%06x"** **%** **`random.randrange(0x1000000)`** **(**lowercase** **hex** **digits** **—** **same** **string** **shape** **and** **uniform** **24-bit** **distribution** **as** **that** **expression** **in** **CPython**)**. **Canonical** **mapping** **(names** **in** **§4.13** **REQ-024** **API** **reference** **manifest** **MUST** **match** **these** **or** **document** **aliases**)**:**
+**`scene` API (Python, bound per run):** **Inject** **a** **`scene`** **object** **into** **the** **user’s** **globals** **before** **each** **iteration** **(or** **once** **per** **`python3`** **process** **lifetime** **with** **captured** **`sceneId`** **and** **`listenPort`)**. **Most** **members** **are** **thin** **wrappers** **around** **HTTP** **(**e.g.** **`urllib.request`**, **`httpx`**, **or** **documented** **equivalent**)** **to** **`http://127.0.0.1:{listenPort}/api/v1/scenes/{sceneId}/…`** **(**§3.15**)** **—** **same** **JSON** **and** **validation** **as** **any** **other** **client**. **REQ-030** **resolved:** **`scene.random_hex_colour()`** **is** **synchronous**, **invokes** **no** **HTTP**, **and** **uses** **only** **the** **standard** **Python** **`random`** **module:** **each** **call** **returns** **`"#%06x"** **%** **`random.randrange(0x1000000)`** **(**lowercase** **hex** **digits** **—** **same** **string** **shape** **and** **uniform** **24-bit** **distribution** **as** **that** **expression** **in** **CPython**)**. **Canonical** **mapping** **(names** **in** **§4.13** **REQ-024** **API** **reference** **manifest** **MUST** **match** **these** **or** **document** **aliases**)**:**
 
 | Python surface (canonical names) | HTTP (§3.15) |
 |----------------------------------|--------------|
@@ -595,13 +599,15 @@ This section extends **REQ-015** scene composition with explicit API contracts f
 
 **Return** **types** **should** **mirror** **JSON** **(e.g.** **lists** **of** **dicts** **with** **`model_id`**, **`light_id`**, **`sx`**, **`sy`**, **`sz`**, **state** **fields)** **—** **exact** **shapes** **documented** **in** **§4.13** **for** **novices**.
 
-**Loop** **(**`python_scene_script` **only**)** **:** **`routineengine`** **starts** **the** **subprocess** **with** **`python_source`** **and** **environment** **`DLM_SCENE_ID`**, **`DLM_RUN_ID`**, **`DLM_BASE_URL=http://127.0.0.1:…`**. **Each** **iteration** **executes** **the** **user** **script** **body** **once** **(**same** **semantic** **as** **prior** **Pyodide** **outer** **loop**)** **;** **default** **host** **gap** **between** **iterations** **50** **ms** **(**`time.sleep(0.05)`** **in** **bootstrap** **or** **supervisor** **sleep**)** **. **Shape** **animation** **§3.17.2** **uses** **Go** **ticker** **instead** **.
+**Loop** **(**`python_scene_script` **only**)** **:** **Supervisor** **passes** **`python_source`** **+** **`sceneId`** **into** **the** **child** **process** **. **Each** **iteration** **runs** **the** **user** **body** **once** **;** **default** **gap** **≈** **50** **ms** **between** **iterations** **unless** **the** **script** **uses** **`asyncio.sleep`** **. **Shape** **animation** **§3.17.2** **uses** **`time.Ticker`** **in** **Go** **instead** **.
 
-**Cooperative stop:** **Between** **iterations**, **supervisor** **checks** **`routine_runs`** **or** **in-memory** **cancel** **flag** **(**fast** **path**)** **;** **on** **stop**, **child** **exits** **cleanly** **.
+**Cooperative stop:** **Supervisor** **sets** **a** **shared** **stop** **flag** **or** **closes** **a** **pipe** **when** **`POST …/stop`** **commits** **;** **bootstrap** **checks** **between** **iterations** **. **SQLite** **`routine_runs`** **reflects** **`stopped`** **for** **concurrency** **rules** **.
 
-**Forced stop (REQ-022 rule 8):** **If** **the** **child** **does** **not** **exit** **within** **`T_force`** **(**default** **5000** **ms**)** **after** **`POST …/stop`**, **supervisor** **sends** **`SIGTERM`** **then** **`SIGKILL`** **(**platform** **equivalent**)** **.
+**Stop latency (REQ-040):** **From** **successful** **`POST …/stop`**, **within** **≤** **2** **s** **:** **no** **further** **§3.15** **writes** **from** **that** **`python3`** **child** **and** **no** **further** **shape** **ticks** **(**§3.17.2**)** **. **Path** **:** **cooperative** **exit** **;** **then** **`SIGTERM`** **;** **then** **`SIGKILL`** **after** **`T_force`** **(**aggregate** **≤** **2** **s** **)** **.
 
-**Editor** **(§4.13,** **REQ-022** **rules** **2–4):** **CodeMirror** **6** **unchanged** **. **Diagnostics** **MAY** **use** **optional** **server** **`POST …/routines/{id}/lint`** **(**not** **required** **by** **requirements**)** **or** **lightweight** **client** **regex**/**tree-sitter** **if** **bundled** **;** **optional** **Pyodide** **in** **browser** **only** **for** **authoring** **comfort** **is** **allowed** **but** **must** **not** **be** **the** **only** **execution** **path** **(**REQ-038**)** **. **Completion** **for** **`scene.`** **from** **static** **manifest** **;** **format** **on** **save** **best-effort** **without** **shipping** **full** **Pyodide** **if** **removed** **.
+**Forced stop (REQ-022 rule 8, bounded by REQ-040):** **`SIGTERM`** **then** **`SIGKILL`** **on** **the** **`python3`** **process** **.
+
+**Editor** **(§4.13,** **REQ-022** **rules** **2–4):** **CodeMirror** **6** **unchanged** **. **Lint**/**format** **MAY** **use** **`dlm-python-editor-worker.mjs`** **/** **Pyodide** **—** **not** **the** **production** **runner** **.
 
 **REQ-021** **rule** **3** **(scene** **API** **only):** **Python** **must** **not** **call** **`/models/.../lights`** **for** **routine** **effects**; **the** **`scene`** **shim** **only** **targets** **§3.15** **scene** **routes**.
 
@@ -624,7 +630,7 @@ This section extends **REQ-015** scene composition with explicit API contracts f
 3. **Final** **radius** **so** **every** **light** **is** **inside** **the** **closed** **sphere** **(**§3.15** **inclusive** **`<=`** **)** **:** **read** **`scene.max_x`**, **`scene.max_y`**, **`scene.max_z`** **from** **the** **same** **`GET …/dimensions`** **payload** **the** **shim** **caches** **(**§3.17** **table**)** **;** **`R = math.hypot(scene.max_x - cx, scene.max_y - cy, scene.max_z - cz)`** **(**distance** **from** **center** **to** **far** **corner** **of** **the** **query** **box** **—** **worst-case** **light** **)** **+** **a** **tiny** **epsilon** **(**e.g.** **`1e-6`** **m**)** **so** **boundary** **lights** **are** **not** **missed** **by** **floating** **rounding**.
 4. **Growth:** **Choose** **starting** **radius** **`r0`** **with** **`0 < r0 < R`** **(**e.g.** **`0.05`** **m** **or** **`R * 0.02`** **—** **document** **in** **sample** **comments**)**. **For** **`elapsed`** **from** **`0`** **to** **`10`** **s** **(**SI**)** **,** **`r = r0 + (R - r0) * (elapsed / 10.0)`** **(**linear** **interpolation** **—** **simplest** **for** **novices**)**.
 5. **Updates** **per** **frame:** **`await scene.set_lights_in_sphere({"x": cx, "y": cy, "z": cz}, r, on=True, color=colour, brightness_pct=100)`** **(**or** **equivalent** **positional** **args** **per** **shim** **signature**)**. **Do** **not** **issue** **a** **second** **call** **to** **force** **off** **lights** **outside** **the** **sphere** **during** **growth** **(**REQ-032**)**.
-6. **Loop** **structure** **(**pseudocode** **for** **the** **worker** **iteration** **model**)** **:** **outer** **`while`** **run** **active** **(**cooperative** **stop** **check** **between** **cycles** **—** **§3.17**)** **;** **inner** **`while elapsed < 10`** **with** **`await asyncio.sleep(step)`** **where** **architecture** **default** **`step = 0.05`** **s** **(**20** **updates/s** **during** **motion** **—** **same** **order** **as** **default** **iteration** **gap** **§3.17**)** **;** **after** **inner** **completes**, **immediately** **start** **the** **next** **cycle** **with** **a** **new** **colour**.
+6. **Loop** **structure** **(**pseudocode** **for** **the** **`python3`** **iteration** **model**)** **:** **outer** **`while`** **run** **active** **(**cooperative** **stop** **check** **between** **cycles** **—** **§3.17**)** **;** **inner** **`while elapsed < 10`** **with** **`await asyncio.sleep(step)`** **where** **architecture** **default** **`step = 0.05`** **s** **(**20** **updates/s** **during** **motion** **—** **same** **order** **as** **default** **iteration** **gap** **§3.17**)** **;** **after** **inner** **completes**, **immediately** **start** **the** **next** **cycle** **with** **a** **new** **colour**.
 
 **Sweeping-cuboid routine** **(**REQ-032** **business** **rule** **4**)** **:**
 
@@ -642,13 +648,13 @@ This section extends **REQ-015** scene composition with explicit API contracts f
 1. **On** **first** **entry** **after** **start** **(**or** **once** **per** **outer** **loop** **iteration**)** **:** **`await scene.set_all_lights(on=True, color=…, brightness_pct=100)`** **with** **a** **valid** **initial** **hex** **(**e.g.** **`#ffffff`** **or** **`scene.random_hex_colour()`**)** **so** **every** **light** **in** **the** **scene** **is** **on** **at** **100%**.
 2. **Thereafter,** **at** **most** **once** **per** **~1** **s** **wall** **clock** **(**SI**)** **while** **the** **run** **stays** **active** **:** **build** **`updates[]`** **with** **one** **entry** **per** **light** **from** **`scene.get_all_lights()`** **(**or** **equivalent**)** **,** **each** **`on: true`**, **`brightness_pct: 100`**, **`color: scene.random_hex_colour()`** **(**REQ-030**)** **;** **`await scene.update_lights_batch(updates)`**.
 3. **Use** **`time.monotonic()`** **and** **a** **stored** **`last_tick`** **(**or** **`asyncio.sleep(1)`** **between** **colour** **passes** **if** **the** **host** **iteration** **gap** **is** **small** **enough**)** **so** **the** **~1** **s** **cadence** **is** **approximate** **but** **not** **faster** **than** **once** **per** **elapsed** **second** **per** **REQ-032** **(**document** **exact** **approach** **in** **sample** **`#`** **comments** **and** **`README.md`** **)**.
-4. **Stopping** **is** **only** **via** **`POST …/stop`** **(**§3.16**)** **—** **the** **script** **must** **cooperate** **with** **the** **worker** **stop** **check** **between** **iterations** **(**§3.17**)**.
+4. **Stopping** **is** **only** **via** **`POST …/stop`** **(**§3.16**)** **—** **the** **script** **must** **cooperate** **with** **the** **supervisor** **stop** **check** **between** **iterations** **(**§3.17**)**.
 
-**Performance note:** **Geometric** **samples** **at** **~20** **updates/s** **stress** **HTTP** **more** **than** **the** **random** **cycle** **(**~1** **batch/s**)** **;** **reuse** **`fetch`** **pools** **and** **§3.19** **equivalence** **short-circuits** **where** **helpful**.
+**Performance note:** **Geometric** **samples** **at** **~20** **updates/s** **stress** **loopback** **HTTP** **to** **§3.15** **;** **reuse** **keep-alive** **and** **§3.19** **equivalence** **short-circuits** **where** **helpful** **(**REQ-029**)** **.
 
-### 3.17.2 Shape animation routines — `definition_json`, server simulation, light painting (**REQ-033**, **REQ-020**, **REQ-026**, **REQ-030**, **REQ-038**)
+### 3.17.2 Shape animation routines — `definition_json`, Go simulation, light painting (**REQ-033**, **REQ-020**, **REQ-026**, **REQ-030**, **REQ-038**, **REQ-040**)
 
-**Placement:** **`routineengine`** **runs** **a** **Go** **package** **(e.g.** **`internal/routineengine/shapeanim`)** **on** **`time.Ticker`** **after** **`POST …/start`**. **Each** **tick** **computes** **geometry** **and** **calls** **the** **same** **internal** **functions** **used** **by** **`PATCH …/lights/state/batch`** **/** **region** **routes** **(**§3.15**)** **—** **no** **HTTP** **loopback** **required** **unless** **implementor** **prefers** **reuse** **via** **internal** **API** **. **The** **browser** **§4.14** **page** **only** **observes** **state** **(**poll**/**SSE**)** **and** **sends** **start**/**stop** **;** **it** **MUST** **not** **be** **the** **sole** **driver** **of** **ticks** **(**REQ-038**)** **. **Optional** **TypeScript** **preview** **engine** **MAY** **remain** **for** **offline** **UX** **prototyping** **—** **not** **normative** **for** **production** **runs** **.**
+**Placement (**production**)** **:** **`internal/routineengine`** **runs** **a** **`time.Ticker`** **(**default** **~** **60** **Hz** **—** **tunable**)** **per** **active** **`shape_animation`** **run** **. **Each** **tick** **advances** **simulation** **state** **(**Go** **port** **of** **`shapeAnimationEngine.ts`** **semantics** **or** **shared** **tested** **pure** **functions**)** **and** **calls** **`BatchPatchSceneLights`** **/** **equivalent** **so** **`mergeIfChanged`** **(**§3.19**)** **and** **SSE** **`deltas[]`** **behave** **like** **an** **HTTP** **`PATCH …/lights/state/batch`** **. **Observers** **(**browser**)** **use** **SSE** **only** **(**REQ-041**)** **. **Preview** **:** **TypeScript** **`shapeAnimationEngine.ts`** **MAY** **drive** **non-authoritative** **ghost** **overlays** **in** **§4.14** **—** **never** **production** **ticks** **.
 
 **Persistence (`definition_json` — normative field names for implementor):** **Single** **JSON** **object** **validated** **on** **`POST`/`PATCH`**. **Top-level:**
 
@@ -660,7 +666,7 @@ This section extends **REQ-015** scene composition with explicit API contracts f
 |-------|---------|
 | **`kind`** | **`"sphere"`** \| **`"cuboid"`** |
 | **`size`** | **`{ "mode": "fixed", "radius_m"?: number, "width_m"?, "height_m"?, "depth_m"? }`** **or** **`{ "mode": "random_uniform", "radius_min_m"?, "radius_max_m"?, … }`** — **sphere** **uses** **`radius_m`** **(**REQ-033** **—** **architecture** **fixes** **radius** **vs** **diameter** **here**)**; **cuboid** **uses** **three** **positive** **extents** **along** **scene** **+X**/**+Y**/**+Z** **(**§3.15** **mapping**)**. |
-| **`color`** | **`{ "mode": "fixed", "color": "#rrggbb" }`** **or** **`{ "mode": "random" }`** **—** **random** **draws** **uniform** **24-bit** **as** **`"#%06x" % randrange(0x1000000)`** **(**same** **as** **REQ-030**)** **in** **the** **browser** **(**no** **HTTP**)**. |
+| **`color`** | **`{ "mode": "fixed", "color": "#rrggbb" }`** **or** **`{ "mode": "random" }`** **—** **random** **draws** **uniform** **24-bit** **as** **`"#%06x" % randrange(0x1000000)`** **(**same** **as** **REQ-030**)** **in** **the** **Go** **tick** **(**no** **HTTP**)** **;** **editor** **ghost** **preview** **MAY** **use** **the** **same** **draw** **in** **TS** **. |
 | **`brightness_pct`** | **number** **0–100** **(**per** **shape** **—** **REQ-033**)**. |
 | **`placement`** | **`{ "mode": "fixed", "center_m": {x,y,z} }`** **for** **sphere** **or** **`{ "mode": "fixed", "min_corner_m": {x,y,z} }`** **for** **cuboid** **(**minimum** **corner** **inclusive** **—** **matches** **§3.15** **`position`**) **or** **`{ "mode": "random_face", "face": "top"|"bottom"|"left"|"right"|"back"|"front" }`**. |
 | **`motion`** | **`{ "direction": { "dx": number, "dy": number, "dz": number }, "speed": { "mode": "fixed", "m_s": number } | { "mode": "random_uniform", "min_m_s": number, "max_m_s": number } }`** — **not** **all** **`dx,dy,dz`** **zero**; **normalize** **to** **unit** **vector** **û** **;** **velocity** **=** **û** **×** **`speed_m_s`** **(**stored** **speed** **always** **SI** **m/s**; **UI** **may** **label** **cm/s** **and** **multiply** **by** **0.01** **on** **save**)**. |
@@ -668,28 +674,28 @@ This section extends **REQ-015** scene composition with explicit API contracts f
 
 **Resolved** **values** **(**random** **size**/**speed**/**colour**/**placement**)** **are** **re-drawn** **on** **each** **run** **start** **and** **each** **loop** **cycle** **(**REQ-033** **rules** **3**, **6**, **10**)** **unless** **tests** **require** **a** **documented** **deterministic** **seed** **(**optional** **`seed`** **field** **in** **v2** **—** **not** **required** **for** **MVP**)**.
 
-**Simulation tick:** **Default** **`Δt = 1/60` s** **(**~**60** **Hz** **client** **loop** **for** **smooth** **motion** **—** **tunable**)**. **Integrate** **`position += velocity * Δt`**. **Boundary** **(**closed** **scene** **AABB** **from** **`GET …/dimensions`:** **`origin.x ≤ x ≤ max.x`**, **same** **for** **`y`,`z`**, **using** **`sx/sy/sz`** **semantics** **for** **shape** **centers**/**corners** **—** **implementor** **documents** **sphere** **vs** **cuboid** **collision** **test** **against** **that** **box**)** **:**
+**Simulation tick:** **Default** **`Δt = 1/60` s** **(**~**60** **Hz** **Go** **`time.Ticker`** **for** **smooth** **motion** **—** **tunable**)**. **Integrate** **`position += velocity * Δt`**. **Boundary** **(**closed** **scene** **AABB** **from** **`GET …/dimensions`:** **`origin.x ≤ x ≤ max.x`**, **same** **for** **`y`,`z`**, **using** **`sx/sy/sz`** **semantics** **for** **shape** **centers**/**corners** **—** **implementor** **documents** **sphere** **vs** **cuboid** **collision** **test** **against** **that** **box**)** **:**
 
 - **`wrap`:** **When** **the** **shape** **would** **exit**, **translate** **its** **reference** **point** **(**center** **or** **min** **corner**)** **by** **whole** **scene** **extents** **so** **the** **volume** **re-enters** **from** **the** **opposite** **face** **(**Pac-Man**)**.
 - **`stop`:** **Remove** **shape** **from** **active** **set** **for** **the** **run**.
 - **`deflect_random`:** **Replace** **û** **with** **uniform** **random** **unit** **vector** **(**independent** **per** **event**)**; **keep** **\|`speed_m_s`\|**.
 - **`deflect_specular`:** **Reflect** **velocity** **across** **the** **plane** **of** **the** **first** **struck** **face** **(**if** **multiple** **faces** **in** **one** **tick** **—** **resolve** **in** **axis** **order** **+X** **then** **+Y** **then** **+Z** **or** **documented** **equivalent** **so** **tests** **are** **stable**)**.
 
-**Light** **assignment** **each** **tick** **(**REQ-033** **rules** **8–9**)** **:**
+**Light** **assignment** **each** **tick** **(**REQ-033** **rules** **8–9**)** **(**server** **path**)** **:**
 
-1. **Load** **scene** **light** **positions** **+** **state** **from** **`LightStateStore`** **+** **store** **geometry** **(**in-process** **—** **no** **HTTP** **)** **.
+1. **Load** **scene** **light** **positions** **from** **store**/**cache** **inside** **the** **routineengine** **goroutine** **.
 2. **For** **each** **active** **shape**, **compute** **inclusion** **in** **scene** **space** **(**§3.15**)** **.
 3. **Build** **winning** **(**color**,** **brightness_pct**)** **per** **light** **by** **lowest** **shape** **index** **.
-4. **Apply** **`BatchPatchSceneLights`** **(**internal** **)** **or** **equivalent** **transactional** **memory** **update** **across** **all** **lights** **in** **the** **scene** **.
+4. **Apply** **`BatchPatchSceneLights`** **(**or** **internal** **equivalent**)** **across** **all** **lights** **in** **one** **transaction** **;** **§3.20** **push** **when** **assigned** **.
 5. **§3.19** **:** **skip** **writes** **/** **device** **push** **when** **unchanged** **.
 
-**Loop** **termination** **(**REQ-033** **rule** **10**)** **:** **Supervisor** **marks** **`stopped`** **and** **stops** **ticker** **when** **terminal** **conditions** **met** **or** **user** **`POST …/stop`**.
+**Loop** **termination** **(**REQ-033** **rule** **10**)** **:** **Supervisor** **stops** **`time.Ticker`** **and** **does** **not** **schedule** **another** **tick** **after** **terminal** **conditions** **or** **`POST …/stop`** **(**REQ-040**)** **.
 
-**Start** **hook:** **`routineengine`** **reads** **`definition_json`** **from** **SQLite** **,** **preloads** **dimensions** **cache** **,** **starts** **ticker** **(**§8.22** **revised**)** **.**
+**Start** **hook:** **`routineengine`** **reads** **`definition_json`** **from** **SQLite** **after** **`POST …/start`**, **preloads** **dimensions** **cache** **,** **starts** **ticker** **(**§8.22** **revised**)** **.**
 
-### 3.18 High-throughput light state updates (**REQ-029**)
+### 3.18 High-throughput light state updates (**REQ-029**, **REQ-041**)
 
-**Design target:** Workloads with **on the order of hundreds** of lights (**REQ-005** upper bound) and **multiple aggregate update cycles per second** across **writes** and **viewer refresh**, while staying **credible** on **Raspberry Pi 4** (**REQ-003**). Prefer **fewer, larger HTTP transactions** and **reused TCP connections** over **storms** of **per-light** **`PATCH`** calls.
+**Design target:** Workloads with **on the order of hundreds** of lights (**REQ-005** upper bound) and **multiple aggregate update cycles per second** across **writes** and **viewer refresh**, while staying **credible** on **Raspberry Pi 4** (**REQ-003**). Prefer **fewer, larger HTTP transactions** and **reused TCP connections** over **storms** of **per-light** **`PATCH`** calls. **Server-Sent Events** (**SSE**) is the default **observer** transport for **live** light-state fan-out (see **Observer path** below).
 
 **Write path (aggregate APIs — satisfies REQ-029 business rule 2 alongside REQ-011 per-light endpoints):**
 
@@ -702,16 +708,37 @@ This section extends **REQ-015** scene composition with explicit API contracts f
 - Go’s **`net/http.Server`** uses **HTTP/1.1 keep-alive** by **default** for **eligible** clients. **Document** in **README** that **integrators** **SHOULD** **reuse** connections (**Go** **`http.Client`** **with** **shared** **`Transport`**; **curl** **keep-alive**; **browser** **`fetch`** **—** **same-origin** **tabs** **typically** **pool** **per** **origin**).
 - **Optional reverse proxy** (**§7**, **canonical** **production** **listener** **note** **in** **§1**): Terminate **TLS** and expose **HTTP/2** to **browsers** (**multiplexing** **many** **requests** **over** **one** **connection**) while **proxying** **HTTP/1.1** to **`127.0.0.1:8080`** **(or** **configured** **upstream**)** — **recommended** when **many** **parallel** **API** **calls** are **expected**.
 
-**Observer path — freshness without polling the full state every tick (REQ-029 business rule 4):**
+**Observer path — shipped web UI (REQ-041, REQ-029 business rule 5):**
 
-- **Shipped architectural default:** **Bounded polling** meets **REQ-012** **timeliness** for **typical** **UI** **use:** **§4.7** **optional** **`GET …/models/{id}/lights/state`** **every** **≤ 5 s** on **model** **detail**; **§4.9** **`GET …/scenes/{id}`** **every** **≤ 2 s** while **a** **routine** **run** **is** **active**. **Rationale:** **Simple**, **stateless** **on** **the** **server**, **low** **connection** **count** **on** **Pi**, **adequate** when **external** **write** **rates** **are** **modest** **or** **only** **the** **acting** **tab** **needs** **instant** **feedback** (**local** **`fetch`** **merge** **after** **PATCH** **—** **§4.7** **State** **sync**).
-- **When** **sustained** **multi-Hz** **writes** **from** **external** **clients** **must** **propagate** **to** **open** **browser** **tabs** **without** **short-interval** **full** **state** **polling:** **implementor** **SHOULD** **add** **Server-Sent** **Events** (**SSE**): e.g. **`GET /api/v1/models/{id}/lights/events`** **or** **`GET /api/v1/scenes/{id}/lights/events`** with **`Content-Type: text/event-stream`**, **emitting** **`data:`** **JSON** **lines** **after** **successful** **`COMMIT`** (**minimal** **payload** **e.g.** **`{ "seq": <uint64> }`** **or** **`{ "revision": … }`**) **so** **clients** **using** **`EventSource`** **trigger** **one** **`GET`** **of** **authoritative** **state** **(or** **apply** **documented** **deltas** **if** **added** **later**)**. **WebSocket** **is** **acceptable** **if** **bidirectional** **integration** **is** **required**; **SSE** **is** **preferred** **for** **one-way** **server→client** **fan-out** **(simpler** **upgrade** **path** **behind** **some** **proxies**)**. **Multi-tab** **behavior** **(REQ-029** **open** **question**)**:** **each** **tab** **may** **open** **its** **own** **SSE** **connection**, **or** **the** **product** **may** **document** **a** **single-tab** **subscriber** **pattern** **with** **`BroadcastChannel`** **(advanced**)**.
+- **Primary** **mechanism** **for** **live** **three.js** **viewports** **(**§4.7** **model** **detail**, **§4.9**/**§4.13**/**§4.14** **scene** **composite** **and** **unified** **routine** **canvases**)** **:** **Open** **`EventSource`** **on** **`GET /api/v1/models/{id}/lights/events`** **or** **`GET /api/v1/scenes/{sceneId}/lights/events`** **(**same** **origin** **as** **API**)** **after** **the** **initial** **`GET`** **that** **loads** **geometry** **+** **state** **. **On** **each** **`message`**, **parse** **JSON** **`{ "seq", "deltas" }`** **per** **§3.2** **API** **table** **;** **merge** **`deltas[]`** **into** **client** **state** **and** **update** **only** **affected** **`InstancedMesh`**/**material** **instances** **(**§4.7** **incremental** **apply**)** **—** **do** **not** **recreate** **chain** **`LineSegments`**, **boundary** **box** **edges**, **or** **all** **`setMatrixAt`** **calls** **when** **only** **a** **subset** **of** **lights** **changed** **(**REQ-031** **still** **skips** **per-light** **work** **when** **triple** **≡** **last-rendered**)** **.
+- **Full** **snapshot** **fallback** **:** **Use** **one** **`GET …/lights/state`** **(**model**)** **or** **`GET …/scenes/{id}`** **(**scene**)** **on** **first** **mount**, **after** **`EventSource`** **`error`**/**disconnect**, **or** **`seq`** **gap** **detected** **(**document** **reconnect** **policy** **)** **—** **not** **a** **high-frequency** **timer** **. **While** **SSE** **is** **connected** **and** **healthy**, **do** **not** **use** **`setInterval`** **/** **tight** **loops** **to** **poll** **full** **state** **(**REQ-041** **—** **at** **most** **occasional** **slow** **watchdog** **e.g.** **≥** **30** **s** **if** **product** **chooses** **)** **.
+- **Degraded** **mode** **:** **If** **`EventSource`** **is** **unsupported** **or** **repeatedly** **fails**, **fall** **back** **to** **documented** **slow** **polling** **(**e.g.** **≥** **5** **s** **interval**)** **and** **/** **or** **a** **visible** **“live** **updates** **paused”** **indicator** **—** **never** **silent** **multi-Hz** **GET** **hammer** **(**REQ-041** **responsive** **note**)** **.
+- **Third-party** **integrators** **outside** **the** **shipped** **UI** **:** **REQ-029** **business** **rule** **4** **SHOULD** **still** **apply** **(**reuse** **connections**, **prefer** **bulk** **writes**, **SSE** **or** **bounded** **polling** **as** **documented**)** **;** **they** **are** **not** **required** **to** **use** **the** **same** **delta** **schema** **unless** **they** **opt** **into** **`…/lights/events`** **.
+- **Transport** **choice** **:** **SSE** **with** **`Content-Type: text/event-stream`** **is** **the** **architectural** **default** **(**one-way** **fan-out**, **works** **through** **typical** **reverse** **proxies** **with** **buffering** **disabled** **)** **. **WebSocket** **MAY** **replace** **SSE** **if** **the** **product** **documents** **the** **same** **`seq`+`deltas`** **semantics** **on** **a** **named** **path** **(**bidirectional** **not** **required** **today**)** **.
+- **Multi-tab** **:** **Each** **browser** **tab** **MAY** **open** **its** **own** **`EventSource`** **(**simplest**)** **;** **Pi** **connection** **count** **(**§6**)** **should** **be** **documented** **(**e.g.** **≤** **few** **dozen** **idle** **SSE** **streams** **)** **.
 - **SQLite** **limits:** **Still** **apply** **to** **catalog** **mutations** **(**models** **/** **scenes** **/** **routines**)** **;** **per-light** **state** **is** **memory-bound** **(**§3.21**)** **so** **hot** **paths** **avoid** **SQLite** **writer** **contention** **(**REQ-039**)** **. **See** **§6**/**§9** **for** **Pi** **and** **abuse** **bounds**.
 - **REQ-031** **:** **§3.19** **covers** **equivalence** **for** **memory**, **device** **push**, **and** **client** **redraw** **.
 
-### 3.19 Redundant light-state elision and WLED traffic (**REQ-031**, **REQ-035–REQ-038**)
+```mermaid
+sequenceDiagram
+  participant Canvas as Model or SceneLightsCanvas
+  participant ES as EventSource (browser)
+  participant Go as Go httpapi + lightstate
+  Canvas->>Go: GET initial model or scene JSON
+  Go-->>Canvas: lights + geometry
+  Canvas->>ES: open …/lights/events
+  loop state changes (routine, PATCH, batch)
+    Go->>Go: mergeIfChanged → deltas, bump seq
+    Go-->>ES: data: { seq, deltas }
+    ES-->>Canvas: onmessage
+    Canvas->>Canvas: apply deltas to instances only (no full graph rebuild)
+  end
+  Note over Canvas,Go: On disconnect: one GET snapshot, then reconnect ES
+```
 
-**Goals:** (1) **Skip** **three.js** **rebuilds** **when** **effective** **triples** **unchanged** **(**client**)** **. (2) **Skip** **`LightStateStore`** **writes** **when** **merged** **≡** **current** **(**server**)** **. (3) **Skip** **WLED** **HTTP** **calls** **when** **device** **output** **would** **not** **change** **(**§3.20** **last-applied** **cache**)** **.
+### 3.19 Redundant light-state elision and WLED traffic (**REQ-031**, **REQ-035–REQ-038**, **REQ-041**)
+
+**Goals:** (1) **Skip** **three.js** **rebuilds** **when** **effective** **triples** **unchanged** **(**client**)** **. (2) **Skip** **`LightStateStore`** **writes** **when** **merged** **≡** **current** **(**server**)** **. (3) **Skip** **WLED** **HTTP** **calls** **when** **device** **output** **would** **not** **change** **(**§3.20** **last-applied** **cache**)** **. (4) **Align** **SSE** **`deltas[]`** **with** **the** **same** **equivalence** **rules** **so** **the** **server** **does** **not** **emit** **redundant** **delta** **rows** **(**empty** **`deltas`** **when** **no** **logical** **change** **)** **.
 
 #### Canonical equivalence (logical state)
 
@@ -729,13 +756,13 @@ This section extends **REQ-015** scene composition with explicit API contracts f
 
 #### Server (`internal/lightstate` + §3.15 handlers)
 
-**Single-light** **`PATCH`**, **batch**, **scene** **region** **routes** **,** **and** **`routineengine`:** **Use** **one** **helper** **`mergeIfChanged(modelID, idx, patch) (newTriple, changed bool)`** **under** **per-model** **mutex** **(**or** **RW** **mutex** **map**)** **so** **read** **+** **compare** **+** **conditional** **write** **are** **atomic** **in** **memory** **. **On** **`changed==false`**, **still** **`200`** **with** **full** **body** **and** **optional** **`unchanged`** **/** **`unchanged_all`** **. **On** **`true`**, **record** **triple** **,** **bump** **SSE** **`seq`**, **enqueue** **WLED** **segment** **updates** **(**§3.20**)** **only** **for** **indices** **that** **differ** **from** **last-applied** **device** **state** **.
+**Single-light** **`PATCH`**, **batch**, **scene** **region** **routes** **,** **and** **writes** **originating** **from** **routine** **automation** **(**`internal/routineengine`:** **internal** **§3.15** **equivalents** **and**/**or** **loopback** **`fetch`** **to** **§3.15** **from** **`python3`**) **:** **Use** **one** **helper** **`mergeIfChanged(modelID, idx, patch) (newTriple, changed bool)`** **under** **per-model** **mutex** **(**or** **RW** **mutex** **map**)** **so** **read** **+** **compare** **+** **conditional** **write** **are** **atomic** **in** **memory** **. **On** **`changed==false`**, **still** **`200`** **with** **full** **body** **and** **optional** **`unchanged`** **/** **`unchanged_all`** **. **On** **`true`**, **record** **triple** **,** **bump** **SSE** **`seq`**, **enqueue** **WLED** **segment** **updates** **(**§3.20**)** **only** **for** **indices** **that** **differ** **from** **last-applied** **device** **state** **.
 
 **Concurrency:** **Per-model** **locking** **prevents** **lost** **updates** **from** **interleaved** **HTTP** **and** **routine** **ticks** **.
 
 #### Client (Next.js + three.js)
 
-**Last-rendered** **cache:** **Keep** **a** **`Map`** **or** **parallel** **arrays** **of** **normalized** **triples** **(**or** **hashes**)** **aligned** **to** **`lights[i]`** **for** **the** **mounted** **model** **or** **scene** **view**. **On** **every** **authoritative** **merge** **(**successful** **`PATCH`**, **`GET`** **poll**, **SSE-triggered** **refetch**)**:
+**Last-rendered** **cache:** **Keep** **a** **`Map`** **or** **parallel** **arrays** **of** **normalized** **triples** **(**or** **hashes**)** **aligned** **to** **`lights[i]`** **for** **the** **mounted** **model** **or** **scene** **view**. **On** **every** **authoritative** **merge** **(**successful** **`PATCH`**, **slow** **`GET`** **poll** **in** **degraded** **mode**, **SSE** **`deltas[]`** **merge** **per** **§3.18**, **or** **SSE-triggered** **full** **refetch** **on** **reconnect**)**:
 
 1. **For** **each** **light**, **if** **new** **triple** **≡** **last-rendered** **triple**, **skip** **any** **per-light** **material** **/** **`InstancedMesh`** **attribute** **work** **for** **that** **index** **(**including** **emissive** **recalc** **§4.7**)**.
 2. **If** **all** **indices** **are** **unchanged** **(**whole** **payload** **equivalent**)**:** **skip** **full** **scene** **rebuild** **(**no** **new** **`BufferGeometry`**, **no** **re** **`setMatrixAt`** **storm** **for** **unchanged** **instances**)** **—** **still** **update** **React** **state** **if** **needed** **for** **reference** **equality** **(**prefer** **structural** **sharing** **/** **stable** **references** **when** **the** **server** **sent** **`unchanged`** **)**.
@@ -743,11 +770,11 @@ This section extends **REQ-015** scene composition with explicit API contracts f
 
 **Optimistic** **UI** **(**if** **any**)**:** **If** **the** **client** **pre-merges** **a** **user** **edit**, **do** **not** **send** **`PATCH`** **when** **the** **control** **value** **matches** **the** **already** **known** **authoritative** **triple** **(**reduces** **HTTP** **as** **well** **as** **DB** **work**)** — **still** **send** **when** **the** **user** **explicitly** **chooses** **“Apply”** **on** **bulk** **panels** **if** **the** **product** **defines** **that** **as** **always** **confirming** **(**optional** **UX** **choice** **—** **prefer** **skip** **for** **performance** **per** **REQ-031**)**.
 
-**Python** **subprocess** **(**§3.17**)** **:** **MAY** **cache** **GET** **results** **inside** **the** **child** **to** **skip** **redundant** **HTTP** **when** **equivalent** **—** **server** **remains** **authoritative** **on** **each** **applied** **`PATCH`** **.
+**`python3`** **child** **(**§3.17**)** **:** **MAY** **cache** **`GET …/dimensions`** **/** **light** **lists** **inside** **the** **process** **to** **skip** **redundant** **HTTP** **when** **equivalent** **—** **server** **remains** **authoritative** **on** **each** **applied** **write** **.
 
-#### Observer path alignment (**REQ-029** + **REQ-031**)
+#### Observer path alignment (**REQ-029**, **REQ-031**, **REQ-041**)
 
-**When** **`GET …/lights/state`** **or** **`GET …/scenes/{id}`** **returns** **data** **unchanged** **from** **the** **client’s** **last** **merge** **(**byte-for-byte** **or** **per-light** **equivalence**)**:** **do** **not** **trigger** **a** **full** **three.js** **rebuild** **—** **update** **timestamps**/**refs** **only** **if** **required** **for** **React**. **This** **complements** **bounded** **polling** **without** **adding** **jank** **when** **nothing** **moved**.
+**When** **`GET …/lights/state`** **or** **`GET …/scenes/{id}`** **returns** **data** **unchanged** **from** **the** **client’s** **last** **merge** **(**byte-for-byte** **or** **per-light** **equivalence**)** **or** **an** **SSE** **`deltas`** **array** **is** **empty** **:** **do** **not** **trigger** **a** **full** **three.js** **rebuild** **—** **update** **timestamps**/**refs** **only** **if** **required** **for** **React**. **This** **complements** **push** **+** **delta** **(**§3.18**)** **and** **occasional** **snapshot** **refetch** **without** **adding** **jank** **when** **nothing** **moved**.
 
 #### WLED push (REQ-035–REQ-038)
 
@@ -756,7 +783,7 @@ This section extends **REQ-015** scene composition with explicit API contracts f
 ```mermaid
 flowchart LR
   subgraph go["Go binary"]
-    H[HTTP + routineengine]
+    H[HTTP API + mergeIfChanged]
     LS[LightStateStore]
     DEV[devices WLED client]
     DB[(SQLite geometry + registry)]
@@ -822,7 +849,7 @@ flowchart LR
 | Pattern | Use |
 |--------|-----|
 | **Client `fetch('/api/v1/...')`** | Primary pattern for reactive UI (**REQ-002**) against **same Go origin**. **Reuse** **connections** **per** **origin** **(browser** **default)** **and** **prefer** **batch**/**bulk** **endpoints** **for** **many** **light** **updates** **(**§3.18**, **REQ-029**)**. |
-| **Optional `EventSource` (future)** | **If** **SSE** **endpoints** **from** **§3.18** **ship**, **subscribe** **for** **push** **notifications** **then** **`GET`** **authoritative** **state** **—** **keeps** **tabs** **fresh** **under** **high** **external** **write** **rates** **without** **sub-second** **polling**. |
+| **`EventSource` on `…/lights/events` (REQ-041)** | **Required** **for** **shipped** **live** **three.js** **viewports** **(**§4.7**, **§4.9**, **§4.13**, **§4.14**)** **:** **open** **after** **initial** **`GET`**, **merge** **`deltas[]`** **from** **each** **`message`**, **reconnect** **+** **one** **snapshot** **`GET`** **on** **failure** **per** **§3.18**. |
 | **Build-time static** | `generateStaticParams` / SSG **only** if values are fixed at build; API must still be available at runtime for live data where needed. |
 
 ### 4.4 Environment
@@ -840,7 +867,7 @@ Unchanged intent: **Tailwind breakpoints**, **touch targets**, **`"use client"`*
 - **Feedback:** Inline / banner display of **400** / **409** **`message`** from API; loading states on list, detail, upload, and delete (**REQ-002**).
 - **Navigation:** **Primary** **IA** **is** **the** **collapsible** **left** **nav** **in** **§4.11** (**Models**, **Scenes**, **Routines**, **Devices**, **Options**, **home** **`/`** **if** **distinct**); **no** **hover-only** **paths** **to** **these** **destinations** (**REQ-002**, **REQ-018**).
 
-### 4.7 Three.js visualization on model detail (**REQ-010**, **REQ-012**, **REQ-016**, **REQ-019**, **REQ-028**, **REQ-031**)
+### 4.7 Three.js visualization on model detail (**REQ-010**, **REQ-012**, **REQ-016**, **REQ-019**, **REQ-028**, **REQ-031**, **REQ-034**, **REQ-041**)
 
 **Dependency:** Declare **`three`** in **`web/package.json`** as a **direct** dependency (satisfies REQ-010 business rule 2). Pin a **stable semver** range in lockfile; bump intentionally when upgrading. Using **`@react-three/fiber`** / **`@react-three/drei`** is **optional**—if used, **`three`** MUST still appear **directly** in **`dependencies`** (not only as a transitive peer).
 
@@ -865,6 +892,8 @@ Unchanged intent: **Tailwind breakpoints**, **touch targets**, **`"use client"`*
   - **A.** **Two** **`InstancedMesh`** **layers**: (**1**) **on** lights — **`InstancedMesh`** + **`instanceColor`** (and **brightness** factored per instance or via **custom** attribute); (**2**) **off** lights — second **`InstancedMesh`** with **shared** **`#D0D0D0`**, **`opacity 0.15`**, **non-wireframe** **material**. When **`on`** toggles, **move** instances between **layers** or **rebuild** **both** from **authoritative** **state** (**O(n)** OK for **n ≤ 1000**).
   - **B.** **Up to n** **individual** **`Mesh`** **nodes** — acceptable if **performance** on **Pi-class** **clients** remains acceptable.
 - **Wire polyline (REQ-005 chain, REQ-010):** **`LineSegments`** (or **`LineBasicMaterial`** **lines**) only between **(i, i+1)** for **i = 0 … n−2**. **Colour** **`#D0D0D0`**, **`transparent: true`**, **`opacity: 0.15`**; **linewidth** where supported is **thin** (note: **WebGL** **line** **width** is often **1** px); segments MUST read **subtler** than **spheres**. **Style** does **not** vary with **on/off** (**REQ-012** **out** **of** **scope** for segment state).
+- **Shared wire material (REQ-034 rule 6):** **Export** **one** **reusable** **constant** **or** **factory** **e.g.** **`makeFaintWireLineMaterial()`** **in** **`web/lib/`** **that** **returns** **`LineBasicMaterial`** **(**or** **documented** **equivalent**)** **with** **the** **same** **`#D0D0D0`** **/** **`opacity`** **0.15** **as** **the** **chain** **segments** **above** **. **Use** **it** **both** **for** **inter-light** **segments** **and** **for** **the** **12-edge** **axis-aligned** **boundary** **cuboid** **(**REQ-034** **—** **tight** **light** **AABB** **±** **0.3** **m** **padding** **on** **model** **view**)** **so** **the** **box** **and** **wire** **read** **as** **one** **visual** **family** **.
+- **Boundary cuboid geometry (REQ-034):** **Build** **12** **edges** **as** **a** **single** **`LineSegments`** **from** **unit** **box** **corners** **scaled** **to** **the** **padded** **AABB** **in** **model** **space** **;** **update** **vertex** **positions** **only** **when** **light** **positions** **change** **(**not** **on** **every** **SSE** **delta** **that** **only** **changes** **colour** **)** **.
 - **Framing (baseline for REQ-016):** **Implement** a **pure** **helper** **`applyDefaultFraming(bounds: THREE.Box3, camera, controls, viewportWidth, viewportHeight)`** **(name** **local** **to** **codebase**)** **that:**
   - Sets **`controls.target`** **to** **the** **center** **of** **`bounds`** **(axis-aligned** **bounding** **box** **of** **all** **light** **positions** **±** **0.01** **m** **sphere** **radius**)**.
   - Positions **`camera`** **outside** **the** **bounds** **on** **a** **stable** **direction** **(e.g.** **normalized** **`(1, 1, 1)`** **from** **center** **scaled** **so** **the** **entire** **bounds** **fits** **in** **the** **vertical** **and** **horizontal** **FOV** **with** **a** **small** **padding** **factor** **≥** **1.1**)**—** **document** **chosen** **vector** **and** **padding** **in** **code** **comments** **so** **reset** **and** **first** **load** **match**.
@@ -872,10 +901,10 @@ Unchanged intent: **Tailwind breakpoints**, **touch targets**, **`"use client"`*
 - **Initial load:** **After** **`lights`** **arrive**, **compute** **`bounds`**, **then** **`applyDefaultFraming`** **once**.
 - **Reset camera (REQ-016):** **Secondary** **button** **(e.g.** **label** **“Reset camera”)** **next** **to** **the** **canvas** **toolbar** **or** **overlay** **corner** **calls** **`applyDefaultFraming`** **again** **using** **the** **current** **`lights`** **bounds** **(recomputed** **if** **data** **changed**)**—** **no** **`fetch`**. **Repeat** **clicks** **yield** **the** **same** **baseline** **for** **the** **same** **`lights`** **and** **viewport** **size** **(REQ-016** **rule** **4**)**. **Architectural** **resolution** **for** **REQ-016** **open** **question:** **reset** **affects** **only** **camera** **and** **`OrbitControls`** **state**; **implementor** **MAY** **clear** **the** **hover**/**tap** **label** **for** **less** **confusion** **but** **is** **not** **required** **to** **clear** **list** **selection** **or** **pagination**.
 
-#### State sync (REQ-012 rule 3; REQ-029 observer path; REQ-031 elision)
+#### State sync (REQ-012 rule 3; REQ-041 push + deltas; REQ-031 elision)
 
-- **After a successful `PATCH …/lights/{lightId}/state`**, **`PATCH …/lights/state/batch`** (**§3.10**, **REQ-013**), or **`POST …/lights/state/reset`** (**§3.11**, **REQ-014**) initiated from **this** **browser** **session**, the **client** MUST **merge** the **JSON** **response** (or **refetch** **`GET …/lights/state`** / **model** **detail**) and **update** **three.js** **meshes** **before** the **next** **`requestAnimationFrame`** **paint** **following** **the** **`fetch`** **resolution** (i.e. **no** **indefinite** **staleness** **after** **confirmed** **write**). **REQ-031:** **When** **the** **merged** **per-light** **state** **is** **equivalent** **to** **what** **was** **already** **rendered** **(**§3.19** **normalization**)** **,** **skip** **redundant** **mesh**/**material**/**instance** **rebuild** **for** **those** **lights** **(**§3.19** **client** **subsection**)**.
-- **Concurrent** **sessions** **(another** **tab** **or** **REST** **client):** **Optional** **`setInterval`** **poll** of **`GET /api/v1/models/{id}/lights/state`** every **≤ 5 s** while the **detail** **route** **is** **mounted**; if **absent**, **manual** **browser** **refresh** **still** **shows** **truth** — **document** **in** **README** **that** **live** **multi-user** **sync** **may** **lag** **up** **to** **one** **poll** **period**. **Under** **sustained** **multi-Hz** **writes** **from** **other** **clients**, **this** **polling** **alone** **may** **not** **meet** **every** **integrator** **expectation** **—** **see** **§3.18** **(optional** **SSE**)** **and** **§8.19**. **REQ-031:** **Poll** **responses** **that** **match** **the** **last** **merged** **state** **should** **not** **force** **a** **full** **three.js** **rebuild** **(**§3.19** **observer** **alignment**)**.
+- **After a successful `PATCH …/lights/{lightId}/state`**, **`PATCH …/lights/state/batch`** (**§3.10**, **REQ-013**), or **`POST …/lights/state/reset`** (**§3.11**, **REQ-014**) initiated from **this** **browser** **session**, the **client** MUST **merge** the **JSON** **response** and **update** **three.js** **meshes** **before** the **next** **`requestAnimationFrame`** **paint** **following** **the** **`fetch`** **resolution** (i.e. **no** **indefinite** **staleness** **after** **confirmed** **write**). **REQ-031:** **When** **the** **merged** **per-light** **state** **is** **equivalent** **to** **what** **was** **already** **rendered** **(**§3.19** **normalization**)** **,** **skip** **redundant** **mesh**/**material**/**instance** **rebuild** **for** **those** **lights** **(**§3.19** **client** **subsection**)**.
+- **Live** **observer** **(**REQ-041**)** **:** **While** **`/models/[id]`** **is** **mounted**, **keep** **`EventSource`** **on** **`GET /api/v1/models/{id}/lights/events`** **open** **;** **on** **each** **event**, **apply** **`deltas[]`** **incrementally** **per** **§3.18** **without** **tearing** **down** **the** **scene** **graph**. **Do** **not** **run** **a** **parallel** **`setInterval`** **full-state** **poll** **at** **≤** **2–5** **s** **while** **SSE** **is** **healthy** **. **If** **SSE** **disconnects**, **one** **`GET …/lights/state`** **or** **model** **detail** **`GET`**, **then** **re-open** **`EventSource`**. **Degraded** **browsers** **:** **slow** **polling** **only** **as** **§3.18** **fallback** **.
 
 #### Picking, hover, and touch (REQ-010 rule 6; REQ-012 rule 4)
 
@@ -916,13 +945,13 @@ Unchanged intent: **Tailwind breakpoints**, **touch targets**, **`"use client"`*
 
 **Accessibility / responsive:** Table **MAY** **stack** as **cards** on **narrow** **viewports**; **checkboxes** and **bulk** **panel** remain **reachable** **without** **hover-only** **affordances** (**REQ-013** rule 7).
 
-### 4.9 Scenes UI and composite three.js (**REQ-015**, **REQ-010**, **REQ-012**, **REQ-016**, **REQ-019**, **REQ-021**, **REQ-022**, **REQ-023**, **REQ-027**, **REQ-028**, **REQ-029**, **REQ-031**, **REQ-033**)
+### 4.9 Scenes UI and composite three.js (**REQ-015**, **REQ-010**, **REQ-012**, **REQ-016**, **REQ-019**, **REQ-021**, **REQ-022**, **REQ-023**, **REQ-027**, **REQ-028**, **REQ-029**, **REQ-031**, **REQ-033**, **REQ-034**, **REQ-041**)
 
 - **Routes:** **`/scenes`** (list), **`/scenes/new`** (**create** **flow**: **scene** **name** + **ordered** **multi-select** **of** **≥ 1** **model** **—** **no** **per-row** **offset** **inputs**; **submit** **`POST /api/v1/scenes`** **with** **`models`** **in** **that** **order** **and** **let** **the** **server** **compute** **offsets** **per** **§3.12**), **`/scenes/[id]`** (**detail** **composite** **view** **+** **optional** **offset** **editing** **via** **`PATCH …/models/{modelId}`** **after** **create**).
 - **Routines on scene detail (REQ-021, REQ-022, REQ-023, REQ-033):** **Panel** **or** **toolbar** **with** **`GET /api/v1/routines`** **(**`<select>`** **or** **list** **—** **each** **row** **shows** **`type`** **or** **icon** **for** **Python** **vs** **shape** **animation**)**; **`POST …/start`** **and** **`POST …/stop`** **with** **Font Awesome** **icons**. **After** **`GET …/routines/runs`**, **show** **active** **run** **(**name** **+** **Stop**)** **or** **“No** **routine** **running”**. **On** **`409`** **`scene_routine_conflict`**, **surface** **`error.message`**. **Optional** **“Edit** **routine”** **→** **`/routines/python/[id]`** **or** **`/routines/shape/[id]`** **by** **`type`** **(**§4.13**/**§4.14**)** **—** **must** **not** **replace** **primary** **create** **via** **`/routines/new`** **(§4.12)**.
 - **Data:** **`GET /api/v1/scenes`**, **`POST /api/v1/scenes`**, **`GET /api/v1/scenes/{id}`**, **`POST …/models`**, **`PATCH …/models/{modelId}`**, **`DELETE …/models/{modelId}`**, **`DELETE /api/v1/scenes/{id}`** per **§3.13**. **On** **`409`** **`scene_last_model`**, **show** **modal** **copy** **that** **removing** **the** **last** **model** **deletes** **the** **entire** **scene**; **on** **confirm**, **`DELETE /api/v1/scenes/{id}`** **then** **redirect** **to** **`/scenes`**.
-- **Live updates while a routine runs (REQ-012, REQ-029, REQ-031):** **While** **`/scenes/[id]`** **is** **mounted** **and** **`GET …/routines/runs`** **shows** **`running`**, **poll** **`GET /api/v1/scenes/{id}`** **every** **`≤ 2 s`** **(covers** **Python** **subprocess** **iterations**, **~1** **s** **effects**, **and** **shape** **animation** **server** **ticks** **—** **editor** **tabs** **also** **refetch** **after** **local** **`PATCH`** **per** **§4.13**/**§4.14**)** **and** **merge** **`items[].lights`** **into** **`SceneLightsCanvas`**. **Apply** **§3.19** **equivalence** **so** **unchanged** **poll** **payloads** **skip** **redundant** **canvas** **work**. **Active** **runs** **mutate** **state** **only** **via** **the** **server** **`routineengine`** **(**§3.17** **Python** **runner** **/** **§3.17.2** **Go** **shape** **loop**)** **calling** **§3.15** **internally** **;** **the** **browser** **only** **observes** **through** **polling** **/** **SSE**. **Stop** **polling** **when** **no** **run** **is** **active** **or** **on** **unmount**. **High-frequency** **external** **writers** **SHOULD** **use** **§3.15** **bulk**/**batch** **(**§3.18**)**; **optional** **SSE** **(**§3.18**/**§8.19**)** **reduces** **polling** **when** **implemented**.
-- **Composite** **three.js:** **Refactor** **or** **duplicate** **§4.7** **patterns** **into** **a** **`SceneLightsCanvas`** **(or** **extend** **`ModelLightsCanvas`**) **that** **accepts** **`items[]`**: **for** **each** **model**, **build** **the** **same** **2** **cm** **spheres** **and** **`#D0D0D0`** **`opacity`** **0.15** **segments** **between** **consecutive** **`id`** **only** **within** **that** **model**, **using** **`sx`, `sy`, `sz`** **from** **API** **(or** **client-composed** **positions** **identical** **to** **server** **rules**). **No** **segments** **between** **models**. **Per-light** **state** **materials** **match** **§4.7** (**REQ-012**, **REQ-028** **emissive** **rules**). **Apply** **the** **same** **REQ-019** **fixed** **dark-grey** **viewport** **treatment** **as** **§4.7** **(scene** **background** **+** **renderer** **clear** **+** **letterbox** **wrapper**)**. **Picking** **must** **identify** **which** **model** **and** **which** **light** **id** **for** **hover**/**tap** **(show** **scene** **coordinates** **and** **model** **id** **+** **light** **`id`** **as** **needed**).
+- **Live updates (REQ-012, REQ-029, REQ-031, REQ-041):** **While** **`/scenes/[id]`** **is** **mounted**, **open** **`EventSource`** **on** **`GET /api/v1/scenes/{id}/lights/events`** **after** **the** **initial** **`GET /api/v1/scenes/{id}`** **;** **merge** **each** **`deltas[]`** **payload** **into** **`SceneLightsCanvas`** **incrementally** **per** **§3.18** **(**no** **full** **graph** **rebuild** **when** **only** **subset** **of** **lights** **changed**)** **. **Routine** **runs** **(**`GET …/routines/runs`** **shows** **`running`**) **and** **idle** **scenes** **both** **use** **the** **same** **SSE** **path** **for** **external** **/** **server-driven** **changes** **. **Do** **not** **replace** **SSE** **with** **`GET …/scenes/{id}`** **every** **≤** **2** **s** **while** **the** **stream** **is** **healthy** **. **On** **SSE** **failure**, **one** **snapshot** **`GET`**, **then** **reconnect** **(**§3.18**)** **.
+- **Composite** **three.js:** **Refactor** **or** **duplicate** **§4.7** **patterns** **into** **a** **`SceneLightsCanvas`** **(or** **extend** **`ModelLightsCanvas`**) **that** **accepts** **`items[]`**: **for** **each** **model**, **build** **the** **same** **2** **cm** **spheres** **and** **`#D0D0D0`** **`opacity`** **0.15** **segments** **between** **consecutive** **`id`** **only** **within** **that** **model**, **using** **`sx`, `sy`, `sz`** **from** **API** **(or** **client-composed** **positions** **identical** **to** **server** **rules**). **No** **segments** **between** **models**. **Per-light** **state** **materials** **match** **§4.7** (**REQ-012**, **REQ-028** **emissive** **rules**). **REQ-034** **:** **Draw** **one** **scene-space** **padded** **AABB** **wire** **(**tight** **bounds** **over** **all** **`sx,sy,sz`** **+** **scene** **`margin_m`** **per** **§3.12**/**§3.13**)** **using** **the** **same** **shared** **faint** **line** **material** **as** **§4.7** **chain** **segments** **. **Apply** **the** **same** **REQ-019** **fixed** **dark-grey** **viewport** **treatment** **as** **§4.7** **(scene** **background** **+** **renderer** **clear** **+** **letterbox** **wrapper**)**. **Picking** **must** **identify** **which** **model** **and** **which** **light** **id** **for** **hover**/**tap** **(show** **scene** **coordinates** **and** **model** **id** **+** **light** **`id`** **as** **needed**).
 - **Framing (REQ-016):** **Fit** **camera** **to** **§3.12** **AABB** **`[0,0,0]`** **–** **`(Mmax+1)`** **per** **axis** **plus** **marker** **radius** **margin** **using** **the** **same** **`applyDefaultFraming`** **pattern** **as** **§4.7** **but** **with** **bounds** **derived** **from** **scene-space** **positions** **`(sx,sy,sz)`** **for** **all** **lights**. **A** **“Reset camera”** **control** **on** **the** **scene** **canvas** **re-invokes** **that** **same** **fit** **(no** **API** **call**)**.**
 - **Add** **model** **control:** **calls** **`POST …/scenes/{id}/models`** **without** **offsets** **to** **get** **default** **+X** **placement** **or** **with** **explicit** **integers** **after** **user** **edit**. **Placement** **inputs** **validate** **≥ 0** **client-side** **for** **fast** **feedback**; **authoritative** **errors** **from** **API** **400**.
 - **REQ-002:** **Same** **touch**/**pointer** **expectations** **as** **model** **detail**; **no** **hover-only** **blocking** **flows** **for** **add**/**remove**/**confirm**.
@@ -1052,9 +1081,9 @@ flowchart LR
 - **Default** **template** **(REQ-025):** **Define** **`PYTHON_ROUTINE_DEFAULT_SOURCE`** **(or** **equivalent)** **in** **`web/`** **as** **the** **initial** **`doc`** **when** **the** **client** **creates** **`python_scene_script`** **with** **`python_source: ""`** **(or** **omit** **and** **let** **client** **substitute** **before** **`PATCH`)** **—** **content** **MUST** **demonstrate** **`await scene.set_lights_in_sphere(...)`** **(or** **sync** **wrapper** **if** **architecture** **uses** **sync** **shim)** **with** **reasonable** **`center`**/**`radius`**, **setting** **`on`**, **`color`** **(canonical** **`#rrggbb`)**, **and** **`brightness_pct`**. **For** **the** **random** **demo** **colour,** **SHOULD** **use** **`colour = scene.random_hex_colour()`** **(**REQ-030**)** **rather** **than** **`import random`** **and** **`"#%06x"** **%** **`random.randrange(0x1000000)`** **alone** **—** **so** **beginners** **see** **the** **documented** **helper** **first**. **Every** **template** **line** **or** **logical** **block** **MUST** **include** **brief** **Python** **`#`** **comments** **matching** **the** **brevity** **standard** **for** **REQ-024** **samples**. **Optional** **toolbar** **“Reset** **to** **template”** **MAY** **replace** **the** **buffer** **after** **confirm**.
 - **Default** **sample** **routines** **(REQ-032):** **Three** **full** **scripts** **in** **`web/lib/pythonRoutineSamples.ts`** **(**§3.8.1**, **§3.17.1**)** **are** **seeded** **into** **`routines`** **and** **listed** **on** **`/routines`** **—** **users** **open** **them** **like** **any** **definition**. **Optional** **toolbar** **“Load** **sample”** **actions** **MAY** **replace** **the** **editor** **buffer** **from** **the** **same** **exports** **(**after** **confirm** **if** **dirty**)**. **REQ-024** **catalog** **MUST** **remain** **focused** **on** **`scene.*`** **API** **items** **with** **short** **per-entry** **snippets** **(**REQ-024** **rule** **7**)** **—** **do** **not** **require** **three** **dedicated** **catalog** **rows** **that** **are** **the** **only** **way** **to** **obtain** **the** **full** **default** **scripts**.
 - **API** **reference** **(REQ-024):** **Rendered** **from** **the** **same** **ordered** **manifest** **as** **§3.17** **(every** **`scene`** **property** **and** **method,** **including** **`scene.random_hex_colour`** **per** **REQ-030**)**. **UI** **requirements:** **(a)** **picker** **—** **`<select>`**, **searchable** **list**, **or** **equivalent** **—** **so** **exactly** **one** **catalog** **entry** **is** **in** **focus** **at** **a** **time**; **(b)** **detail** **area** **showing** **plain-language** **description**, **parameters**/**returns** **at** **novice** **level**, **and** **at** **least** **one** **sample** **usage** **string** **that** **includes** **Python** **`#`** **comments** **with** **short**, **non-verbose** **explanations**; **(c)** **Insert** **example** **button** **(REQ-018** **icon** **+** **label** **in** **simple** **wording)** **that** **inserts** **the** **currently** **shown** **sample** **via** **`EditorView.dispatch`** **of** **a** **CodeMirror** **6** **`Transaction`** **(**e.g.** **`insert`**, **`replaceSelection`**, **or** **equivalent** **change** **spec**)** **at** **the** **main** **selection** **anchor** **when** **the** **editor** **view** **has** **focus** **and** **a** **defined** **anchor** **(implementor** **MAY** **replace** **the** **current** **selection** **or** **insert** **at** **caret** **only** **—** **document** **the** **choice** **when** **implemented)**; **if** **no** **caret** **is** **available**, **append** **at** **the** **end** **of** **the** **document**. **Sample** **rendering** **MAY** **use** **read-only** **CodeMirror** **or** **styled** **`<pre>`**. **Heading** **e.g.** **“Scene** **API** **(**pick** **one** **to** **read** **more**)**”** **with** **anchor** **`#python-scene-api-catalog`**. **Implementor** **MUST** **keep** **manifest** **and** **§3.17** **in** **sync** **(single** **TS** **module** **exporting** **rows** **recommended)**.
-- **Unified** **live** **viewport** **(REQ-027,** **REQ-028,** **REQ-031):** **The** **single** **scene** **`<select>`** **in** **the** **unified** **region** **determines** **`sceneId`** **for** **`SceneLightsCanvas`** **fed** **by** **`GET /api/v1/scenes/{id}`** **(per-light** **state** **+** **`sx/sy/sz`)**. **While** **a** **run** **is** **active** **for** **that** **`sceneId`**, **poll** **`GET …/scenes/{id}`** **(**or** **`GET …/lights`**)** **on** **the** **same** **interval** **as** **§4.9** **(**`≤ 2 s`**)** **and** **merge** **into** **the** **canvas** **(**REQ-012**/**REQ-028** **—** **no** **indefinite** **staleness**)** **;** **apply** **§3.19** **so** **unchanged** **payloads** **skip** **redundant** **canvas** **work**. **Reset** **scene** **lights** **→** **`PATCH /api/v1/scenes/{sceneId}/lights/state/scene`** **with** **`{ "on": false, "color": "#ffffff", "brightness_pct": 100 }`** **then** **merge**; **does** **not** **auto** **`POST …/stop`** **—** **user** **stops** **the** **run** **separately** **or** **accepts** **the** **next** **server** **iteration** **may** **overwrite**. **Reset** **camera** **→** **`applyDefaultFraming`** **(REQ-016,** **client-only)**. **Viewport** **usable** **with** **no** **active** **run** **(static** **inspection)** **and** **with** **an** **active** **run** **(live** **updates)**.
+- **Unified** **live** **viewport** **(REQ-027,** **REQ-028,** **REQ-031,** **REQ-041):** **The** **single** **scene** **`<select>`** **in** **the** **unified** **region** **determines** **`sceneId`** **for** **`SceneLightsCanvas`** **fed** **by** **initial** **`GET /api/v1/scenes/{id}`** **(per-light** **state** **+** **`sx/sy/sz`)**. **Subscribe** **`EventSource`** **`GET /api/v1/scenes/{sceneId}/lights/events`** **and** **apply** **`deltas[]`** **as** **§4.9** **(**not** **poll** **`GET …/scenes/{id}`** **every** **≤** **2** **s** **while** **SSE** **works**)** **. **Reset** **scene** **lights** **(**REQ-027**)** **:** **when** **the** **UI** **tracks** **an** **active** **routine** **run** **for** **the** **selected** **`sceneId`**, **it** **MUST** **`POST …/routines/runs/{runId}/stop`** **(**or** **equivalent** **documented** **stop** **for** **that** **run**)** **first** **and** **await** **success** **(**REQ-040**)** **,** **then** **`PATCH /api/v1/scenes/{sceneId}/lights/state/scene`** **with** **`{ "on": false, "color": "#ffffff", "brightness_pct": 100 }`** **and** **merge** **the** **response** **. **Reset** **camera** **→** **`applyDefaultFraming`** **(REQ-016,** **client-only)**. **Viewport** **usable** **with** **no** **active** **run** **(static** **inspection)** **and** **with** **an** **active** **run** **(live** **updates)**.
 - **Persistence** **actions** **(toolbar):** **Load** **`GET /api/v1/routines/{id}`** **on** **mount**; **Save** **`PATCH /api/v1/routines/{id}`** **(or** **initial** **`POST`** **on** **new)**; **Duplicate** **—** **`POST /api/v1/routines`** **with** **copied** **fields**; **Delete** **`DELETE …`** **(same** **409** **rules)**; **Load** **list** **is** **the** **`/routines`** **page** **—** **this** **page** **MAY** **include** **a** **`<select>`** **of** **other** **Python** **routines** **for** **quick** **switch** **(optional)**.
-- **Start**/**Stop** **(same** **`sceneId`** **as** **canvas):** **Optional** **`?scene=id`** **from** **`/scenes/[id]`** **(§4.9)** **pre-selects** **the** **unified** **scene** **`<select>`**. **Start** **`POST …/scenes/{sceneId}/routines/{routineId}/start`** **—** **Go** **`routineengine`** **starts** **the** **§3.17** **`python3`** **subprocess** **(**or** **§3.17.2** **shape** **loop**)** **;** **the** **browser** **does** **not** **spawn** **a** **worker** **for** **production** **execution**. **Stop** **`POST …/stop`** **—** **supervisor** **signals** **cooperative** **shutdown** **then** **`SIGTERM`**/**`SIGKILL`** **after** **`T_force`** **(**§3.17**)** **if** **needed**.
+- **Start**/**Stop** **(same** **`sceneId`** **as** **canvas):** **Optional** **`?scene=id`** **from** **`/scenes/[id]`** **(§4.9)** **pre-selects** **the** **unified** **scene** **`<select>`**. **Start** **`POST …/scenes/{sceneId}/routines/{routineId}/start`** **—** **Go** **persists** **`routine_runs`** **and** **`internal/routineengine`** **spawns** **the** **supervised** **`python3`** **child** **(**§3.17**)** **;** **the** **browser** **does** **not** **run** **the** **script** **(**REQ-038**)** **. **Stop** **`POST …/stop`** **—** **Go** **marks** **`stopped`** **and** **signals** **the** **supervisor** **(**cooperative** **exit** **then** **`SIGTERM`**/**`SIGKILL`** **within** **REQ-040** **—** **§3.17**)** **.**
 - **REQ-018:** **Toolbar** **and** **reference** **buttons** **(Save,** **Format,** **Run/Stop,** **Duplicate,** **Delete,** **Insert** **example,** **Reset** **scene** **lights,** **Reset** **camera** **where** **present)** **each** **include** **a** **visible** **Font** **Awesome** **icon**.
 
 **Vertical** **layout** **(summary** **—** **REQ-024** **+** **REQ-027):**
@@ -1074,8 +1103,8 @@ flowchart TB
 
 - **Route:** **`/routines/shape/[id]`** **(App** **Router)** **—** **edit** **`shape_animation`** **definitions** **only** **(**`404`** **or** **redirect** **if** **`type`** **≠** **`shape_animation`**)**.
 - **Page** **structure** **(mirror** **REQ-027** **without** **CodeMirror** **or** **REQ-024):** **(1)** **toolbar** **—** **Save** **`PATCH`** **(**merge** **`definition_json`** **from** **form** **state**)** , **Duplicate**, **Delete** **(**same** **§3.16** **rules**)**; **(2)** **authoring** **panel** **—** **responsive** **form** **for** **`background`**, **ordered** **list** **of** **up** **to** **20** **shapes** **(**add**/**remove**/**reorder** **—** **touch-friendly** **per** **REQ-002**)** **mapping** **to** **§3.17.2** **schema** **(**speed** **inputs** **MAY** **use** **cm/s** **labels** **with** **0.01** **×** **conversion** **to** **`m_s`** **in** **JSON**)**; **(3)** **one** **unified** **region** **after** **the** **form** **—** **exactly** **one** **scene** **`<select>`**, **Start**/**Stop**, **`SceneLightsCanvas`**, **Reset** **scene** **lights**, **Reset** **camera** **(**same** **behavior** **as** **§4.13** **unified** **block**)**. **Forbidden:** **second** **scene** **picker** **or** **viewport** **for** **this** **workflow**.
-- **Run** **driver** **(**REQ-038**)** **:** **On** **Start**, **`POST …/start`** **starts** **the** **server** **§3.17.2** **ticker** **;** **the** **page** **only** **polls**/**SSE** **for** **fresh** **scene** **state** **and** **run** **status** **. **On** **Stop** **or** **unmount**, **`POST …/stop`** **(**idempotent**)** **. **Do** **not** **rely** **on** **a** **browser** **tab** **to** **advance** **ticks** **.**
-- **Viewport** **sync:** **While** **a** **run** **is** **active**, **poll** **`GET /api/v1/scenes/{id}`** **(**or** **`GET …/lights`**)** **on** **the** **same** **interval** **as** **§4.9** **and** **merge** **into** **`SceneLightsCanvas`** **(**REQ-012**/**REQ-028**)** **;** **the** **browser** **does** **not** **observe** **each** **server** **tick** **via** **a** **direct** **callback** **from** **the** **shape** **loop** **(**§3.19** **still** **applies** **to** **skip** **redundant** **canvas** **work** **when** **payloads** **are** **unchanged**)**.
+- **Run** **driver** **(**REQ-038**)** **:** **On** **Start**, **`POST …/start`** **creates** **the** **`running`** **row** **and** **`internal/routineengine`** **starts** **a** **`time.Ticker`** **(**§3.17.2**)** **;** **ticks** **run** **in** **Go** **—** **not** **in** **the** **browser** **. **Observe** **scene** **state** **via** **SSE** **`deltas[]`** **(**REQ-041**, **§4.9**)** **and** **`GET …/routines/runs`** **for** **run** **status** **. **On** **Stop**, **`POST …/stop`** **(**idempotent**)** **;** **unmounting** **the** **page** **does** **not** **stop** **the** **run** **(**headless** **operation** **—** **REQ-038**)** **. **Closing** **all** **tabs** **without** **stop** **leaves** **automation** **running** **until** **`POST …/stop`**, **process** **exit**, **or** **factory** **reset** **(**§3.16**)** **.**
+- **Viewport** **sync** **(**REQ-041**)** **:** **Use** **`EventSource`** **`…/scenes/{id}/lights/events`** **+** **`deltas[]`** **merge** **as** **§4.9**/**§4.13** **;** **routine** **ticks** **commit** **through** **`LightStateStore`** **on** **the** **server** **(**§3.17.2**)** **and** **emit** **SSE** **like** **any** **other** **writer** **(**§3.19** **skips** **redundant** **per-light** **work** **when** **triples** **are** **unchanged**)** **.**
 - **Instructional** **copy:** **Use** **plain** **language** **(**short** **sentences**)** **for** **non-Python** **users** **;** **no** **REQ-022** **twelve-year-old** **Python** **tone** **requirement** **on** **this** **page** **unless** **product** **unifies** **copy** **style** **later**.
 - **REQ-018:** **Toolbar** **and** **form** **actions** **that** **are** **buttons** **include** **Font** **Awesome** **icons**.
 
@@ -1126,8 +1155,8 @@ flowchart TB
 ### 6.2 Process model
 
 - **One** `systemd` service — the **application binary** only.
-- **Scene** **routines** **(REQ-021**/**REQ-038**)** **:** **`routineengine`** **runs** **in** **Go** **:** **Python** **via** **supervised** **`python3`** **subprocess** **(**§3.17**)** **;** **shape** **animation** **via** **Go** **`time.Ticker`** **(**§3.17.2**)** **. **Headless** **operation** **does** **not** **require** **any** **browser** **.
-- **Python** **(REQ-022)** **:** **Editor** **static** **bundle** **no** **longer** **requires** **shipping** **Pyodide** **for** **execution** **(**may** **still** **be** **optional** **for** **client-side** **lint** **only** **—** **§3.17**)** **. **Pi** **deployments** **SHOULD** **document** **`python3`** **on** **`PATH`** **for** **Python** **routine** **runs** **and** **CPU**/**RAM** **impact** **of** **concurrent** **subprocesses** **.
+- **Scene** **routines** **(REQ-021**/**REQ-038**)** **:** **`internal/routineengine`** **(**§3.16**–**§3.17.2**)** **runs** **supervised** **`python3`** **(**§3.17**)** **and** **Go** **`time.Ticker`** **shape** **simulation** **(**§3.17.2**)** **headless** **;** **no** **browser** **tab** **is** **required** **for** **lights** **to** **keep** **updating** **. **The** **UI** **only** **calls** **start**/**stop** **and** **observes** **SSE**/**GET** **.
+- **Python** **(REQ-022)** **:** **Production** **execution** **uses** **OS** **`python3`** **(**not** **bundled** **in** **the** **Go** **binary** **—** **REQ-004**)** **;** **Pi** **docs** **SHOULD** **note** **`python3`** **install**, **child** **RAM**, **and** **loopback** **HTTP** **cadence** **to** **§3.15** **. **Pyodide** **in** **the** **static** **bundle** **is** **optional** **and** **editor-only** **(**lint**/**format**)** **—** **§3.17** **.
 - **Optional** separate **`caddy.service`** or **`nginx`** is **OS/infrastructure**, not part of REQ-004’s single binary (the **product** remains one file).
 
 ### 6.3 Distribution (**REQ-004** / anti-Docker)
@@ -1603,60 +1632,58 @@ sequenceDiagram
   end
 ```
 
-### 8.16 Scene routine start, server Python loop, and stop (**REQ-021**, **REQ-038**, **§3.16**, **§3.17**)
+### 8.16 Scene routine start, server-supervised `python3` loop, and stop (**REQ-021**, **REQ-038**, **§3.16**, **§3.17**)
 
 ```mermaid
 sequenceDiagram
   actor User as User device
-  participant B as Browser
+  participant Page as Next.js scene page
+  participant RE as routineengine supervisor
+  participant Py as python3 child §3.17
+  participant ES as EventSource observers
   participant P as Reverse proxy (optional)
   participant G as Go binary
-  participant R as routineengine supervisor
-  participant Py as python3 subprocess
   participant L as LightStateStore
   participant S as SQLite store
 
-  User->>B: Create routine (python_scene_script)
-  B->>P: POST /api/v1/routines
+  User->>Page: Create routine (python_scene_script)
+  Page->>P: POST /api/v1/routines
   P->>G: POST
   G->>S: INSERT routines row
   S-->>G: OK
-  G-->>P: 201 routine json
-  P-->>B: 201
+  G-->>Page: 201 routine json
 
-  User->>B: Start routine on scene
-  B->>P: POST /api/v1/scenes/{sid}/routines/{rid}/start
+  User->>Page: Start routine on scene
+  Page->>P: POST /api/v1/scenes/{sid}/routines/{rid}/start
   P->>G: POST
-  G->>S: BEGIN; INSERT routine_runs running; COMMIT
+  G->>S: INSERT routine_runs running
   S-->>G: OK
-  G->>R: Start supervised run
-  R->>Py: spawn with python_source scene shim §3.17
-  G-->>P: 201 run json
-  P-->>B: 201
+  G->>RE: begin supervision for run
+  RE->>Py: spawn bootstrap + python_source + sceneId
+  G-->>Page: 201 run json
 
-  loop Each iteration until supervisor stop
+  loop Each iteration until stop
     Py->>P: HTTP loopback §3.15 PATCH/GET
     P->>G: HTTP
     G->>L: Merge state §3.9 §3.15
     L-->>G: OK
     G-->>Py: 200 JSON
-    R->>R: Check stop flag / routine_runs
+    G-->>ES: SSE seq + deltas
   end
 
-  User->>B: Stop routine
-  B->>P: POST /api/v1/scenes/{sid}/routines/runs/{runId}/stop
+  User->>Page: Stop routine
+  Page->>P: POST /api/v1/scenes/{sid}/routines/runs/{runId}/stop
   P->>G: POST
-  G->>S: UPDATE routine_runs set stopped
+  G->>S: UPDATE routine_runs stopped
   S-->>G: OK
-  G->>R: Signal shutdown
-  R->>Py: cooperative then SIGTERM SIGKILL if needed §3.17
-  G-->>P: 200
-  P-->>B: 200
+  G->>RE: signal stop REQ-040
+  RE->>Py: cooperative then SIGTERM/SIGKILL
+  G-->>Page: 200
 ```
 
-**§8.17** **adds** **the** **Next.js** **editor** **save** **path** **and** **REQ-030** **(**`scene.random_hex_colour()`** **local** **to** **the** **`python3`** **child** **only**)**.
+**§8.17** **adds** **the** **Next.js** **editor** **save** **path** **and** **REQ-030** **(**`scene.random_hex_colour()`** **local** **to** **CPython** **in** **the** **`python3`** **child** **only**)**.
 
-### 8.17 Python routine: editor save, server subprocess loop, scene API over loopback, cooperative and forced stop (**REQ-022**, **REQ-030**, **REQ-038**, **§3.17**)
+### 8.17 Python routine: editor save, supervised `python3` child, scene API over loopback HTTP (**REQ-022**, **REQ-030**, **REQ-038**, **§3.17**)
 
 **REQ-030** **note:** **`scene.random_hex_colour()`** **runs** **only** **inside** **the** **`python3`** **child** **(**standard** **`random`** **module**)** **and** **does** **not** **add** **HTTP** **traffic** **to** **§3.15**; **it** **does** **not** **appear** **as** **an** **HTTP** **leg** **in** **the** **diagram** **below**.
 
@@ -1664,10 +1691,10 @@ sequenceDiagram
 sequenceDiagram
   actor User as User device
   participant Page as Next.js page (§4.13)
+  participant RE as routineengine
+  participant Py as python3 child
   participant P as Reverse proxy (optional)
   participant G as Go binary
-  participant R as routineengine
-  participant Py as python3 subprocess
   participant L as LightStateStore
   participant S as SQLite store
 
@@ -1683,56 +1710,60 @@ sequenceDiagram
   P->>G: POST
   G->>S: INSERT routine_runs running (§3.16)
   S-->>G: OK
-  G->>R: start python run
-  R->>Py: spawn bootstrap + user source
+  G->>RE: start supervisor
+  RE->>Py: spawn with user source
   G-->>Page: 201 run_id
 
-  loop Each iteration until R signals stop
-    Py->>P: urllib/httpx to 127.0.0.1 §3.15
+  loop Each iteration until stop
+    Py->>P: loopback HTTP §3.15
     P->>G: HTTP
     G->>L: merge §3.15 handlers
     L-->>G: OK
     G-->>Py: JSON
-    R->>R: sleep iteration gap; check stop
+    Note over Py: random_hex_colour() local only REQ-030
   end
 
   User->>Page: Stop
   Page->>P: POST …/routines/runs/{runId}/stop
   P->>G: POST
   G->>S: UPDATE routine_runs stopped
-  G->>R: shutdown
-  R->>Py: cooperative stop then SIGTERM SIGKILL §3.17
+  G->>RE: teardown §3.17 REQ-040
+  RE->>Py: SIGTERM then SIGKILL if needed
   G-->>Page: 200
 ```
 
 ---
 
-### 8.18 Python routine page: unified scene target, polling viewport sync, and resets (**REQ-027**, **REQ-028**, **§4.13**)
+### 8.18 Python routine page: unified scene target, SSE viewport sync, and resets (**REQ-027**, **REQ-028**, **REQ-041**, **§4.13**)
 
 ```mermaid
 sequenceDiagram
   actor User as User device
   participant Page as Next.js §4.13 page
   participant Canvas as SceneLightsCanvas
+  participant ES as EventSource
   participant G as Go binary §3.15 §3.17
 
   User->>Page: Select target scene (run + viewport)
   Page->>G: GET /api/v1/scenes/{id}
   G-->>Page: items + lights + state
   Page->>Canvas: mount / update props
+  Page->>ES: open …/scenes/{id}/lights/events
 
   User->>Page: Start routine on same scene
   Page->>G: POST …/routines/…/start
   G-->>Page: 201 run_id
-  Note over G: routineengine runs python3 child; browser does not execute script
+  Note over Page: routineengine runs python3 server-side; browser observes SSE only
 
-  loop Poll while run active §4.9 §4.13
-    Page->>G: GET …/scenes/{id} or GET …/routines/runs
-    G-->>Page: fresh lights + state
-    Page->>Canvas: merge state REQ-012 REQ-028 §3.19
+  loop SSE while viewport mounted §4.9 §4.13
+    G-->>ES: data seq + deltas
+    ES-->>Page: onmessage
+    Page->>Canvas: merge deltas REQ-012 REQ-028 §3.19 REQ-041
   end
 
-  User->>Page: Reset scene lights
+  User->>Page: Reset scene lights (run active)
+  Page->>G: POST …/routines/runs/{runId}/stop
+  G-->>Page: 200
   Page->>G: PATCH …/lights/state/scene (off, #ffffff, 100%)
   G-->>Page: 200
   Page->>Canvas: merge state
@@ -1741,101 +1772,101 @@ sequenceDiagram
   Page->>Canvas: applyDefaultFraming (REQ-016, no API)
 ```
 
-### 8.21 Scene routine start — Python subprocess vs Go shape loop (**REQ-021**, **REQ-038**, **§3.16**, **§3.17**, **§3.17.2**)
+### 8.21 Scene routine start — `python3` vs Go shape ticker (**REQ-021**, **REQ-038**, **§3.16**, **§3.17**, **§3.17.2**)
 
 ```mermaid
 sequenceDiagram
   actor User as User device
-  participant Page as Next.js routine page
+  participant Page as Next.js routine or scene page
+  participant RE as routineengine
+  participant Py as python3 child
+  participant P as Reverse proxy (optional)
   participant G as Go binary
-  participant R as routineengine
-  participant Py as python3 subprocess
-  participant Eng as shape loop §3.17.2
 
   User->>Page: Start on scene
-  Page->>G: POST …/scenes/sid/routines/rid/start
-  G->>R: start run for routine type
+  Page->>P: POST …/scenes/sid/routines/rid/start
+  P->>G: POST
+  G->>RE: start supervision
   G-->>Page: 201 run_id
 
   alt routine type python_scene_script
-    R->>Py: spawn §3.17
+    RE->>Py: spawn §3.17
     loop iterations until stop
-      Py->>G: loopback HTTP §3.15
+      Py->>P: loopback HTTP §3.15
+      P->>G: HTTP
       G-->>Py: 200 JSON
-      R->>R: supervise gap and stop
     end
   else routine type shape_animation
-    R->>Eng: start ticker definition_json sceneId
     loop each tick until stop
-      Eng->>G: internal §3.15 lightstate paths
-      G-->>Eng: OK
+      RE->>G: internal BatchPatch / equivalent §3.17.2
+      G-->>RE: OK
     end
   end
 
   User->>Page: Stop
-  Page->>G: POST …/runs/runId/stop
-  G->>R: shutdown
-  R->>Py: SIGTERM chain if needed
-  R->>Eng: cancel ticker
+  Page->>P: POST …/runs/runId/stop
+  P->>G: POST
+  G->>RE: stop §3.17 REQ-040
+  G-->>Page: 200
 ```
 
-### 8.22 Shape animation page — unified viewport and server tick writes (**REQ-033**, **REQ-027**, **REQ-038**, **§3.17.2**)
+### 8.22 Shape animation page — unified viewport; server tick writes (**REQ-033**, **REQ-027**, **REQ-038**, **§3.17.2**)
 
 ```mermaid
 sequenceDiagram
   actor User as User device
   participant Page as Next.js §4.14
-  participant G as Go §3.15 §3.17.2
+  participant RE as routineengine shape ticker
+  participant ES as EventSource
+  participant P as Reverse proxy (optional)
+  participant G as Go §3.15
   participant C as SceneLightsCanvas
 
   User->>Page: Select scene in unified panel
   Page->>G: GET /api/v1/scenes/id
   G-->>Page: lights + state
   Page->>C: mount SceneLightsCanvas
+  Page->>ES: open …/lights/events
 
   User->>Page: Start
   Page->>G: POST …/start
+  G->>RE: start time.Ticker §3.17.2
   G-->>Page: 201 run_id
-  Note over G: routineengine shape ticker runs inside Go; not in the browser bundle
+  Note over RE: Go ticker applies batch; browser does not drive production ticks
 
-  loop Poll + server ticks until stop
-    G->>G: ticker integrates shapes PATCH batch §3.15
-    Page->>G: GET scene or GET lights §4.14
-    G-->>Page: fresh state
-    Page->>C: merge REQ-012 REQ-028 §3.19
+  loop SSE until stop or unmount
+    RE->>G: tick → mergeIfChanged §3.19
+    G-->>ES: seq + deltas
+    ES-->>Page: onmessage
+    Page->>C: merge REQ-012 REQ-028 §3.19 REQ-041
   end
 
   User->>Page: Stop
   Page->>G: POST …/stop
+  G->>RE: cancel ticker REQ-040
   G-->>Page: 200
 ```
 
-### 8.19 Optional push path for high-throughput observers (**REQ-029**, **§3.18**)
+### 8.19 Server-push observer path for shipped UI (**REQ-041**, **REQ-029**, **§3.18**)
 
-**Note:** **This** **diagram** **describes** **an** **optional** **future** **or** **parallel** **implementation** **path** **when** **bounded** **polling** **(**§4.7**, **§4.9**)** **is** **insufficient** **for** **multi-tab** **freshness** **under** **sustained** **external** **writes**.
+**Normative** **for** **the** **embedded** **Next.js** **three.js** **surfaces** **:** **after** **initial** **`GET`**, **the** **browser** **keeps** **`EventSource`** **on** **`…/lights/events`** **and** **applies** **`deltas[]`** **without** **full** **scene** **rebuild** **(**§3.18** **Mermaid** **)** **. **The** **diagram** **below** **shows** **external** **writers** **;** **the** **same** **SSE** **fan-out** **applies** **when** **`internal/routineengine`** **(**`python3`** **loopback** **HTTP** **or** **internal** **§3.15** **calls** **/** **shape** **ticker** **)** **commits** **patches** **.**
 
 ```mermaid
 sequenceDiagram
-  participant Ext as External client
+  participant Ext as External client or routine automation
   participant G as Go binary
   participant L as LightStateStore
   participant S as SQLite store
-  participant B as Browser observer tab
+  participant B as Browser tab EventSource
 
-  Ext->>G: PATCH bulk model or scene state
-  G->>L: Merge triples §3.9 §3.19
-  L-->>G: OK
-  Note over G,S: SQLite touched only for catalog or geometry mutations
+  Ext->>G: PATCH bulk or internal batch patch
+  G->>L: mergeIfChanged §3.9 §3.19
+  L-->>G: changed indices + new triples
+  Note over G,S: SQLite only for catalog or geometry
   G-->>Ext: 200 JSON
-  Note over G,B: Optional SSE after successful state commit per §3.18
-  G-->>B: text/event-stream data line
-  B->>G: GET authoritative state
-  G->>S: read geometry or scene rows if needed
-  S-->>G: rows
-  G->>L: read triples §3.21
-  L-->>G: state
-  G-->>B: 200 JSON
-  B->>B: merge into three.js and tables REQ-012
+  G-->>B: SSE data seq + deltas for changed lights only
+  B->>B: update InstancedMesh or materials per index REQ-031
+  Note over B: No GET storm; snapshot GET only on reconnect
 ```
 
 ### 8.20 Light state write with no-op elision (**REQ-031**, **§3.19**)
@@ -1880,7 +1911,7 @@ sequenceDiagram
 - **Scene batch updates:** **`PATCH /api/v1/scenes/{id}/lights/state/batch`** **can** **carry** **one** **JSON** **object** **per** **light** **(up** **to** **~1000** **per** **scene** **in** **worst** **case**)**; **enforce** **a** **reasonable** **max** **body** **size** **(e.g.** **several** **MB** **below** **Pi** **RAM** **headroom**)** **and** **reject** **oversize** **with** **`413`** **or** **`400`** **before** **full** **parse** **if** **needed**.
 - **SQLite file:** Treat **`DLM_DB_PATH`** as **persistent** storage on the Pi (e.g. SD card or USB); operators should **back up** the DB file with normal file backup practices.
 - **Factory reset:** **`POST /api/v1/system/factory-reset`** **is** **destructive** **and** **unauthenticated** **in** **MVP**; **treat** **network** **exposure** **accordingly** **(see** **§3.14**)**.**
-- **User-authored Python (REQ-022):** **Production** **execution** **is** **in** **a** **supervised** **`python3`** **child** **process** **(**§3.17**)** **whose** **`scene`** **shim** **calls** **loopback** **§3.15** **(**or** **in-process** **equivalent**)** **—** **treat** **untrusted** **code** **as** **able** **to** **reach** **the** **local** **API** **and** **filesystem** **within** **that** **process** **;** **harden** **with** **timeouts**, **resource** **limits**, **and** **rate** **/** **body** **limits** **§9**. **Optional** **browser** **Pyodide** **(**§3.17**)** **must** **not** **be** **the** **only** **execution** **path** **(**REQ-038**)**. **Do** **not** **expose** **admin** **tokens** **or** **third-party** **API** **keys** **into** **routine** **sources** **or** **bundles**.
+- **User-authored Python (REQ-022):** **Production** **execution** **is** **in** **a** **supervised** **`python3`** **child** **process** **(**§3.17**)** **whose** **`scene`** **shim** **calls** **loopback** **§3.15** **(**or** **in-process** **equivalent**)** **—** **treat** **untrusted** **code** **as** **able** **to** **reach** **the** **local** **API** **and** **filesystem** **within** **that** **process** **;** **harden** **with** **timeouts**, **resource** **limits**, **and** **rate** **/** **body** **limits** **§9**. **Optional** **browser** **Pyodide** **(**editor** **lint**/**format** **only** **—** **§3.17**)** **must** **not** **run** **production** **routines** **(**REQ-038**)**. **Do** **not** **expose** **admin** **tokens** **or** **third-party** **API** **keys** **into** **routine** **sources** **or** **bundles**.
 
 ---
 
@@ -1908,26 +1939,28 @@ sequenceDiagram
 | REQ-018 | §1, §2, §4.5, §4.6, §4.7, §4.9, §4.10, §4.11, §4.12, §4.13, §4.14, §8.1 (inline theme + hydration), §10 |
 | REQ-019 | §1, §4.7, §4.9, §4.11 (contrast note), §8.5, §8.11, §10 |
 | REQ-020 | §1, §3.2, §3.12, §3.13, §3.15, §8.15 |
-| REQ-021 | §1, §3.2, §3.8.1, §3.14, §3.15, §3.16, §3.17, §3.17.2, §4.9, §4.11, §4.12, §4.14, §7, §8.16, §8.17, §8.21 |
-| REQ-022 | §1, §3.2, §3.15, §3.16, §3.17, §3.17.1 (REQ-032 uses same `scene` shim), §4.9, §4.11, §4.12, §4.13, §6.2, §7, §8.16, §8.17 |
+| REQ-021 | §1, §3.2, §3.8.1, §3.14, §3.15, §3.16, §3.17, §3.17.2 (incl. REQ-040 stop), §4.9, §4.11, §4.12, §4.14, §7, §8.16, §8.17, §8.21 |
+| REQ-022 | §1, §3.2, §3.15, §3.16, §3.17 (REQ-040 `T_force`), §3.17.1 (REQ-032 uses same `scene` shim), §4.9, §4.11, §4.12, §4.13, §6.2, §7, §8.16, §8.17 |
 | REQ-023 | §1, §3.2 (`POST /routines` two kinds), §3.16, §4.9, §4.11, §4.12, §4.13, §4.14 |
 | REQ-024 | §4.13 (`#python-scene-api-catalog` below editor; picker + commented samples + insert; manifest sync with §3.17 incl. REQ-030, `scene.max_*`; REQ-032 full default scripts also via seed + §3.8.1) |
 | REQ-025 | §4.13 (`PYTHON_ROUTINE_DEFAULT_SOURCE`, sphere colour demo; SHOULD use `scene.random_hex_colour()` per REQ-030) |
 | REQ-026 | §3.15 (axis mapping for `size` and `max`), §3.17 (`scene.width` / `height` / `depth` / `max_*`), §4.13 |
-| REQ-027 | §3.15 (`PATCH …/lights/state/scene` for reset), §4.7, §4.9, §4.13, §4.14, §8.18, §8.22 (with REQ-028 materials via shared canvas) |
+| REQ-027 | §3.15 (`PATCH …/lights/state/scene` for reset), §4.7, §4.9, §4.13, §4.14, §8.18 (SSE sync), §8.22 (with REQ-028 materials via shared canvas); REQ-041 observer |
 | REQ-028 | §1, §4.7, §4.9, §4.13, §4.14, §6.5, §8.5, §8.7 |
-| REQ-029 | §1, §3.2, §3.10, §3.15, §3.18, §3.19 (observer alignment), §4.3, §4.7, §4.9, §6, §7, §8.19, §9 |
+| REQ-029 | §1, §3.2, §3.10, §3.15, §3.18 (BR5 vs REQ-041), §3.19 (observer alignment), §4.3, §4.7, §4.9, §6, §7, §8.19, §9 |
 | REQ-030 | §1, §3.17, §3.17.2 (random colour distribution for shape mode), §4.13, §8.17 (`scene.random_hex_colour()` local to `python3` child; no §3.15 HTTP) |
 | REQ-031 | §3.9, §3.10 (batch note), §3.15 (bulk semantics), §3.16 (`routine_runs` persistence), §3.17.2 (optional tick skip), §3.18, §3.19, §4.7, §4.9, §4.13, §4.14, §8.7, §8.8, §8.20 |
 | REQ-032 | §3.8.1 (seed three defaults), §3.17.1 (geometry, timing, algorithms), §4.13 (optional toolbar + REQ-024 catalog), `web/lib/pythonRoutineSamples.ts` |
-| REQ-033 | §3.2 (routines API rows), §3.16, §3.17.2, §4.12, §4.14, §6.2, §8.21, §8.22 |
-| REQ-034 | §3.12–§3.13, §4.7, §4.9, §4.14 |
+| REQ-033 | §3.2 (routines API rows), §3.16, §3.17.2 (REQ-040 ticker stop), §4.12, §4.14, §6.2, §8.21, §8.22 |
+| REQ-034 | §3.12–§3.13, §4.7 (shared faint wire material + boundary edges), §4.9, §4.14 |
 | REQ-035 | §3.19–§3.20, §4.15, §7 |
 | REQ-036 | §3.20, §4.15 |
 | REQ-037 | §4.11, §4.15 |
 | REQ-038 | §3.16–§3.17.2, §4.9, §4.13–§4.14, §6.2, §8.16–§8.22 |
 | REQ-039 | §3.3, §3.9, §3.19, §3.21 (startup push-after-defaults; unassign stops push, hardware unchanged), §8.7–§8.9, §8.11, §8.15, §8.19–§8.20 |
+| REQ-040 | §3.17 (Python `T_force`, stop latency), §3.17.2 (ticker halt) |
+| REQ-041 | §3.2 (`…/lights/events` schema), §3.18 (normative observer + Mermaid), §3.19 (delta equivalence), §4.3, §4.7, §4.9, §4.13, §4.14, §8.19 |
 
 ---
 
-**Next step:** Invoke **`@implementor`** **then** **`@verifier`** **to** **implement** **against** **this** **document** **(**including** **`internal/lightstate`**, **`internal/routineengine`** **with** **`python3`** **subprocess** **+** **Go** **shape** **ticker**, **`internal/devices`** **/** **WLED** **push** **§3.20**, **`shape_animation`** **`definition_json`** **validation**, **routes**, **`/routines/shape/[id]`**, **`/devices`**, **two-kind** **create** **flow**)** **and** **update** **`docs/traceability_matrix.md`**. **REQ-022** **editor** **remains** **CodeMirror** **6** **(**§4.13**)** **;** **execution** **is** **server-side** **(**§3.17**, **REQ-038**)** **—** **optional** **Pyodide** **in** **the** **browser** **is** **non-authoritative** **only**. **REQ-023** **is** **the** **§4.12** **two-kind** **create** **path**. **REQ-027** **applies** **to** **§4.13** **and** **§4.14** **unified** **panels** **(**§8.18**, **§8.22**)**. **Client-only** **`shapeAnimationEngine.ts`** **(**if** **present**)** **is** **for** **authoring** **preview** **/** **tests** **only** **—** **not** **the** **production** **tick** **driver** **(**REQ-038**/**REQ-033**)**.
+**Next step:** Invoke **`@implementor`** **then** **`@verifier`** **to** **keep** **code** **aligned** **with** **this** **document** **(**including** **`internal/routineengine`** **(**supervised** **`python3`** **+** **shape** **`time.Ticker`**, **REQ-040** **stop** **semantics**)** **,** **`internal/lightstate`** **with** **SSE** **`deltas[]`** **(**REQ-041**)** **,** **`internal/devices`** **/** **WLED** **push** **§3.20**, **`shape_animation`** **`definition_json`** **validation**, **routes**, **`/routines/shape/[id]`**, **`/devices`**, **two-kind** **create** **flow**, **and** **Next.js** **`EventSource`** **+** **incremental** **three.js** **apply** **—** **browser** **start**/**stop** **+** **observe** **only** **)** **and** **update** **`docs/traceability_matrix.md`**. **REQ-022** **editor** **remains** **CodeMirror** **6** **(**§4.13**)** **;** **production** **Python** **runs** **in** **OS** **`python3`** **(**§3.17**)** **. **REQ-023** **is** **the** **§4.12** **two-kind** **create** **path**. **REQ-027** **applies** **to** **§4.13** **and** **§4.14** **unified** **panels** **(**§8.18**, **§8.22**)**. **`web/lib/shapeAnimationEngine.ts`** **MAY** **mirror** **Go** **simulation** **for** **authoring** **ghost** **preview** **only** **(**§3.17.2**)** **;** **production** **shape** **ticks** **run** **in** **Go** **.**

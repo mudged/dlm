@@ -47,7 +47,7 @@ type SceneRoutineConflictError struct {
 }
 
 func (e *SceneRoutineConflictError) Error() string {
-	return "another routine is already running on this scene"
+	return "a routine is already running on this scene"
 }
 
 // RoutineDTO is a persisted routine definition (REQ-021, REQ-022).
@@ -278,61 +278,36 @@ func (s *Store) DeleteRoutine(ctx context.Context, id string) error {
 	return nil
 }
 
-func (s *Store) findRunningRunForSceneRoutine(ctx context.Context, tx *sql.Tx, sceneID, routineID string) (runID string, ok bool, err error) {
-	q := `SELECT id FROM routine_runs WHERE scene_id = ? AND routine_id = ? AND status = ?`
-	var row *sql.Row
-	if tx != nil {
-		row = tx.QueryRowContext(ctx, q, sceneID, routineID, RoutineStatusRunning)
-	} else {
-		row = s.db.QueryRowContext(ctx, q, sceneID, routineID, RoutineStatusRunning)
-	}
-	var id string
-	if err := row.Scan(&id); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return "", false, nil
-		}
-		return "", false, err
-	}
-	return id, true, nil
-}
-
-// StartRoutineRun creates a running row. Light mutations during a run are performed by the server routine engine (REQ-038 / architecture §3.16–§3.17).
-// Returns runID, alreadyRunning (true if same routine already running on scene), error.
-func (s *Store) StartRoutineRun(ctx context.Context, sceneID, routineID string) (runID string, alreadyRunning bool, err error) {
+// StartRoutineRun creates a running row. Light mutations during a run are performed by
+// internal/routineengine (supervised python3 and/or Go shape ticker) calling store §3.15 paths (REQ-038).
+// REQ-021 BR5: if any run is already active on this scene (including the same routine), returns
+// *SceneRoutineConflictError and does not insert a second row.
+func (s *Store) StartRoutineRun(ctx context.Context, sceneID, routineID string) (runID string, err error) {
 	if _, err := s.GetRoutine(ctx, routineID); err != nil {
-		return "", false, err
+		return "", err
 	}
 	ok, err := s.sceneExistsTx(ctx, nil, sceneID)
 	if err != nil {
-		return "", false, err
+		return "", err
 	}
 	if !ok {
-		return "", false, ErrSceneNotFound
+		return "", ErrSceneNotFound
 	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return "", false, err
+		return "", err
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if id, found, err := s.findRunningRunForSceneRoutine(ctx, tx, sceneID, routineID); err != nil {
-		return "", false, err
-	} else if found {
-		if err := tx.Commit(); err != nil {
-			return "", false, err
-		}
-		return id, true, nil
-	}
-
-	var otherID, otherRid string
+	var existingRunID, existingRid string
 	row := tx.QueryRowContext(ctx, `
 		SELECT id, routine_id FROM routine_runs WHERE scene_id = ? AND status = ? LIMIT 1
 	`, sceneID, RoutineStatusRunning)
-	if err := row.Scan(&otherID, &otherRid); err == nil {
-		return "", false, &SceneRoutineConflictError{RunID: otherID, RoutineID: otherRid}
+	if err := row.Scan(&existingRunID, &existingRid); err == nil {
+		return "", &SceneRoutineConflictError{RunID: existingRunID, RoutineID: existingRid}
 	} else if !errors.Is(err, sql.ErrNoRows) {
-		return "", false, err
+		return "", err
 	}
 
 	runID = uuid.NewString()
@@ -341,12 +316,12 @@ func (s *Store) StartRoutineRun(ctx context.Context, sceneID, routineID string) 
 		INSERT INTO routine_runs (id, routine_id, scene_id, status, started_at, stopped_at)
 		VALUES (?, ?, ?, ?, ?, NULL)
 	`, runID, routineID, sceneID, RoutineStatusRunning, started); err != nil {
-		return "", false, err
+		return "", err
 	}
 	if err := tx.Commit(); err != nil {
-		return "", false, err
+		return "", err
 	}
-	return runID, false, nil
+	return runID, nil
 }
 
 // StopRoutineRun marks a run stopped if it belongs to the scene.
@@ -395,4 +370,13 @@ func (s *Store) ListRunningRoutineRunsForScene(ctx context.Context, sceneID stri
 		out = append(out, dto)
 	}
 	return out, rows.Err()
+}
+
+// StopAllRunningRoutineRuns marks every running row stopped (crash recovery before supervisors restart).
+func (s *Store) StopAllRunningRoutineRuns(ctx context.Context) error {
+	stoppedAt := time.Now().UTC().Format(time.RFC3339Nano)
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE routine_runs SET status = ?, stopped_at = ? WHERE status = ?
+	`, RoutineStatusStopped, stoppedAt, RoutineStatusRunning)
+	return err
 }

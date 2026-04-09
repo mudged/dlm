@@ -11,77 +11,154 @@ import (
 	"example.com/dlm/backend/internal/store"
 )
 
-// RevisionHub broadcasts monotonic revision numbers for model and scene light-state
-// topics (REQ-029 / architecture §3.18). Safe for concurrent use.
+// LightsSSEDelta is one light's full output triple after a successful commit (REQ-041).
+// ModelID is omitted on model-scoped SSE; required on scene-scoped SSE.
+type LightsSSEDelta struct {
+	ModelID       string  `json:"model_id,omitempty"`
+	LightID       int     `json:"light_id"`
+	On            bool    `json:"on"`
+	Color         string  `json:"color"`
+	BrightnessPct float64 `json:"brightness_pct"`
+}
+
+// LightsSSEPayload is the JSON object on each SSE data line (REQ-041).
+type LightsSSEPayload struct {
+	Seq    uint64           `json:"seq"`
+	Deltas []LightsSSEDelta `json:"deltas"`
+}
+
+// RevisionHub broadcasts monotonic revision numbers and per-commit deltas for model and
+// scene light-state topics (REQ-029, REQ-041). Safe for concurrent use.
 type RevisionHub struct {
 	mu   sync.Mutex
 	seq  map[string]uint64
-	subs map[string][]chan uint64
+	subs map[string][]chan LightsSSEPayload
 }
 
 // NewRevisionHub constructs an empty hub.
 func NewRevisionHub() *RevisionHub {
 	return &RevisionHub{
 		seq:  make(map[string]uint64),
-		subs: make(map[string][]chan uint64),
+		subs: make(map[string][]chan LightsSSEPayload),
 	}
 }
 
 func modelTopic(modelID string) string { return "m:" + modelID }
 func sceneTopic(sceneID string) string { return "s:" + sceneID }
 
-// NotifyModelLightsChanged bumps the model topic and every scene that contains this model.
-func (h *RevisionHub) NotifyModelLightsChanged(ctx context.Context, st *store.Store, modelID string) {
-	if h == nil || st == nil || modelID == "" {
-		return
-	}
-	h.bump(modelTopic(modelID))
-	scenes, err := st.ListSceneIDsForModel(ctx, modelID)
-	if err != nil {
-		return
-	}
-	for _, sid := range scenes {
-		h.bump(sceneTopic(sid))
+func sceneStateToDelta(ps store.ScenePatchedState) LightsSSEDelta {
+	return LightsSSEDelta{
+		ModelID:       ps.ModelID,
+		LightID:       ps.ID,
+		On:            ps.On,
+		Color:         ps.Color,
+		BrightnessPct: ps.BrightnessPct,
 	}
 }
 
-// NotifyAfterSceneLightPatch notifies subscribers for each distinct model touched by a scene bulk patch.
-func (h *RevisionHub) NotifyAfterSceneLightPatch(ctx context.Context, st *store.Store, states []store.ScenePatchedState) {
-	if h == nil || len(states) == 0 {
-		return
-	}
-	seen := make(map[string]bool)
-	for _, ps := range states {
-		mid := ps.ModelID
-		if mid == "" || seen[mid] {
-			continue
-		}
-		seen[mid] = true
-		h.NotifyModelLightsChanged(ctx, st, mid)
+func lightDTOToDelta(d store.LightStateDTO) LightsSSEDelta {
+	return LightsSSEDelta{
+		LightID:       d.ID,
+		On:            d.On,
+		Color:         d.Color,
+		BrightnessPct: d.BrightnessPct,
 	}
 }
 
-func (h *RevisionHub) bump(key string) uint64 {
+func cloneDeltasWithModelID(modelID string, src []LightsSSEDelta) []LightsSSEDelta {
+	out := make([]LightsSSEDelta, len(src))
+	for i := range src {
+		out[i] = src[i]
+		out[i].ModelID = modelID
+	}
+	return out
+}
+
+func (h *RevisionHub) emit(key string, deltas []LightsSSEDelta) {
+	if h == nil || key == "" {
+		return
+	}
+	if deltas == nil {
+		deltas = []LightsSSEDelta{}
+	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.seq[key]++
 	v := h.seq[key]
+	msg := LightsSSEPayload{Seq: v, Deltas: deltas}
 	for _, ch := range h.subs[key] {
 		select {
-		case ch <- v:
+		case ch <- msg:
 		default:
 		}
 	}
-	return v
 }
 
-func (h *RevisionHub) subscribe(key string) (last uint64, ch <-chan uint64, unsub func()) {
-	c := make(chan uint64, 32)
+// NotifyModelLightsChanged bumps the model topic and every scene that contains this model.
+// Deltas must use empty ModelID (implicit on GET …/models/{id}/lights/events).
+func (h *RevisionHub) NotifyModelLightsChanged(ctx context.Context, st *store.Store, modelID string, deltas []LightsSSEDelta) {
+	if h == nil || st == nil || modelID == "" || len(deltas) == 0 {
+		return
+	}
+	h.emit(modelTopic(modelID), deltas)
+	scenes, err := st.ListSceneIDsForModel(ctx, modelID)
+	if err != nil {
+		return
+	}
+	sceneDeltas := cloneDeltasWithModelID(modelID, deltas)
+	for _, sid := range scenes {
+		h.emit(sceneTopic(sid), sceneDeltas)
+	}
+}
+
+// NotifyAfterSceneLightPatch notifies the patched scene and propagates model / other scene topics (REQ-041).
+func (h *RevisionHub) NotifyAfterSceneLightPatch(ctx context.Context, st *store.Store, sceneID string, states []store.ScenePatchedState) {
+	if h == nil || st == nil || sceneID == "" || len(states) == 0 {
+		return
+	}
+	sceneDeltas := make([]LightsSSEDelta, 0, len(states))
+	for _, ps := range states {
+		sceneDeltas = append(sceneDeltas, sceneStateToDelta(ps))
+	}
+	h.emit(sceneTopic(sceneID), sceneDeltas)
+
+	byModel := make(map[string][]LightsSSEDelta)
+	for _, ps := range states {
+		if ps.ModelID == "" {
+			continue
+		}
+		byModel[ps.ModelID] = append(byModel[ps.ModelID], LightsSSEDelta{
+			LightID:       ps.ID,
+			On:            ps.On,
+			Color:         ps.Color,
+			BrightnessPct: ps.BrightnessPct,
+		})
+	}
+	for mid, md := range byModel {
+		if len(md) == 0 {
+			continue
+		}
+		h.emit(modelTopic(mid), md)
+		others, err := st.ListSceneIDsForModel(ctx, mid)
+		if err != nil {
+			continue
+		}
+		for _, sid := range others {
+			if sid == sceneID {
+				continue
+			}
+			h.emit(sceneTopic(sid), cloneDeltasWithModelID(mid, md))
+		}
+	}
+}
+
+func (h *RevisionHub) subscribe(key string) (lastSeq uint64, ch <-chan LightsSSEPayload, unsub func()) {
+	c := make(chan LightsSSEPayload, 32)
 	h.mu.Lock()
-	last = h.seq[key]
+	lastSeq = h.seq[key]
 	h.subs[key] = append(h.subs[key], c)
 	h.mu.Unlock()
-	return last, c, func() {
+	return lastSeq, c, func() {
 		h.mu.Lock()
 		defer h.mu.Unlock()
 		lst := h.subs[key]
@@ -157,7 +234,7 @@ func (a *apiDeps) getModelLightsEvents(w http.ResponseWriter, r *http.Request) {
 	last, revCh, unsub := a.rev.subscribe(key)
 	defer unsub()
 
-	if err := writeSSEData(w, fl, map[string]uint64{"seq": last}); err != nil {
+	if err := writeSSEData(w, fl, LightsSSEPayload{Seq: last, Deltas: []LightsSSEDelta{}}); err != nil {
 		return
 	}
 	extend()
@@ -175,12 +252,12 @@ func (a *apiDeps) getModelLightsEvents(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			fl.Flush()
-		case seq, ok := <-revCh:
+		case msg, ok := <-revCh:
 			if !ok {
 				return
 			}
 			extend()
-			if err := writeSSEData(w, fl, map[string]uint64{"seq": seq}); err != nil {
+			if err := writeSSEData(w, fl, msg); err != nil {
 				return
 			}
 		}
@@ -232,7 +309,7 @@ func (a *apiDeps) getSceneLightsEvents(w http.ResponseWriter, r *http.Request) {
 	last, revCh, unsub := a.rev.subscribe(key)
 	defer unsub()
 
-	if err := writeSSEData(w, fl, map[string]uint64{"seq": last}); err != nil {
+	if err := writeSSEData(w, fl, LightsSSEPayload{Seq: last, Deltas: []LightsSSEDelta{}}); err != nil {
 		return
 	}
 	extend()
@@ -250,12 +327,12 @@ func (a *apiDeps) getSceneLightsEvents(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			fl.Flush()
-		case seq, ok := <-revCh:
+		case msg, ok := <-revCh:
 			if !ok {
 				return
 			}
 			extend()
-			if err := writeSSEData(w, fl, map[string]uint64{"seq": seq}); err != nil {
+			if err := writeSSEData(w, fl, msg); err != nil {
 				return
 			}
 		}

@@ -25,14 +25,13 @@ import {
   removeSceneModel,
   type SceneDetail,
 } from "@/lib/scenes";
-import { mergeSceneLightBatchIntoItems } from "@/lib/scenesMerge";
-import type { BatchLightUpdate } from "@/lib/shapeAnimationEngine";
-import { PythonRoutineHost } from "@/components/PythonRoutineHost";
-import { ShapeAnimationRoutineHost } from "@/components/ShapeAnimationRoutineHost";
+import {
+  applySceneLightDeltas,
+  parseLightsSSEMessage,
+} from "@/lib/lightDeltas";
 import {
   ROUTINE_TYPE_PYTHON_SCENE_SCRIPT,
   ROUTINE_TYPE_SHAPE_ANIMATION,
-  fetchRoutine,
   fetchRoutines,
   fetchSceneRoutineRuns,
   startSceneRoutine,
@@ -59,10 +58,6 @@ export function SceneDetailClient() {
   const [routines, setRoutines] = useState<RoutineDefinition[] | null>(null);
   const [routineRuns, setRoutineRuns] = useState<RoutineRun[]>([]);
   const [selectedRoutineId, setSelectedRoutineId] = useState("");
-  const [pythonSource, setPythonSource] = useState<string | null>(null);
-  const [pythonRunnerErr, setPythonRunnerErr] = useState<string | null>(null);
-  const [shapeDefinitionJson, setShapeDefinitionJson] = useState<string | null>(null);
-  const [shapeRunnerErr, setShapeRunnerErr] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!id) {
@@ -90,32 +85,16 @@ export function SceneDetailClient() {
     }
   }, [id]);
 
-  const onShapeLightsPreview = useCallback(
-    (updates: BatchLightUpdate[]) => {
-      if (updates.length === 0 || !id) {
-        return;
-      }
-      setScene((prev) => {
-        if (!prev || prev.id !== id) {
-          return prev;
-        }
-        return {
-          ...prev,
-          items: mergeSceneLightBatchIntoItems(prev.items, updates),
-        };
-      });
-    },
-    [id],
-  );
-
   useEffect(() => {
     void load();
   }, [load]);
 
-  // REQ-029: push-style refresh when scene light state changes externally (complements polling while routines run).
-  const sceneSSESkipFirst = useRef(true);
+  // REQ-041: SSE seq + deltas; avoid full-scene polling while EventSource is healthy (REQ-029).
+  const sceneSseSeqRef = useRef<number | null>(null);
+  const sceneSseLiveRef = useRef(false);
   useEffect(() => {
-    sceneSSESkipFirst.current = true;
+    sceneSseSeqRef.current = null;
+    sceneSseLiveRef.current = false;
   }, [id]);
   useEffect(() => {
     if (!id || typeof window === "undefined") {
@@ -124,15 +103,37 @@ export function SceneDetailClient() {
     const es = new EventSource(
       `/api/v1/scenes/${encodeURIComponent(id)}/lights/events`,
     );
-    es.onmessage = () => {
-      if (sceneSSESkipFirst.current) {
-        sceneSSESkipFirst.current = false;
+    es.onopen = () => {
+      sceneSseLiveRef.current = true;
+    };
+    es.onmessage = (ev) => {
+      const msg = parseLightsSSEMessage(ev.data);
+      if (!msg) {
         return;
       }
-      void load();
+      const prev = sceneSseSeqRef.current;
+      if (prev !== null && msg.seq !== prev + 1) {
+        sceneSseSeqRef.current = msg.seq;
+        void load();
+        return;
+      }
+      sceneSseSeqRef.current = msg.seq;
+      const deltas = msg.deltas ?? [];
+      if (deltas.length === 0) {
+        return;
+      }
+      setScene((s) => {
+        if (!s || s.id !== id) {
+          return s;
+        }
+        return { ...s, items: applySceneLightDeltas(s.items, deltas) };
+      });
     };
     es.onerror = () => {
       es.close();
+      sceneSseLiveRef.current = false;
+      sceneSseSeqRef.current = null;
+      void load();
     };
     return () => es.close();
   }, [id, load]);
@@ -148,7 +149,7 @@ export function SceneDetailClient() {
           setRoutineRuns(runs);
           const shapeActive =
             runs[0]?.routine_type === ROUTINE_TYPE_SHAPE_ANIMATION;
-          if (!shapeActive) {
+          if (!shapeActive && !sceneSseLiveRef.current) {
             const s = await fetchScene(id);
             setScene(s);
           }
@@ -165,67 +166,6 @@ export function SceneDetailClient() {
     firstRun?.routine_type === ROUTINE_TYPE_PYTHON_SCENE_SCRIPT;
   const isShapeRun =
     firstRun?.routine_type === ROUTINE_TYPE_SHAPE_ANIMATION;
-  const pythonRoutineId = firstRun?.routine_id;
-  const shapeRoutineId = firstRun?.routine_id;
-
-  useEffect(() => {
-    if (!pythonRoutineId || !isPythonRun) {
-      setPythonSource(null);
-      setPythonRunnerErr(null);
-      return;
-    }
-    let cancelled = false;
-    setPythonRunnerErr(null);
-    void fetchRoutine(pythonRoutineId)
-      .then((r) => {
-        if (!cancelled) {
-          setPythonSource(r.python_source ?? "");
-        }
-      })
-      .catch((e) => {
-        if (!cancelled) {
-          setPythonSource("");
-          setPythonRunnerErr(
-            e instanceof Error ? e.message : "Could not load Python routine",
-          );
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [pythonRoutineId, isPythonRun]);
-
-  useEffect(() => {
-    if (!shapeRoutineId || !isShapeRun) {
-      setShapeDefinitionJson(null);
-      setShapeRunnerErr(null);
-      return;
-    }
-    let cancelled = false;
-    setShapeRunnerErr(null);
-    void fetchRoutine(shapeRoutineId)
-      .then((r) => {
-        if (!cancelled) {
-          try {
-            setShapeDefinitionJson(JSON.stringify(r.definition_json ?? {}));
-          } catch {
-            setShapeDefinitionJson("{}");
-          }
-        }
-      })
-      .catch((e) => {
-        if (!cancelled) {
-          setShapeDefinitionJson(null);
-          setShapeRunnerErr(
-            e instanceof Error ? e.message : "Could not load shape routine",
-          );
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [shapeRoutineId, isShapeRun]);
-
   const inSceneIds = useMemo(() => {
     if (!scene) {
       return new Set<string>();
@@ -465,49 +405,12 @@ export function SceneDetailClient() {
                 </Button>
               </div>
             </div>
-            {isPythonRun && firstRun && id ? (
-              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-600 dark:bg-slate-950/50">
-                {pythonRunnerErr ? (
-                  <p className="mb-2 text-xs text-red-600 dark:text-red-400">
-                    {pythonRunnerErr}
-                  </p>
-                ) : null}
-                {pythonSource === null ? (
-                  <p className="text-xs text-slate-600 dark:text-slate-400">
-                    Loading Python script…
-                  </p>
-                ) : (
-                  <PythonRoutineHost
-                    sceneId={id}
-                    source={pythonSource}
-                    onWorkerMessage={(m) => setPythonRunnerErr(m)}
-                  />
-                )}
-              </div>
-            ) : null}
-            {isShapeRun && firstRun && id ? (
-              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-600 dark:bg-slate-950/50">
-                {shapeRunnerErr ? (
-                  <p className="mb-2 text-xs text-red-600 dark:text-red-400">
-                    {shapeRunnerErr}
-                  </p>
-                ) : null}
-                {shapeDefinitionJson === null ? (
-                  <p className="text-xs text-slate-600 dark:text-slate-400">
-                    Loading shape definition…
-                  </p>
-                ) : (
-                  <ShapeAnimationRoutineHost
-                    sceneId={id}
-                    runId={firstRun.id}
-                    definitionJson={shapeDefinitionJson}
-                    onSceneRefresh={() => void load()}
-                    onLightsPreview={onShapeLightsPreview}
-                    onError={(m) => setShapeRunnerErr(m)}
-                    onStopped={() => void load()}
-                  />
-                )}
-              </div>
+            {(isPythonRun || isShapeRun) && firstRun ? (
+              <p className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 dark:border-slate-600 dark:bg-slate-950/50 dark:text-slate-400">
+                This routine runs on the server. You can close this tab and lights keep updating;
+                use Stop above or the API to end the run. Live changes appear in the 3D view via
+                server push.
+              </p>
             ) : null}
           </div>
         ) : (

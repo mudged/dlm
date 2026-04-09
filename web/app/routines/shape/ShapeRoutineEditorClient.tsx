@@ -14,7 +14,6 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
-import { ShapeAnimationRoutineHost } from "@/components/ShapeAnimationRoutineHost";
 import { ShapeRoutineDefinitionForm } from "@/components/ShapeRoutineDefinitionForm";
 import {
   definitionJsonStringFromForm,
@@ -24,20 +23,17 @@ import {
   type ShapeAnimationFormState,
 } from "@/lib/shapeAnimationDefinitionForm";
 import {
-  ghostOverlaysFromSim,
   ghostShapesFromDefinition,
   sceneDimensionsFromApiResponse,
-  type BatchLightUpdate,
   type GhostShapeOverlay,
   type SceneDimensions,
-  type ShapeAnimationSim,
 } from "@/lib/shapeAnimationEngine";
-import { mergeSceneLightBatchIntoItems } from "@/lib/scenesMerge";
 import {
   ROUTINE_TYPE_SHAPE_ANIMATION,
   createRoutine,
   deleteRoutine,
   fetchRoutine,
+  fetchSceneRoutineRuns,
   patchRoutine,
   startSceneRoutine,
   stopSceneRoutineRun,
@@ -200,38 +196,15 @@ export default function ShapeRoutineEditorClient() {
     }
   }, [targetSceneId]);
 
-  const showShapeHost = activeRun && activeRun.scene_id === targetSceneId;
   const definitionJsonForHost = definitionJsonString;
 
   useEffect(() => {
-    if (showShapeHost && activeRun) {
-      return;
-    }
     if (!sceneDims || !definitionJsonString) {
       ghostRef.current = [];
       return;
     }
     ghostRef.current = ghostShapesFromDefinition(definitionJsonString, sceneDims);
-  }, [showShapeHost, activeRun, sceneDims, definitionJsonString]);
-
-  const onSimTick = useCallback((sim: ShapeAnimationSim) => {
-    ghostRef.current = ghostOverlaysFromSim(sim);
-  }, []);
-
-  const onLightsPreview = useCallback((updates: BatchLightUpdate[]) => {
-    if (updates.length === 0) {
-      return;
-    }
-    setTargetScene((prev) => {
-      if (!prev) {
-        return prev;
-      }
-      return {
-        ...prev,
-        items: mergeSceneLightBatchIntoItems(prev.items, updates),
-      };
-    });
-  }, []);
+  }, [sceneDims, definitionJsonString]);
 
   async function onSave() {
     setBusy(true);
@@ -343,6 +316,18 @@ export default function ShapeRoutineEditorClient() {
     setBusy(true);
     setError(null);
     try {
+      let runId =
+        activeRun?.scene_id === targetSceneId ? activeRun.run_id : null;
+      if (!runId) {
+        const runs = await fetchSceneRoutineRuns(targetSceneId);
+        if (runs.length > 0) {
+          runId = runs[0].id;
+        }
+      }
+      if (runId) {
+        await stopSceneRoutineRun(targetSceneId, runId);
+        setActiveRun(null);
+      }
       await patchSceneLightsStateScene(targetSceneId, {
         on: false,
         color: "#ffffff",
@@ -521,22 +506,11 @@ export default function ShapeRoutineEditorClient() {
             Reset camera
           </Button>
         </div>
-        {showShapeHost && activeRun && definitionJsonForHost ? (
-          <div className="mt-3" key={activeRun.run_id}>
-            <ShapeAnimationRoutineHost
-              sceneId={activeRun.scene_id}
-              runId={activeRun.run_id}
-              definitionJson={definitionJsonForHost}
-              onSceneRefresh={() => void refreshTargetScene()}
-              onLightsPreview={onLightsPreview}
-              onError={(m) => setError(m)}
-              onStopped={() => {
-                setActiveRun(null);
-                void refreshTargetScene();
-              }}
-              onSimTick={onSimTick}
-            />
-          </div>
+        {activeRun && activeRun.scene_id === targetSceneId ? (
+          <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
+            Run is active on the server. The viewport uses server push; semi-transparent shapes
+            above show placement from your form (editor preview), not the live server simulation.
+          </p>
         ) : null}
         {targetScene && targetScene.items.length > 0 ? (
           <div className="mt-4 min-h-[280px] w-full sm:min-h-[320px]">

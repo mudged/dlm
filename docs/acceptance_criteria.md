@@ -394,6 +394,13 @@ Feature: Model view light list pagination and bulk settings (REQ-013)
     And the user must be able to apply the same on off hex colour and brightness to every selected light
     And validation for colour and brightness must match REQ-011
 
+  Scenario: REQ-013 requires batch HTTP API when applying to two or more selected lights at once
+    Parent requirement: REQ-013
+    Given docs/requirements.md defines REQ-013
+    When REQ-013 business rule 6 is read
+    Then when two or more lights are selected and the user applies settings in one bulk action the client must use the documented model-scoped batch light-state API from docs/architecture.md
+    And a sequence of per-light requests alone must not be the only mechanism for that bulk action
+
   Scenario: REQ-013 binds bulk updates to visualization timeliness
     Parent requirement: REQ-013
     Given docs/requirements.md defines REQ-012 and REQ-013
@@ -697,6 +704,19 @@ Feature: Scene routines Python definitions run stop and scene API (REQ-021)
     And the product must support stopping an active run
     And start must fail with clear actionable errors when the scene does not exist or is not usable
 
+  Scenario: REQ-021 allows at most one active routine run per scene
+    Parent requirement: REQ-021
+    Given docs/requirements.md defines REQ-021
+    When REQ-021 business rule 5 is read
+    Then at most one active routine run may exist for a given scene at a time
+    And starting a second run on that scene while one is active must fail with a clear actionable error
+
+  Scenario: REQ-021 forbids deleting a routine definition while a run is active
+    Parent requirement: REQ-021
+    Given docs/requirements.md defines REQ-021
+    When REQ-021 business rule 6 is read
+    Then deleting or destructively mutating a routine definition while that routine has an active run must be rejected with a clear actionable error
+
   Scenario: REQ-021 binds running automation to scene API for light state changes
     Parent requirement: REQ-021
     Given docs/requirements.md defines REQ-011 REQ-020 REQ-021 REQ-022 and REQ-033
@@ -704,6 +724,13 @@ Feature: Scene routines Python definitions run stop and scene API (REQ-021)
     Then automated changes to on off hex colour or brightness for lights in that scene from Python runs must be effected through the Python scene binding and underlying REQ-020 scene API surface
     And automated changes from shape animation runs must use REQ-020 equivalent native paths that preserve REQ-011 semantics without executing user Python
     And canonical stored model coordinates must not be rewritten by routine automation
+
+  Scenario: REQ-021 forbids browser-hosted production routine execution
+    Parent requirement: REQ-021
+    Given docs/requirements.md defines REQ-021 REQ-022 REQ-033 and REQ-038
+    When the REQ-021 business rules about execution placement are read
+    Then the browser must not execute production routine automation loops for applying light effects
+    And routine automation must run entirely within the Go service process as documented in docs/architecture.md
 
   Scenario: REQ-021 coordinates with device requirements for physical output
     Parent requirement: REQ-021
@@ -747,6 +774,15 @@ Feature: Scene routines Python definitions run stop and scene API (REQ-021)
     When the REQ-017 scope about factory reset data removal is read
     Then factory reset must remove persisted scene routine definitions including shape animation per REQ-033 and any persisted routine run state together with models scenes and related data
     And factory reset must re-seed exactly the three default Python sample routines defined in REQ-032
+
+Feature: Routine runs synchronize visualization and physical lights; server-side headless execution (REQ-038)
+
+  Scenario: REQ-038 browser is observation-only for routine-driven state
+    Parent requirement: REQ-038
+    Given docs/requirements.md defines REQ-038 REQ-021 REQ-041 and REQ-039
+    When the REQ-038 scope and browser role rule are read
+    Then the web UI must observe authoritative light state via server push or read APIs without executing routine bodies in the browser for production runs
+    And closing all browser tabs must not stop an active routine run started via the HTTP API
 
 Feature: Python scene routines editor API docs and execution (REQ-022)
 
@@ -903,23 +939,25 @@ Feature: Python scene binding width depth height (REQ-026)
     And values must align with REQ-020 dimension semantics for the same scene snapshot
     And docs architecture.md the REQ-022 on-page reference and the REQ-024 API reference must document all three attributes including which world axis each maps to
 
-Feature: Python routine unified run-in-scene and live viewport (REQ-027)
+Feature: Routine authoring unified run-in-scene and live viewport (REQ-027)
 
-  Scenario: REQ-027 requires one unified region for scene target run stop and live three.js viewport
+  Scenario: REQ-027 requires one unified region for scene target run stop and live three.js viewport on each routine kind
     Parent requirement: REQ-027
-    Given docs/requirements.md defines REQ-002 REQ-010 REQ-012 REQ-015 REQ-019 REQ-022 and REQ-027
+    Given docs/requirements.md defines REQ-002 REQ-010 REQ-012 REQ-015 REQ-019 REQ-022 REQ-033 and REQ-027
     When the REQ-027 scope and business rules are read
-    Then the product must present exactly one unified run scene viewport region on the Python routine authoring surface
-    And that region must combine scene selection for routine execution run or stop controls tied to that scene and the live three.js viewport showing the same scene
-    And the product must not split run in scene from visual debug into parallel sections with duplicate scene pickers or viewports for the same workflow
+    Then the product must present exactly one unified run scene viewport region on the Python routine authoring surface per REQ-022
+    And the product must present exactly one such unified region on the shape animation authoring surface per REQ-033
+    And each region must combine scene selection for routine execution run or stop controls tied to that scene and the live three.js viewport showing the same scene
+    And the product must not split run in scene from visual debug into parallel sections with duplicate scene pickers or viewports for the same workflow on that page
     And light state changes from the routine must become visible in the viewport within the same class of timeliness as REQ-012 after successful writes
     And the viewport must follow REQ-010 REQ-012 REQ-015 and REQ-019 visual rules for scene composite views as applicable
 
   Scenario: REQ-027 requires reset scene lights and reset camera controls
     Parent requirement: REQ-027
-    Given docs/requirements.md defines REQ-011 REQ-014 REQ-016 REQ-018 and REQ-027
+    Given docs/requirements.md defines REQ-011 REQ-014 REQ-016 REQ-018 REQ-021 REQ-027 REQ-039 and REQ-040
     When the REQ-027 business rules about reset actions are read
     Then a reset scene lights control must set every light in the selected scene to REQ-014 defaults and update authoritative in-memory state per REQ-011 and REQ-039 without changing scene membership placements or canonical model coordinates
+    And activating reset scene lights must stop any active routine run for that scene first per REQ-021 and REQ-040 so automation does not overwrite the reset baseline
     And a reset camera control must restore default client navigation for that viewport only per REQ-016 semantics without altering persisted models scenes placements or authoritative per-light state
     And REQ-018 applies where reset actions are implemented as buttons
 
@@ -933,16 +971,16 @@ Feature: Three.js emissive glow scaled by brightness (REQ-028)
 
   Scenario: REQ-028 requires emissive appearance for on light spheres in three.js views
     Parent requirement: REQ-028
-    Given docs/requirements.md defines REQ-010 REQ-012 REQ-015 REQ-027 and REQ-028
+    Given docs/requirements.md defines REQ-010 REQ-012 REQ-015 REQ-027 REQ-039 and REQ-028
     When the REQ-028 scope and business rules are read
-    Then on lights must use a material with a clear emissive light-emitting component in the single-model view scene composite view and Python routine unified live viewport where REQ-012 spheres apply
+    Then on lights must use a material with a clear emissive light-emitting component in the single-model view scene composite view and routine authoring unified live viewports per REQ-027 where REQ-012 spheres apply
     And the sphere must read as emitting light not only as a diffuse tinted surface
 
   Scenario: REQ-028 ties glow strength to REQ-011 brightness with strong appearance at 100 percent
     Parent requirement: REQ-028
-    Given docs/requirements.md defines REQ-011 and REQ-028
+    Given docs/requirements.md defines REQ-011 REQ-039 and REQ-028
     When the REQ-028 business rules about brightness scaling are read
-    Then emissive strength or documented equivalent must scale with brightness percentage from zero through one hundred
+    Then emissive strength or documented equivalent must scale with the current brightness percentage from authoritative in-memory light state from zero through one hundred
     And at 100 percent brightness the glow must be visibly strong
     And at lower percents the glow must be weaker in a perceptibly dimmer way
 
@@ -961,7 +999,7 @@ Feature: Three.js emissive glow scaled by brightness (REQ-028)
 
   Scenario: REQ-028 binds visualization timeliness and architecture documentation
     Parent requirement: REQ-028
-    Given docs/requirements.md defines REQ-003 REQ-011 REQ-012 and REQ-028
+    Given docs/requirements.md defines REQ-003 REQ-011 REQ-012 REQ-039 and REQ-028
     When the REQ-028 business rules about updates and architecture are read
     Then glow must follow authoritative server light state per REQ-039 without indefinite staleness after successful writes consistent with REQ-012
     And docs architecture.md must describe the three.js material approach and brightness mapping including Pi WebGL notes where relevant
@@ -995,6 +1033,13 @@ Feature: High-throughput light updates (REQ-029)
     When the REQ-029 scope is read
     Then solutions for high-throughput light updates must remain plausible on Raspberry Pi 4 constraints from REQ-003
 
+  Scenario: REQ-029 business rule 5 points shipped web three.js observer path to REQ-041
+    Parent requirement: REQ-029
+    Given docs/requirements.md defines REQ-029 and REQ-041
+    When REQ-029 business rule 5 is read
+    Then it must state that REQ-041 adds MUST-level push and incremental delta apply for shipped web three.js viewports
+    And rule 4 SHOULD for server-push remains for other observer clients unless they reuse the same mechanism
+
 Feature: Python scene API random hex colour helper (REQ-030)
 
   Scenario: REQ-030 requires a documented random colour helper on the Python scene binding
@@ -1018,7 +1063,7 @@ Feature: Python scene API random hex colour helper (REQ-030)
     Then the REQ-024 API catalog must list the callable with a commented sample per REQ-024
     And CodeMirror completions and the scene worker must stay aligned with the chosen Python name and async or sync semantics
 
-Feature: Redundant light-state skips (visualization, authoritative state, device traffic) (REQ-031)
+Feature: Redundant light-state skips (visualization, in-memory authority, device traffic) (REQ-031)
 
   Scenario: REQ-031 requires skipping unnecessary visualization work when state is unchanged
     Parent requirement: REQ-031
@@ -1184,7 +1229,7 @@ Feature: Faint scene boundary cuboid in three.js views (REQ-034)
     And the scene view must expand the tight box by the scene persisted margin m on each axis in both directions
 
   Scenario: REQ-015 stores scene boundary margin m defaulting to 30 cm and allows edit
-    Parent requirement: REQ-034
+    Parent requirement: REQ-015
     Given docs/requirements.md defines REQ-015 and REQ-034
     When REQ-015 business rules 12 and 13 are read
     Then each scene must persist one non-negative finite margin m in SI meters for the visualization boundary
@@ -1206,6 +1251,13 @@ Feature: Faint scene boundary cuboid in three.js views (REQ-034)
     When the REQ-034 business rules about appearance are read
     Then the boundary must be faint and subtle similar in visual weight to REQ-010 inter-light segments
     And it must not be more prominent than those segments or the light spheres
+
+  Scenario: REQ-034 boundary edges use the same colour opacity and line thickness policy as REQ-010 wire segments
+    Parent requirement: REQ-034
+    Given docs/requirements.md defines REQ-010 and REQ-034
+    When REQ-034 business rule 6 about the same recipe as inter-light wire is read
+    Then the boundary cuboid edges must use the same colour opacity and line thickness policy as REQ-010 consecutive light segments
+    And the canonical styling includes hex D0D0D0 with 85 percent transparency meaning 15 percent opacity and thin barely visible lines
 
   Scenario: REQ-010 and REQ-015 reference the boundary cuboid requirement
     Parent requirement: REQ-034
@@ -1292,6 +1344,7 @@ Feature: Routines sync physical lights and run on server (REQ-038)
     When the REQ-038 business rules about server-side execution are read
     Then starting a routine must run automation on the backend until stop or failure
     And a web browser session must not be required for the run to progress
+    And the browser must not host production routine ticks or apply routine light mutations
 
   Scenario: REQ-038 requires physical sync for models with assigned devices
     Parent requirement: REQ-038
@@ -1344,6 +1397,46 @@ Feature: In-memory light authority and sync (REQ-039)
     When the REQ-039 business rules are read
     Then docs/architecture.md must document one consistent policy when startup sync observes device state that differs from REQ-014 defaults
     And docs/architecture.md must document physical output behavior when a device is unassigned from a model
+
+Feature: Routine stop within two seconds (REQ-040)
+
+  Scenario: REQ-040 mandates stop completes within two SI seconds for active runs
+    Parent requirement: REQ-040
+    Given docs/requirements.md defines REQ-040 REQ-021 REQ-038 and REQ-039
+    When requirement REQ-040 is read
+    Then after the server accepts a stop request for an active routine run the run must emit no further routine-originated light-state updates within at most 2 SI seconds under normal conditions
+    And the requirement applies to Python and shape animation routine kinds
+    And the same bound applies whether stop is invoked from the web UI or the HTTP API
+
+  Scenario: REQ-040 requires architecture to document Python and shape paths within the two second budget
+    Parent requirement: REQ-040
+    Given docs/requirements.md defines REQ-040 REQ-022 and REQ-033
+    When REQ-040 business rule 2 is read
+    Then docs/architecture.md must describe how the Python subprocess and shape animation supervisor meet the two second stop bound
+    And forcible termination timeouts must not exceed the two second aggregate budget unless a narrow documented exception exists with product tests
+
+Feature: Server-push visualization with incremental apply (REQ-041)
+
+  Scenario: REQ-041 requires push as primary path for live three.js viewports after initial load
+    Parent requirement: REQ-041
+    Given docs/requirements.md defines REQ-041 REQ-010 REQ-015 REQ-027 REQ-029 and REQ-039
+    When the REQ-041 scope and business rules are read
+    Then shipped web three.js experiences that show live authoritative per-light state must use SSE WebSocket or architecturally equivalent server push as the primary means of learning state changes after the initial snapshot
+    And the client must not use high-frequency repeated polling as the primary refresh mechanism while push is healthy
+
+  Scenario: REQ-041 requires delta payloads and incremental three.js apply for partial light changes
+    Parent requirement: REQ-041
+    Given docs/requirements.md defines REQ-041 REQ-010 REQ-012 REQ-028 and REQ-031
+    When REQ-041 business rules 2 and 3 are read
+    Then when a change affects only a proper subset of lights the server must send only affected light ids and new state fields
+    And the client must merge deltas into existing three.js objects without rebuilding the full mesh and line graph from scratch on every delta message when only a subset changed
+
+  Scenario: REQ-041 requires architecture to document transport schema reconnect and Pi plausibility
+    Parent requirement: REQ-041
+    Given docs/requirements.md defines REQ-041 REQ-003 REQ-029 and REQ-031
+    When REQ-041 business rules 4 and 5 are read
+    Then docs/architecture.md must name the chosen push transport URL or subscription pattern delta message schema and reconnect full resync behavior
+    And the design must remain plausible on Raspberry Pi 4 constraints
 ```
 
 ---

@@ -136,7 +136,7 @@ export async function startSceneRoutine(
     `/api/v1/scenes/${encodeURIComponent(sceneId)}/routines/${encodeURIComponent(routineId)}/start`,
     { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" },
   );
-  if (res.status === 201 || res.status === 200) {
+  if (res.status === 201) {
     return res.json() as Promise<StartRoutineResponse>;
   }
   const j = (await res.json().catch(() => null)) as {

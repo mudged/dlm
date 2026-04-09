@@ -56,9 +56,9 @@ func TestRoutines_PythonPatchBlockedWhenRunning(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runID, already, err := s.StartRoutineRun(ctx, sc.ID, r.ID)
-	if err != nil || already || runID == "" {
-		t.Fatalf("start %v %v %v", runID, already, err)
+	runID, err := s.StartRoutineRun(ctx, sc.ID, r.ID)
+	if err != nil || runID == "" {
+		t.Fatalf("start %v %v", runID, err)
 	}
 	if _, err := s.PatchRoutine(ctx, r.ID, nil, nil, ptr("y=2"), nil); err != ErrRoutineRunActive {
 		t.Fatalf("want ErrRoutineRunActive, got %v", err)

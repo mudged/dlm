@@ -31,15 +31,15 @@ func readRequirements(t *testing.T) string {
 	return string(b)
 }
 
-// requirementBlock returns the markdown subsection starting at "### REQ-xxx" up to (but not including) the next "### REQ-" heading.
+// requirementBlock returns the markdown subsection starting at "## REQ-xxx" up to (but not including) the next "## REQ-" heading.
 func requirementBlock(doc, reqID string) string {
-	prefix := "### " + reqID + " —"
+	prefix := "## " + reqID + " —"
 	i := strings.Index(doc, prefix)
 	if i < 0 {
 		return ""
 	}
 	rest := doc[i:]
-	next := strings.Index(rest[len(prefix):], "\n### REQ-")
+	next := strings.Index(rest[len(prefix):], "\n## REQ-")
 	if next < 0 {
 		return rest
 	}
@@ -123,7 +123,7 @@ func TestAcceptance_REQ005_wireLightModel(t *testing.T) {
 	doc := readRequirements(t)
 	block := requirementBlock(doc, "REQ-005")
 	if block == "" {
-		t.Fatal("requirements must contain ### REQ-005 section")
+		t.Fatal("requirements must contain ## REQ-005 section")
 	}
 	lower := strings.ToLower(block)
 	if !strings.Contains(lower, "1000") {
@@ -162,7 +162,7 @@ func TestAcceptance_REQ006_modelCRUDAndCSVUpload(t *testing.T) {
 	doc := readRequirements(t)
 	block := requirementBlock(doc, "REQ-006")
 	if block == "" {
-		t.Fatal("requirements must contain ### REQ-006 section")
+		t.Fatal("requirements must contain ## REQ-006 section")
 	}
 	lower := strings.ToLower(block)
 	for _, verb := range []string{"list", "view", "delete"} {
@@ -193,7 +193,7 @@ func TestAcceptance_REQ007_validateCSVOnUpload(t *testing.T) {
 	doc := readRequirements(t)
 	block := requirementBlock(doc, "REQ-007")
 	if block == "" {
-		t.Fatal("requirements must contain ### REQ-007 section")
+		t.Fatal("requirements must contain ## REQ-007 section")
 	}
 	lower := strings.ToLower(block)
 	if !strings.Contains(lower, "validat") {
@@ -249,7 +249,7 @@ func TestAcceptance_REQ008_singleCommandBuildAndRun(t *testing.T) {
 	doc := readRequirements(t)
 	block := requirementBlock(doc, "REQ-008")
 	if block == "" {
-		t.Fatal("requirements must contain ### REQ-008 section")
+		t.Fatal("requirements must contain ## REQ-008 section")
 	}
 	lower := strings.ToLower(block)
 	if !strings.Contains(lower, "readme.md") {
@@ -284,7 +284,7 @@ func TestAcceptance_REQ009_defaultSampleModels(t *testing.T) {
 	doc := readRequirements(t)
 	block := requirementBlock(doc, "REQ-009")
 	if block == "" {
-		t.Fatal("requirements must contain ### REQ-009 section")
+		t.Fatal("requirements must contain ## REQ-009 section")
 	}
 	lower := strings.ToLower(block)
 	for _, shape := range []string{"sphere", "cube", "cone"} {
@@ -328,7 +328,7 @@ func TestAcceptance_REQ010_threeJsModelView(t *testing.T) {
 	doc := readRequirements(t)
 	block := requirementBlock(doc, "REQ-010")
 	if block == "" {
-		t.Fatal("requirements must contain ### REQ-010 section")
+		t.Fatal("requirements must contain ## REQ-010 section")
 	}
 	lower := strings.ToLower(block)
 	if !strings.Contains(lower, "three.js") && !strings.Contains(lower, "three") {
@@ -376,7 +376,7 @@ func TestAcceptance_REQ011_restLightStateAPI(t *testing.T) {
 	doc := readRequirements(t)
 	block := requirementBlock(doc, "REQ-011")
 	if block == "" {
-		t.Fatal("requirements must contain ### REQ-011 section")
+		t.Fatal("requirements must contain ## REQ-011 section")
 	}
 	lower := strings.ToLower(block)
 	if !strings.Contains(lower, "rest") {
@@ -424,7 +424,7 @@ func TestAcceptance_REQ012_visualizationReflectsLightState(t *testing.T) {
 	doc := readRequirements(t)
 	block := requirementBlock(doc, "REQ-012")
 	if block == "" {
-		t.Fatal("requirements must contain ### REQ-012 section")
+		t.Fatal("requirements must contain ## REQ-012 section")
 	}
 	lower := strings.ToLower(block)
 	if !strings.Contains(lower, "visual") && !strings.Contains(lower, "3d") {
@@ -466,7 +466,7 @@ func TestAcceptance_REQ013_modelViewPaginationAndBulkSettings(t *testing.T) {
 	doc := readRequirements(t)
 	block := requirementBlock(doc, "REQ-013")
 	if block == "" {
-		t.Fatal("requirements must contain ### REQ-013 section")
+		t.Fatal("requirements must contain ## REQ-013 section")
 	}
 	lower := strings.ToLower(block)
 	if !strings.Contains(lower, "paginat") {
@@ -492,6 +492,9 @@ func TestAcceptance_REQ013_modelViewPaginationAndBulkSettings(t *testing.T) {
 	}
 	if !strings.Contains(lower, "bulk") || !strings.Contains(lower, "apply") {
 		t.Fatal("REQ-013 must require bulk or apply of settings to selected lights")
+	}
+	if !strings.Contains(lower, "batch") {
+		t.Fatal("REQ-013 must require the batch light-state HTTP API when applying to two or more selected lights in one action")
 	}
 	if !strings.Contains(lower, "req-011") {
 		t.Fatal("REQ-013 must reference REQ-011 for on/off, colour, and brightness")
@@ -528,7 +531,7 @@ func TestAcceptance_REQ014_defaultLightStateAndReset(t *testing.T) {
 	doc := readRequirements(t)
 	block := requirementBlock(doc, "REQ-014")
 	if block == "" {
-		t.Fatal("requirements must contain ### REQ-014 section")
+		t.Fatal("requirements must contain ## REQ-014 section")
 	}
 	lower := strings.ToLower(block)
 	if !strings.Contains(lower, "off") {
@@ -572,7 +575,7 @@ func TestAcceptance_REQ015_scenesCompositeSpaceAndManagement(t *testing.T) {
 	doc := readRequirements(t)
 	block := requirementBlock(doc, "REQ-015")
 	if block == "" {
-		t.Fatal("requirements must contain ### REQ-015 section")
+		t.Fatal("requirements must contain ## REQ-015 section")
 	}
 	lower := strings.ToLower(block)
 	for _, kw := range []string{"scene", "create", "list", "delete", "open"} {
@@ -623,7 +626,7 @@ func TestAcceptance_REQ016_cameraResetModelAndSceneViews(t *testing.T) {
 	doc := readRequirements(t)
 	block := requirementBlock(doc, "REQ-016")
 	if block == "" {
-		t.Fatal("requirements must contain ### REQ-016 section")
+		t.Fatal("requirements must contain ## REQ-016 section")
 	}
 	lower := strings.ToLower(block)
 	if !strings.Contains(lower, "camera reset") {
@@ -676,7 +679,7 @@ func TestAcceptance_REQ019_fixedDarkGreyThreeJSViewport(t *testing.T) {
 	doc := readRequirements(t)
 	block := requirementBlock(doc, "REQ-019")
 	if block == "" {
-		t.Fatal("requirements must contain ### REQ-019 section")
+		t.Fatal("requirements must contain ## REQ-019 section")
 	}
 	lower := strings.ToLower(block)
 	if !strings.Contains(lower, "three.js") {
@@ -714,7 +717,7 @@ func TestAcceptance_REQ020_sceneSpatialAPI(t *testing.T) {
 	doc := readRequirements(t)
 	block := requirementBlock(doc, "REQ-020")
 	if block == "" {
-		t.Fatal("requirements must contain ### REQ-020 section")
+		t.Fatal("requirements must contain ## REQ-020 section")
 	}
 	lower := strings.ToLower(block)
 	if !strings.Contains(lower, "dimension") {
@@ -761,7 +764,7 @@ func TestAcceptance_REQ017_optionsFactoryResetWithConfirmation(t *testing.T) {
 	doc := readRequirements(t)
 	block := requirementBlock(doc, "REQ-017")
 	if block == "" {
-		t.Fatal("requirements must contain ### REQ-017 section")
+		t.Fatal("requirements must contain ## REQ-017 section")
 	}
 	lower := strings.ToLower(block)
 	if !strings.Contains(lower, "options") {
@@ -826,7 +829,7 @@ func TestAcceptance_REQ018_applicationShellThemesNavAndFontAwesome(t *testing.T)
 	doc := readRequirements(t)
 	block := requirementBlock(doc, "REQ-018")
 	if block == "" {
-		t.Fatal("requirements must contain ### REQ-018 section")
+		t.Fatal("requirements must contain ## REQ-018 section")
 	}
 	lower := strings.ToLower(block)
 	if !strings.Contains(lower, "light") || !strings.Contains(lower, "dark") {
@@ -906,7 +909,7 @@ func TestAcceptance_REQ022_pythonSceneRoutinesAndCodeMirror6(t *testing.T) {
 	doc := readRequirements(t)
 	block := requirementBlock(doc, "REQ-022")
 	if block == "" {
-		t.Fatal("requirements must contain ### REQ-022 section")
+		t.Fatal("requirements must contain ## REQ-022 section")
 	}
 	lower := strings.ToLower(block)
 	if !strings.Contains(lower, "codemirror") {
@@ -990,7 +993,7 @@ func TestAcceptance_REQ024_pythonRoutineApiReferenceBelowEditor(t *testing.T) {
 	doc := readRequirements(t)
 	block := requirementBlock(doc, "REQ-024")
 	if block == "" {
-		t.Fatal("requirements must contain ### REQ-024 section")
+		t.Fatal("requirements must contain ## REQ-024 section")
 	}
 	lower := strings.ToLower(block)
 	for _, kw := range []string{
@@ -1074,11 +1077,11 @@ func TestAcceptance_REQ024_pythonRoutineApiReferenceBelowEditor(t *testing.T) {
 	}
 }
 
-func TestAcceptance_REQ027_pythonRoutineUnifiedRunAndViewport(t *testing.T) {
+func TestAcceptance_REQ027_unifiedRunAndViewportPythonAndShape(t *testing.T) {
 	doc := readRequirements(t)
 	block := requirementBlock(doc, "REQ-027")
 	if block == "" {
-		t.Fatal("requirements must contain ### REQ-027 section")
+		t.Fatal("requirements must contain ## REQ-027 section")
 	}
 	lower := strings.ToLower(block)
 	for _, kw := range []string{"unified", "viewport", "three.js", "scene", "req-012", "req-014", "req-016"} {
@@ -1089,42 +1092,54 @@ func TestAcceptance_REQ027_pythonRoutineUnifiedRunAndViewport(t *testing.T) {
 	if !strings.Contains(lower, "req-022") {
 		t.Fatal("REQ-027 must reference REQ-022 for the authoring surface")
 	}
+	if !strings.Contains(lower, "req-033") {
+		t.Fatal("REQ-027 must reference REQ-033 for the shape animation authoring surface")
+	}
 	if !strings.Contains(block, "| **Priority** | Must |") {
 		t.Fatal("REQ-027 metadata must state priority Must")
 	}
 
 	root := repoRoot(t)
-	editorPath := filepath.Join(root, "web", "app", "routines", "python", "PythonRoutineEditorClient.tsx")
-	ed, err := os.ReadFile(editorPath)
-	if err != nil {
-		t.Fatalf("read %s: %v", editorPath, err)
+	assertREQ027UnifiedEditor := func(t *testing.T, path, beginnerHeadingSubstring string) {
+		t.Helper()
+		b, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		s := string(b)
+		if strings.Count(s, "value={targetSceneId}") != 1 {
+			t.Fatalf("REQ-027 (%s): exactly one scene selector must bind targetSceneId (run + viewport)", path)
+		}
+		if strings.Count(s, "<SceneLightsCanvas") != 1 {
+			t.Fatalf("REQ-027 (%s): unified region must render a single SceneLightsCanvas for the live view", path)
+		}
+		if !strings.Contains(s, "startSceneRoutine(targetSceneId") {
+			t.Fatalf("REQ-027 (%s): Start must target the same scene id as the viewport", path)
+		}
+		if !strings.Contains(s, beginnerHeadingSubstring) {
+			t.Fatalf("REQ-027 (%s): unified run/viewport section must be clearly labeled for beginners (%q)", path, beginnerHeadingSubstring)
+		}
+		hasResetLights := strings.Contains(s, "Reset scene lights") || strings.Contains(s, "Reset room lights")
+		if !hasResetLights || !strings.Contains(s, "Reset camera") {
+			t.Fatalf("REQ-027 (%s): unified region must expose reset scene lights (or equivalent room wording) and reset camera controls", path)
+		}
+		if strings.Contains(s, "debugSceneId") || strings.Contains(s, "runSceneId") {
+			t.Fatalf("REQ-027 (%s): must not split run vs debug with separate scene id state", path)
+		}
 	}
-	edStr := string(ed)
-	if strings.Count(edStr, "value={targetSceneId}") != 1 {
-		t.Fatal("REQ-027: exactly one scene selector must bind targetSceneId (run + viewport)")
-	}
-	if strings.Count(edStr, "<SceneLightsCanvas") != 1 {
-		t.Fatal("REQ-027: unified region must render a single SceneLightsCanvas for the live view")
-	}
-	if !strings.Contains(edStr, "startSceneRoutine(targetSceneId") {
-		t.Fatal("REQ-027: Start must target the same scene id as the viewport")
-	}
-	if !strings.Contains(edStr, "Run your script and watch the room") {
-		t.Fatal("REQ-027: unified run/viewport section must be clearly labeled for beginners")
-	}
-	if !strings.Contains(edStr, "Reset room lights") || !strings.Contains(edStr, "Reset camera") {
-		t.Fatal("REQ-027: unified region must expose reset scene lights and reset camera controls")
-	}
-	if strings.Contains(edStr, "debugSceneId") || strings.Contains(edStr, "runSceneId") {
-		t.Fatal("REQ-027: must not split run vs debug with separate scene id state")
-	}
+
+	pythonPath := filepath.Join(root, "web", "app", "routines", "python", "PythonRoutineEditorClient.tsx")
+	assertREQ027UnifiedEditor(t, pythonPath, "Run your script and watch the room")
+
+	shapePath := filepath.Join(root, "web", "app", "routines", "shape", "ShapeRoutineEditorClient.tsx")
+	assertREQ027UnifiedEditor(t, shapePath, "Run and watch the scene")
 }
 
 func TestAcceptance_REQ030_pythonSceneRandomHexColour(t *testing.T) {
 	doc := readRequirements(t)
 	block := requirementBlock(doc, "REQ-030")
 	if block == "" {
-		t.Fatal("requirements must contain ### REQ-030 section")
+		t.Fatal("requirements must contain ## REQ-030 section")
 	}
 	lower := strings.ToLower(block)
 	if !strings.Contains(lower, "random") && !strings.Contains(lower, "randrange") {
@@ -1179,7 +1194,7 @@ func TestAcceptance_REQ029_highThroughputLightUpdates(t *testing.T) {
 	doc := readRequirements(t)
 	block := requirementBlock(doc, "REQ-029")
 	if block == "" {
-		t.Fatal("requirements must contain ### REQ-029 section")
+		t.Fatal("requirements must contain ## REQ-029 section")
 	}
 	lower := strings.ToLower(block)
 	if !strings.Contains(lower, "integrator") {
@@ -1336,7 +1351,7 @@ func TestAcceptance_REQ021_sceneRoutinesPythonAndSceneAPI(t *testing.T) {
 	doc := readRequirements(t)
 	block := requirementBlock(doc, "REQ-021")
 	if block == "" {
-		t.Fatal("requirements must contain ### REQ-021 section")
+		t.Fatal("requirements must contain ## REQ-021 section")
 	}
 	lower := strings.ToLower(block)
 	if !strings.Contains(block, "| **Priority** | Must |") {
@@ -1356,8 +1371,21 @@ func TestAcceptance_REQ021_sceneRoutinesPythonAndSceneAPI(t *testing.T) {
 	if !strings.Contains(lower, "req-032") {
 		t.Fatal("REQ-021 must reference REQ-032 for default seeded Python behaviors")
 	}
+	if !strings.Contains(lower, "req-033") {
+		t.Fatal("REQ-021 must reference REQ-033 for shape animation routine kind")
+	}
 	if !strings.Contains(lower, "non-python") && !strings.Contains(lower, "python-only") {
 		t.Fatal("REQ-021 must clarify Python-only routine definitions vs non-Python types")
+	}
+	compact := strings.Join(strings.Fields(strings.ReplaceAll(lower, "**", " ")), " ")
+	if !strings.Contains(compact, "at most one") || !strings.Contains(compact, "active") || !strings.Contains(compact, "per scene") {
+		t.Fatal("REQ-021 must require at most one active routine run per scene")
+	}
+	if !strings.Contains(lower, "409") {
+		t.Fatal("REQ-021 must reference HTTP 409 (or equivalent) when starting a second run on a busy scene")
+	}
+	if !strings.Contains(lower, "delet") || !strings.Contains(lower, "reject") {
+		t.Fatal("REQ-021 must reject deleting or destructive definition changes while a run of that definition is active")
 	}
 	for _, kw := range []string{"mobile", "tablet", "desktop"} {
 		if !strings.Contains(lower, kw) {
@@ -1385,16 +1413,6 @@ func TestAcceptance_REQ021_sceneRoutinesPythonAndSceneAPI(t *testing.T) {
 		}
 	}
 
-	mainPath := filepath.Join(root, "backend", "cmd", "server", "main.go")
-	mainBytes, err := os.ReadFile(mainPath)
-	if err != nil {
-		t.Fatalf("read %s: %v", mainPath, err)
-	}
-	mainSrc := string(mainBytes)
-	if strings.Contains(mainSrc, "StartRoutineScheduler") {
-		t.Fatal("REQ-021 / architecture §3.16: server must not run StartRoutineScheduler (no Go routine ticker)")
-	}
-
 	storeRoutinesPath := filepath.Join(root, "backend", "internal", "store", "routines.go")
 	routinesGo, err := os.ReadFile(storeRoutinesPath)
 	if err != nil {
@@ -1402,7 +1420,7 @@ func TestAcceptance_REQ021_sceneRoutinesPythonAndSceneAPI(t *testing.T) {
 	}
 	routinesGoStr := string(routinesGo)
 	if strings.Contains(routinesGoStr, "TickRoutineRuns") {
-		t.Fatal("store/routines.go must not define TickRoutineRuns (automation runs in the browser: Pyodide and/or shape animation engine)")
+		t.Fatal("store/routines.go must not define TickRoutineRuns (routine ticks belong in internal/routineengine, not the SQLite store layer)")
 	}
 
 	sceneClientPath := filepath.Join(root, "web", "app", "scenes", "detail", "SceneDetailClient.tsx")
@@ -1422,7 +1440,7 @@ func TestAcceptance_REQ021_sceneRoutinesPythonAndSceneAPI(t *testing.T) {
 	}
 	ws := string(workerBytes)
 	if !strings.Contains(ws, "/api/v1/scenes/") || !strings.Contains(ws, "runPythonAsync") {
-		t.Fatal("Pyodide worker must drive scene API via fetch to /api/v1/scenes/... (REQ-021 rule 3)")
+		t.Fatal("public/dlm-python-scene-worker.mjs (editor diagnostics) must still target /api/v1/scenes/... via runPythonAsync when present")
 	}
 
 	archPath := filepath.Join(root, "docs", "architecture.md")
@@ -1432,11 +1450,20 @@ func TestAcceptance_REQ021_sceneRoutinesPythonAndSceneAPI(t *testing.T) {
 	}
 	archStr := string(archBytes)
 	archLower := strings.ToLower(archStr)
-	if !strings.Contains(archLower, "pyodide") || !strings.Contains(archLower, "req-021") {
-		t.Fatal("docs/architecture.md must document Pyodide execution and REQ-021 for scene routines")
+	if !strings.Contains(archLower, "routineengine") || !strings.Contains(archLower, "python3") {
+		t.Fatal("docs/architecture.md must document internal/routineengine and supervised python3 for REQ-021")
+	}
+	if !strings.Contains(archLower, "req-021") {
+		t.Fatal("docs/architecture.md must reference REQ-021 for scene routines")
+	}
+	if !strings.Contains(archLower, "pyodide") {
+		t.Fatal("docs/architecture.md must mention optional Pyodide for editor-only use (REQ-022)")
 	}
 	if !strings.Contains(archStr, "time.Ticker") {
-		t.Fatal("docs/architecture.md must explicitly address time.Ticker vs browser automation (REQ-021 / §3.16)")
+		t.Fatal("docs/architecture.md must document time.Ticker for shape animation (REQ-021 / §3.17.2)")
+	}
+	if !strings.Contains(archLower, "headless") || !strings.Contains(archLower, "observer") {
+		t.Fatal("docs/architecture.md must state headless execution and browser-as-observer (REQ-038)")
 	}
 }
 
@@ -1444,7 +1471,7 @@ func TestAcceptance_REQ032_threeSeededPythonSampleRoutines(t *testing.T) {
 	doc := readRequirements(t)
 	block := requirementBlock(doc, "REQ-032")
 	if block == "" {
-		t.Fatal("requirements must contain ### REQ-032 section")
+		t.Fatal("requirements must contain ## REQ-032 section")
 	}
 	lower := strings.ToLower(block)
 	if !strings.Contains(block, "| **Priority** | Must |") {
@@ -1545,7 +1572,7 @@ func TestAcceptance_REQ033_shapeAnimationRoutines(t *testing.T) {
 	doc := readRequirements(t)
 	block := requirementBlock(doc, "REQ-033")
 	if block == "" {
-		t.Fatal("requirements must contain ### REQ-033 section")
+		t.Fatal("requirements must contain ## REQ-033 section")
 	}
 	lower := strings.ToLower(block)
 	if !strings.Contains(block, "| **Priority** | Must |") {
@@ -1627,18 +1654,8 @@ func TestAcceptance_REQ033_shapeAnimationRoutines(t *testing.T) {
 	es := string(eb)
 	for _, needle := range []string{"initShapeAnimationSim", "tickShapeAnimationSim", "buildBatchUpdatesFromSim"} {
 		if !strings.Contains(es, needle) {
-			t.Fatalf("shapeAnimationEngine.ts must define %s (REQ-033 client simulation)", needle)
+			t.Fatalf("shapeAnimationEngine.ts must define %s (REQ-033 authoring/ghost parity with §3.17.2)", needle)
 		}
-	}
-
-	hostPath := filepath.Join(root, "web", "components", "ShapeAnimationRoutineHost.tsx")
-	hostBytes, err := os.ReadFile(hostPath)
-	if err != nil {
-		t.Fatalf("read %s: %v", hostPath, err)
-	}
-	hostSrc := string(hostBytes)
-	if !strings.Contains(hostSrc, "patchSceneLightsStateBatch") {
-		t.Fatal("ShapeAnimationRoutineHost must call patchSceneLightsStateBatch for scene light writes (REQ-033)")
 	}
 
 	scenesLibPath := filepath.Join(root, "web", "lib", "scenes.ts")
@@ -1688,8 +1705,8 @@ func TestAcceptance_REQ033_shapeAnimationRoutines(t *testing.T) {
 		t.Fatalf("read %s: %v", shapeEditorPath, err)
 	}
 	shapeEd := string(seb)
-	if !strings.Contains(shapeEd, "SceneLightsCanvas") || !strings.Contains(shapeEd, "ShapeAnimationRoutineHost") {
-		t.Fatal("ShapeRoutineEditorClient must embed SceneLightsCanvas and ShapeAnimationRoutineHost (REQ-033 + REQ-027 viewport)")
+	if !strings.Contains(shapeEd, "SceneLightsCanvas") {
+		t.Fatal("ShapeRoutineEditorClient must embed SceneLightsCanvas (REQ-033 + REQ-027 viewport)")
 	}
 	if !strings.Contains(shapeEd, "ShapeRoutineDefinitionForm") || !strings.Contains(shapeEd, "shapeGhostsSourceRef") {
 		t.Fatal("ShapeRoutineEditorClient must use form authoring and editor-only shape ghost overlays (REQ-033)")
@@ -1710,8 +1727,8 @@ func TestAcceptance_REQ033_shapeAnimationRoutines(t *testing.T) {
 		t.Fatalf("read %s: %v", sceneDetailPath, err)
 	}
 	sceneDetail := string(sdb)
-	if !strings.Contains(sceneDetail, "ShapeAnimationRoutineHost") || !strings.Contains(sceneDetail, "ROUTINE_TYPE_SHAPE_ANIMATION") {
-		t.Fatal("SceneDetailClient must host ShapeAnimationRoutineHost when routine_type is shape_animation (REQ-021 + REQ-033)")
+	if !strings.Contains(sceneDetail, "ROUTINE_TYPE_SHAPE_ANIMATION") {
+		t.Fatal("SceneDetailClient must handle ROUTINE_TYPE_SHAPE_ANIMATION (REQ-021 + REQ-033)")
 	}
 
 	archPath := filepath.Join(root, "docs", "architecture.md")

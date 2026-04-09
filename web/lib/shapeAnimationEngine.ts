@@ -525,7 +525,7 @@ export function ghostShapesFromDefinition(
   }
 }
 
-/** Live positions during an active run (updated each tick by `ShapeAnimationRoutineHost`). */
+/** Live positions during an active run (server ticks in Go; optional client preview). */
 export function ghostOverlaysFromSim(sim: ShapeAnimationSim): GhostShapeOverlay[] {
   return overlaysFromSim(sim);
 }
