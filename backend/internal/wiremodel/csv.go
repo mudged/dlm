@@ -26,7 +26,7 @@ func (e *ParseError) Error() string { return e.Message }
 
 var wantHeader = []string{"id", "x", "y", "z"}
 
-// ParseLightsCSV reads a UTF-8 CSV with header id,x,y,z and validates rows per docs/architecture §3.6.
+// ParseLightsCSV reads a UTF-8 CSV with header id,x,y,z and validates rows per docs/agentic-development/architecture §3.6.
 func ParseLightsCSV(r io.Reader) ([]Light, error) {
 	cr := csv.NewReader(r)
 	cr.FieldsPerRecord = 4

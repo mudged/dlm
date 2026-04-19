@@ -8,12 +8,12 @@ import (
 	"testing"
 )
 
-// Tests trace to Gherkin in docs/acceptance_criteria.md (Given docs/requirements.md exists).
+// Tests trace to Gherkin in docs/agentic-development/acceptance_criteria.md (Given docs/agentic-development/requirements.md exists).
 
 func requirementsPath(t *testing.T) string {
 	t.Helper()
-	// internal/acceptance -> repo root is ../.. from here; docs at ../../docs
-	root := filepath.Join("..", "..", "..", "docs", "requirements.md")
+	// internal/acceptance -> repo root is ../.. from here; specs at ../../docs/agentic-development
+	root := filepath.Join("..", "..", "..", "docs", "agentic-development", "requirements.md")
 	abs, err := filepath.Abs(root)
 	if err != nil {
 		t.Fatal(err)
@@ -91,8 +91,8 @@ func TestAcceptance_REQ003_raspberryPiDeployment(t *testing.T) {
 		t.Fatal("REQ-003 must name Raspberry Pi 4 Model B (or equivalent)")
 	}
 	lower := strings.ToLower(doc)
-	if !strings.Contains(lower, "docs/architecture.md") {
-		t.Fatal("REQ-003 must require docs/architecture.md for deployment fit")
+	if !strings.Contains(lower, "docs/agentic-development/architecture.md") {
+		t.Fatal("REQ-003 must require docs/agentic-development/architecture.md for deployment fit")
 	}
 	if !strings.Contains(lower, "arm64") {
 		t.Fatal("REQ-003 must acknowledge ARM64")
@@ -114,7 +114,7 @@ func TestAcceptance_REQ004_singleBinaryNoDocker(t *testing.T) {
 	if !strings.Contains(lower, "docker") {
 		t.Fatal("REQ-004 must explicitly defer Docker / container packaging")
 	}
-	if !strings.Contains(lower, "docs/architecture.md") {
+	if !strings.Contains(lower, "docs/agentic-development/architecture.md") {
 		t.Fatal("REQ-004 must require architecture reconciliation (single-binary model)")
 	}
 }
@@ -409,8 +409,8 @@ func TestAcceptance_REQ011_restLightStateAPI(t *testing.T) {
 	if !strings.Contains(lower, "persist") && !(strings.Contains(lower, "authoritative") && strings.Contains(lower, "req-039")) {
 		t.Fatal("REQ-011 must require successful writes to be persisted or held as authoritative in-memory state (REQ-039)")
 	}
-	if !strings.Contains(lower, "docs/architecture.md") {
-		t.Fatal("REQ-011 must defer URL layout or defaults to docs/architecture.md")
+	if !strings.Contains(lower, "docs/agentic-development/architecture.md") {
+		t.Fatal("REQ-011 must defer URL layout or defaults to docs/agentic-development/architecture.md")
 	}
 	if !strings.Contains(lower, "req-001") || !strings.Contains(lower, "req-005") || !strings.Contains(lower, "req-006") {
 		t.Fatal("REQ-011 dependencies must reference REQ-001, REQ-005, and REQ-006")
@@ -647,8 +647,8 @@ func TestAcceptance_REQ016_cameraResetModelAndSceneViews(t *testing.T) {
 	if !strings.Contains(lower, "default") {
 		t.Fatal("REQ-016 must require restoring default camera / framing")
 	}
-	if !strings.Contains(lower, "docs/architecture.md") {
-		t.Fatal("REQ-016 must reference docs/architecture.md for default framing")
+	if !strings.Contains(lower, "docs/agentic-development/architecture.md") {
+		t.Fatal("REQ-016 must reference docs/agentic-development/architecture.md for default framing")
 	}
 	if !strings.Contains(lower, "client-side") || !strings.Contains(lower, "navigation") {
 		t.Fatal("REQ-016 must limit reset to client-side navigation")
@@ -1179,14 +1179,14 @@ func TestAcceptance_REQ030_pythonSceneRandomHexColour(t *testing.T) {
 		t.Fatal("pythonSceneApiCatalog must show scene.random_hex_colour() in template or snippet")
 	}
 
-	archPath := filepath.Join(root, "docs", "architecture.md")
+	archPath := filepath.Join(root, "docs", "agentic-development", "architecture.md")
 	archBytes, err := os.ReadFile(archPath)
 	if err != nil {
 		t.Fatalf("read %s: %v", archPath, err)
 	}
 	archStr := string(archBytes)
 	if !strings.Contains(archStr, "random_hex_colour") {
-		t.Fatal("docs/architecture.md must document scene.random_hex_colour (REQ-030)")
+		t.Fatal("docs/agentic-development/architecture.md must document scene.random_hex_colour (REQ-030)")
 	}
 }
 
@@ -1221,8 +1221,8 @@ func TestAcceptance_REQ029_highThroughputLightUpdates(t *testing.T) {
 	if !strings.Contains(lower, "batch") || !strings.Contains(lower, "bulk") {
 		t.Fatal("REQ-029 must mention batch or bulk write APIs")
 	}
-	if !strings.Contains(lower, "docs/architecture.md") {
-		t.Fatal("REQ-029 business rule 1 must require docs/architecture.md")
+	if !strings.Contains(lower, "docs/agentic-development/architecture.md") {
+		t.Fatal("REQ-029 business rule 1 must require docs/agentic-development/architecture.md")
 	}
 	if !strings.Contains(lower, "write path") {
 		t.Fatal("REQ-029 must require the architecture to describe the write path")
@@ -1265,7 +1265,7 @@ func TestAcceptance_REQ029_highThroughputLightUpdates(t *testing.T) {
 
 func TestAcceptance_REQ029_architectureDocumentsThroughputAndSSE(t *testing.T) {
 	root := repoRoot(t)
-	archPath := filepath.Join(root, "docs", "architecture.md")
+	archPath := filepath.Join(root, "docs", "agentic-development", "architecture.md")
 	archBytes, err := os.ReadFile(archPath)
 	if err != nil {
 		t.Fatalf("read %s: %v", archPath, err)
@@ -1298,17 +1298,20 @@ func TestAcceptance_REQ029_architectureDocumentsThroughputAndSSE(t *testing.T) {
 		t.Fatal("architecture §3.18 must mention HTTP/2 for reverse-proxy multiplexing")
 	}
 
-	readmePath := filepath.Join(root, "README.md")
-	readmeBytes, err := os.ReadFile(readmePath)
+	userDocPath := filepath.Join(root, "docs", "user", "advanced-setup.md")
+	userDocBytes, err := os.ReadFile(userDocPath)
 	if err != nil {
-		t.Fatalf("read %s: %v", readmePath, err)
+		t.Fatalf("read %s: %v", userDocPath, err)
 	}
-	readme := strings.ToLower(string(readmeBytes))
-	if !strings.Contains(readme, "req-029") {
-		t.Fatal("README must document REQ-029 (high-throughput light updates)")
+	userDoc := strings.ToLower(string(userDocBytes))
+	if strings.Contains(userDoc, "req-029") {
+		t.Fatal("docs/user/advanced-setup.md must not cite requirement IDs like REQ-029 (see AGENTS.md README policy)")
 	}
-	if !strings.Contains(readme, "/lights/events") {
-		t.Fatal("README must mention the /lights/events SSE URLs for integrators")
+	if !strings.Contains(userDoc, "/lights/events") {
+		t.Fatal("docs/user/advanced-setup.md must mention the /lights/events SSE URLs for integrators")
+	}
+	if !strings.Contains(userDoc, "batch") || !strings.Contains(userDoc, "sse") {
+		t.Fatal("docs/user/advanced-setup.md must mention batch APIs and SSE for high-throughput light updates")
 	}
 
 	for _, rel := range []string{
@@ -1443,7 +1446,7 @@ func TestAcceptance_REQ021_sceneRoutinesPythonAndSceneAPI(t *testing.T) {
 		t.Fatal("public/dlm-python-scene-worker.mjs (editor diagnostics) must still target /api/v1/scenes/... via runPythonAsync when present")
 	}
 
-	archPath := filepath.Join(root, "docs", "architecture.md")
+	archPath := filepath.Join(root, "docs", "agentic-development", "architecture.md")
 	archBytes, err := os.ReadFile(archPath)
 	if err != nil {
 		t.Fatalf("read %s: %v", archPath, err)
@@ -1451,19 +1454,19 @@ func TestAcceptance_REQ021_sceneRoutinesPythonAndSceneAPI(t *testing.T) {
 	archStr := string(archBytes)
 	archLower := strings.ToLower(archStr)
 	if !strings.Contains(archLower, "routineengine") || !strings.Contains(archLower, "python3") {
-		t.Fatal("docs/architecture.md must document internal/routineengine and supervised python3 for REQ-021")
+		t.Fatal("docs/agentic-development/architecture.md must document internal/routineengine and supervised python3 for REQ-021")
 	}
 	if !strings.Contains(archLower, "req-021") {
-		t.Fatal("docs/architecture.md must reference REQ-021 for scene routines")
+		t.Fatal("docs/agentic-development/architecture.md must reference REQ-021 for scene routines")
 	}
 	if !strings.Contains(archLower, "pyodide") {
-		t.Fatal("docs/architecture.md must mention optional Pyodide for editor-only use (REQ-022)")
+		t.Fatal("docs/agentic-development/architecture.md must mention optional Pyodide for editor-only use (REQ-022)")
 	}
 	if !strings.Contains(archStr, "time.Ticker") {
-		t.Fatal("docs/architecture.md must document time.Ticker for shape animation (REQ-021 / §3.17.2)")
+		t.Fatal("docs/agentic-development/architecture.md must document time.Ticker for shape animation (REQ-021 / §3.17.2)")
 	}
 	if !strings.Contains(archLower, "headless") || !strings.Contains(archLower, "observer") {
-		t.Fatal("docs/architecture.md must state headless execution and browser-as-observer (REQ-038)")
+		t.Fatal("docs/agentic-development/architecture.md must state headless execution and browser-as-observer (REQ-038)")
 	}
 }
 
@@ -1537,14 +1540,14 @@ func TestAcceptance_REQ032_threeSeededPythonSampleRoutines(t *testing.T) {
 		t.Fatal("store.go must implement SeedDefaultPythonRoutines for REQ-032 fresh install + factory reset")
 	}
 
-	archPath := filepath.Join(root, "docs", "architecture.md")
+	archPath := filepath.Join(root, "docs", "agentic-development", "architecture.md")
 	archBytes, err := os.ReadFile(archPath)
 	if err != nil {
 		t.Fatalf("read %s: %v", archPath, err)
 	}
 	archStr := string(archBytes)
 	if !strings.Contains(archStr, "pythonRoutineSamples.ts") || !strings.Contains(archStr, "REQ-032") {
-		t.Fatal("docs/architecture.md must name pythonRoutineSamples.ts and REQ-032 seed placement (business rule 7)")
+		t.Fatal("docs/agentic-development/architecture.md must name pythonRoutineSamples.ts and REQ-032 seed placement (business rule 7)")
 	}
 
 	catalogPath := filepath.Join(root, "web", "lib", "pythonSceneApiCatalog.ts")
@@ -1589,8 +1592,8 @@ func TestAcceptance_REQ033_shapeAnimationRoutines(t *testing.T) {
 	if !strings.Contains(lower, "m/s") && !strings.Contains(lower, "meter") {
 		t.Fatal("REQ-033 must document SI speed (m/s or meters per second)")
 	}
-	if !strings.Contains(lower, "docs/architecture.md") {
-		t.Fatal("REQ-033 rule 12 must require docs/architecture.md for persistence and simulation")
+	if !strings.Contains(lower, "docs/agentic-development/architecture.md") {
+		t.Fatal("REQ-033 rule 12 must require docs/agentic-development/architecture.md for persistence and simulation")
 	}
 	if !strings.Contains(lower, "shape") && !strings.Contains(lower, "animation") {
 		t.Fatal("REQ-033 must name shape animation in scope or rules")
@@ -1731,7 +1734,7 @@ func TestAcceptance_REQ033_shapeAnimationRoutines(t *testing.T) {
 		t.Fatal("SceneDetailClient must handle ROUTINE_TYPE_SHAPE_ANIMATION (REQ-021 + REQ-033)")
 	}
 
-	archPath := filepath.Join(root, "docs", "architecture.md")
+	archPath := filepath.Join(root, "docs", "agentic-development", "architecture.md")
 	ab, err := os.ReadFile(archPath)
 	if err != nil {
 		t.Fatalf("read %s: %v", archPath, err)
@@ -1739,9 +1742,9 @@ func TestAcceptance_REQ033_shapeAnimationRoutines(t *testing.T) {
 	arch := string(ab)
 	archLower := strings.ToLower(arch)
 	if !strings.Contains(archLower, "req-033") || !strings.Contains(archLower, "3.17.2") {
-		t.Fatal("docs/architecture.md must document REQ-033 and §3.17.2 shape animation")
+		t.Fatal("docs/agentic-development/architecture.md must document REQ-033 and §3.17.2 shape animation")
 	}
 	if !strings.Contains(archLower, "definition_json") {
-		t.Fatal("docs/architecture.md must document definition_json for shape routines (REQ-033)")
+		t.Fatal("docs/agentic-development/architecture.md must document definition_json for shape routines (REQ-033)")
 	}
 }
