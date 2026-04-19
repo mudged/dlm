@@ -25,6 +25,22 @@ export type StartRoutineResponse = {
   status: string;
 };
 
+/** POST …/start returns 409 with this shape when the scene already has a running routine (REQ-021). */
+export class SceneRoutineConflictError extends Error {
+  readonly code = "scene_routine_conflict" as const;
+
+  constructor(
+    message: string,
+    readonly sceneId: string,
+    readonly requestedRoutineId: string,
+    readonly existingRunId: string,
+    readonly existingRoutineId: string,
+  ) {
+    super(message);
+    this.name = "SceneRoutineConflictError";
+  }
+}
+
 /** Legacy persisted type only (migrated to python_scene_script on open). */
 export const ROUTINE_TYPE_RANDOM_COLOUR_ALL = "random_colour_cycle_all";
 export const ROUTINE_TYPE_PYTHON_SCENE_SCRIPT = "python_scene_script";
@@ -140,9 +156,27 @@ export async function startSceneRoutine(
     return res.json() as Promise<StartRoutineResponse>;
   }
   const j = (await res.json().catch(() => null)) as {
-    error?: { message?: string; code?: string };
+    error?: {
+      message?: string;
+      code?: string;
+      details?: { run_id?: string; routine_id?: string };
+    };
   };
-  throw new Error(j?.error?.message ?? `start routine failed (${res.status})`);
+  const err = j?.error;
+  if (
+    res.status === 409 &&
+    err?.code === "scene_routine_conflict" &&
+    err.details?.run_id
+  ) {
+    throw new SceneRoutineConflictError(
+      err.message ?? "a routine is already running on this scene",
+      sceneId,
+      routineId,
+      err.details.run_id,
+      err.details.routine_id ?? "",
+    );
+  }
+  throw new Error(err?.message ?? `start routine failed (${res.status})`);
 }
 
 export async function stopSceneRoutineRun(

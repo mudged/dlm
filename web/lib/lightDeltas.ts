@@ -44,6 +44,22 @@ export function applyModelLightDeltas<L extends Light>(lights: L[], deltas: Ligh
   });
 }
 
+type SceneLightDelta = NonNullable<LightsSSEMessage["deltas"]>[number];
+
+/** Resolve model id / light id (snake_case from Go; tolerate camelCase). */
+function sceneDeltaKeys(d: SceneLightDelta): { modelId: string; lightId: number } | null {
+  const raw = d as SceneLightDelta & {
+    modelId?: string;
+    lightId?: number;
+  };
+  const mid = raw.model_id ?? raw.modelId ?? "";
+  const lid = raw.light_id ?? raw.lightId;
+  if (!mid || typeof lid !== "number" || !Number.isFinite(lid)) {
+    return null;
+  }
+  return { modelId: mid, lightId: lid };
+}
+
 export function applySceneLightDeltas(
   items: SceneItem[],
   deltas: NonNullable<LightsSSEMessage["deltas"]>,
@@ -51,18 +67,18 @@ export function applySceneLightDeltas(
   if (deltas.length === 0) {
     return items;
   }
-  const byModel = new Map<string, Map<number, (typeof deltas)[number]>>();
+  const byModel = new Map<string, Map<number, SceneLightDelta>>();
   for (const d of deltas) {
-    const mid = d.model_id ?? "";
-    if (!mid) {
+    const keys = sceneDeltaKeys(d);
+    if (!keys) {
       continue;
     }
-    let m = byModel.get(mid);
+    let m = byModel.get(keys.modelId);
     if (!m) {
       m = new Map();
-      byModel.set(mid, m);
+      byModel.set(keys.modelId, m);
     }
-    m.set(d.light_id, d);
+    m.set(keys.lightId, d);
   }
   return items.map((it) => {
     const m = byModel.get(it.model_id);

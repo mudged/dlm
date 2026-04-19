@@ -77,4 +77,42 @@ describe("applySceneLightDeltas", () => {
     expect(out[0]?.lights[0]?.on).toBe(true);
     expect(out[0]?.lights[0]?.color).toBe("#0000ff");
   });
+
+  it("merges when SSE uses camelCase modelId/lightId keys", () => {
+    const out = applySceneLightDeltas(
+      [
+        {
+          model_id: "m1",
+          name: "A",
+          offset_x: 0,
+          offset_y: 0,
+          offset_z: 0,
+          lights: [
+            {
+              id: 0,
+              x: 0,
+              y: 0,
+              z: 0,
+              sx: 0,
+              sy: 0,
+              sz: 0,
+              on: false,
+              color: "#ffffff",
+              brightness_pct: 100,
+            },
+          ],
+        },
+      ],
+      [
+        {
+          modelId: "m1",
+          lightId: 0,
+          on: true,
+          color: "#00ff00",
+          brightness_pct: 50,
+        } as Parameters<typeof applySceneLightDeltas>[1][0],
+      ],
+    );
+    expect(out[0]?.lights[0]?.color).toBe("#00ff00");
+  });
 });

@@ -62,9 +62,13 @@ export default function RoutinesPage() {
           <Link href="/scenes" className="text-sky-700 underline dark:text-sky-300">
             scene
           </Link>{" "}
-          detail page. New installs include three sample Python routines. Python
-          runs with Pyodide; shape animations run in the browser and update lights
-          through the scene API.
+          detail page. New installs include three sample Python routines. Running
+          a routine uses the server&apos;s <code className="font-mono">routineengine</code>{" "}
+          (Python subprocess or in-process shape ticks calling the API over
+          loopback)—not the browser—so those{" "}
+          <code className="font-mono">PATCH</code> requests will not show in
+          DevTools. Pyodide in the app is for the editor (lint/format), not for
+          execution.
         </p>
         <p className="mt-4">
           <Button

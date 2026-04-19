@@ -1437,6 +1437,35 @@ Feature: Server-push visualization with incremental apply (REQ-041)
     When REQ-041 business rules 4 and 5 are read
     Then docs/architecture.md must name the chosen push transport URL or subscription pattern delta message schema and reconnect full resync behavior
     And the design must remain plausible on Raspberry Pi 4 constraints
+
+Feature: Routine run visibility and visualization resync (REQ-042)
+
+  Scenario: REQ-042 requires server-backed detection of an active routine on a scene
+    Parent requirement: REQ-042
+    Given docs/requirements.md defines REQ-021 REQ-027 and REQ-042
+    When requirement REQ-042 is read
+    Then the product must use server-reported routine run state to determine whether a scene has an active run
+    And the scene detail page and Python and shape routine authoring pages must reflect that state when a scene is selected
+
+  Scenario: REQ-042 requires live visualization to track authoritative light state
+    Parent requirement: REQ-042
+    Given docs/requirements.md defines REQ-012 REQ-039 REQ-041 and REQ-042
+    When REQ-042 business rules 1 and 2 are read
+    Then the three.js scene viewport on those pages must track current authoritative per-light state for the selected scene
+    And push and delta rules apply while the connection is healthy with documented fallback when push is unavailable
+
+  Scenario: REQ-042 requires resynchronization after navigating away and back while a run remains active
+    Parent requirement: REQ-042
+    Given docs/requirements.md defines REQ-042 REQ-021 and REQ-041
+    When REQ-042 business rule 3 is read
+    Then reopening the scene detail page or routine authoring page for a scene with an active server-side run must re-fetch run status and light state
+    And controls and labels must match the server and the viewport must show current lights not only state from the previous visit
+
+  Scenario: REQ-042 requires consistent UI when start conflicts with an already active run
+    Parent requirement: REQ-042
+    Given docs/requirements.md defines REQ-021 and REQ-042
+    When REQ-042 business rule 4 is read
+    Then if the user attempts to start a second run while one is active the UI must recover to a consistent state so the user can stop before retrying
 ```
 
 ---

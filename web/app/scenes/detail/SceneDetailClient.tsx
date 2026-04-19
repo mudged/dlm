@@ -25,13 +25,11 @@ import {
   removeSceneModel,
   type SceneDetail,
 } from "@/lib/scenes";
-import {
-  applySceneLightDeltas,
-  parseLightsSSEMessage,
-} from "@/lib/lightDeltas";
+import { useSceneLightsSSE } from "@/lib/useSceneLightsSSE";
 import {
   ROUTINE_TYPE_PYTHON_SCENE_SCRIPT,
   ROUTINE_TYPE_SHAPE_ANIMATION,
+  SceneRoutineConflictError,
   fetchRoutines,
   fetchSceneRoutineRuns,
   startSceneRoutine,
@@ -89,54 +87,11 @@ export function SceneDetailClient() {
     void load();
   }, [load]);
 
-  // REQ-041: SSE seq + deltas; avoid full-scene polling while EventSource is healthy (REQ-029).
-  const sceneSseSeqRef = useRef<number | null>(null);
+  // REQ-041 / REQ-029: EventSource subscribes to GET /api/v1/scenes/{id}/lights/events via useSceneLightsSSE.
   const sceneSseLiveRef = useRef(false);
-  useEffect(() => {
-    sceneSseSeqRef.current = null;
-    sceneSseLiveRef.current = false;
-  }, [id]);
-  useEffect(() => {
-    if (!id || typeof window === "undefined") {
-      return;
-    }
-    const es = new EventSource(
-      `/api/v1/scenes/${encodeURIComponent(id)}/lights/events`,
-    );
-    es.onopen = () => {
-      sceneSseLiveRef.current = true;
-    };
-    es.onmessage = (ev) => {
-      const msg = parseLightsSSEMessage(ev.data);
-      if (!msg) {
-        return;
-      }
-      const prev = sceneSseSeqRef.current;
-      if (prev !== null && msg.seq !== prev + 1) {
-        sceneSseSeqRef.current = msg.seq;
-        void load();
-        return;
-      }
-      sceneSseSeqRef.current = msg.seq;
-      const deltas = msg.deltas ?? [];
-      if (deltas.length === 0) {
-        return;
-      }
-      setScene((s) => {
-        if (!s || s.id !== id) {
-          return s;
-        }
-        return { ...s, items: applySceneLightDeltas(s.items, deltas) };
-      });
-    };
-    es.onerror = () => {
-      es.close();
-      sceneSseLiveRef.current = false;
-      sceneSseSeqRef.current = null;
-      void load();
-    };
-    return () => es.close();
-  }, [id, load]);
+  useSceneLightsSSE(id ?? undefined, setScene, load, {
+    sseLiveRef: sceneSseLiveRef,
+  });
 
   useEffect(() => {
     if (!id || routineRuns.length === 0) {
@@ -147,9 +102,7 @@ export function SceneDetailClient() {
         try {
           const runs = await fetchSceneRoutineRuns(id);
           setRoutineRuns(runs);
-          const shapeActive =
-            runs[0]?.routine_type === ROUTINE_TYPE_SHAPE_ANIMATION;
-          if (!shapeActive && !sceneSseLiveRef.current) {
+          if (!sceneSseLiveRef.current) {
             const s = await fetchScene(id);
             setScene(s);
           }
@@ -256,7 +209,16 @@ export function SceneDetailClient() {
       await startSceneRoutine(id, selectedRoutineId);
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Start routine failed");
+      if (e instanceof SceneRoutineConflictError) {
+        await load();
+        setError(
+          e.requestedRoutineId !== e.existingRoutineId
+            ? "Another routine is still running on this scene. Stop it before starting a different one."
+            : null,
+        );
+      } else {
+        setError(e instanceof Error ? e.message : "Start routine failed");
+      }
     } finally {
       setBusy(false);
     }
@@ -344,9 +306,14 @@ export function SceneDetailClient() {
           Routines
         </h2>
         <p className="text-xs text-slate-600 dark:text-slate-400">
-          Start a saved routine on this scene. Scripts run in your browser
-          (Pyodide) and change lights through the scene API. Default samples
-          include a ~1&nbsp;s random colour cycle and two geometry demos.
+          Start a saved routine on this scene. The server runs Python (
+          <code className="font-mono">python3</code>) or shape animation logic and
+          updates lights via loopback HTTP to this API—those{" "}
+          <code className="font-mono">PATCH</code> calls do not appear in the
+          browser Network tab. Use the EventStream view on{" "}
+          <code className="font-mono">lights/events</code> (or server logs) to
+          confirm updates. Default samples include a ~1&nbsp;s random colour
+          cycle and two geometry demos.
         </p>
         {routineRuns.length > 0 ? (
           <div className="flex flex-col gap-3">

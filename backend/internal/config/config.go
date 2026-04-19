@@ -37,12 +37,26 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("HTTP_READ_TIMEOUT_SEC and HTTP_WRITE_TIMEOUT_SEC must be >= 1")
 	}
 
+	// Cross-origin EventSource from `next dev` (:3000) to Go (:8080) requires CORS (see web/lib/sseUrl.ts).
+	// When unset, allow typical Next dev origins so SSE works without extra env; production embedded UI is same-origin and ignores this.
 	var origins []string
-	if raw := strings.TrimSpace(os.Getenv("CORS_ALLOWED_ORIGINS")); raw != "" {
+	raw := strings.TrimSpace(os.Getenv("CORS_ALLOWED_ORIGINS"))
+	switch {
+	case raw == "-":
+		origins = nil
+	case raw != "":
 		for _, p := range strings.Split(raw, ",") {
 			if o := strings.TrimSpace(p); o != "" {
 				origins = append(origins, o)
 			}
+		}
+	default:
+		// Common `next dev` ports; EventSource uses NEXT_PUBLIC_DLM_API_ORIGIN → Go (often :8080) cross-origin.
+		origins = []string{
+			"http://localhost:3000",
+			"http://127.0.0.1:3000",
+			"http://localhost:8000",
+			"http://127.0.0.1:8000",
 		}
 	}
 

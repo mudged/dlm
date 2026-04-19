@@ -39,6 +39,7 @@ import {
 } from "@/lib/pythonRoutineSamples";
 import {
   ROUTINE_TYPE_PYTHON_SCENE_SCRIPT,
+  SceneRoutineConflictError,
   createRoutine,
   deleteRoutine,
   fetchRoutine,
@@ -55,6 +56,7 @@ import {
   type SceneDetail,
   type SceneSummary,
 } from "@/lib/scenes";
+import { useSceneLightsSSE } from "@/lib/useSceneLightsSSE";
 
 const SceneLightsCanvas = dynamic(() => import("@/components/SceneLightsCanvas"), {
   ssr: false,
@@ -166,6 +168,35 @@ export default function PythonRoutineEditorClient() {
     };
   }, [targetSceneId]);
 
+  // REQ-027: show Stop when this room already has a run (e.g. started from Scenes).
+  useEffect(() => {
+    if (!targetSceneId) {
+      setActiveRun(null);
+      return;
+    }
+    let cancelled = false;
+    const syncRuns = async () => {
+      try {
+        const runs = await fetchSceneRoutineRuns(targetSceneId);
+        if (cancelled) return;
+        if (runs.length > 0) {
+          const run = runs[0]!;
+          setActiveRun({ run_id: run.id, scene_id: targetSceneId });
+        } else {
+          setActiveRun(null);
+        }
+      } catch {
+        /* ignore transient errors */
+      }
+    };
+    void syncRuns();
+    const t = window.setInterval(() => void syncRuns(), 1500);
+    return () => {
+      cancelled = true;
+      window.clearInterval(t);
+    };
+  }, [targetSceneId]);
+
   const refreshTargetScene = useCallback(async () => {
     if (!targetSceneId) {
       return;
@@ -177,6 +208,26 @@ export default function PythonRoutineEditorClient() {
       /* ignore */
     }
   }, [targetSceneId]);
+
+  const sceneSseLiveRef = useRef(false);
+  useSceneLightsSSE(
+    targetSceneId || undefined,
+    setTargetScene,
+    refreshTargetScene,
+    { enabled: Boolean(targetSceneId), sseLiveRef: sceneSseLiveRef },
+  );
+
+  useEffect(() => {
+    if (!targetSceneId || !activeRun) {
+      return;
+    }
+    const t = window.setInterval(() => {
+      if (!sceneSseLiveRef.current) {
+        void refreshTargetScene();
+      }
+    }, 1500);
+    return () => window.clearInterval(t);
+  }, [targetSceneId, activeRun, refreshTargetScene]);
 
   const onInsertSnippet = useCallback(
     (snippet: string, options?: { replaceAll?: boolean }) => {
@@ -321,7 +372,19 @@ export default function PythonRoutineEditorClient() {
       const res = await startSceneRoutine(targetSceneId, routineId);
       setActiveRun({ run_id: res.run_id, scene_id: res.scene_id });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Start failed");
+      if (e instanceof SceneRoutineConflictError) {
+        setActiveRun({
+          run_id: e.existingRunId,
+          scene_id: e.sceneId,
+        });
+        setError(
+          e.requestedRoutineId !== e.existingRoutineId
+            ? "Another routine is still running on that scene. Stop it, then start this one."
+            : null,
+        );
+      } else {
+        setError(e instanceof Error ? e.message : "Start failed");
+      }
     } finally {
       setBusy(false);
     }

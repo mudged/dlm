@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -293,7 +294,10 @@ func (a *apiDeps) postSceneRoutineStart(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if a.engine != nil {
-		if err := a.engine.Start(r.Context(), runID, sceneID, routineID); err != nil {
+		// Long-running routines must not use r.Context(): it is canceled when this
+		// handler returns, which would kill python3 (exec.CommandContext) and shape
+		// workers immediately—no light updates, run row stuck "running".
+		if err := a.engine.Start(context.Background(), runID, sceneID, routineID); err != nil {
 			_ = a.store.StopRoutineRun(r.Context(), sceneID, runID)
 			writeAPIError(w, http.StatusServiceUnavailable, "routine_engine_failed", err.Error())
 			return

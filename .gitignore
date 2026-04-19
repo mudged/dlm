@@ -41,6 +41,7 @@ go.work.sum
 web/node_modules/
 web/.next/
 web/out/
+web/tsconfig.tsbuildinfo
 
 # Local SQLite (default DLM_DATA_DIR)
 data/

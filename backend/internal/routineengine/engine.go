@@ -186,7 +186,7 @@ func (e *Engine) startShape(parent context.Context, runID, sceneID, definitionJS
 					res, err := e.store.PatchSceneLightsBatch(ctx, sceneID, updates)
 					if err != nil {
 						e.log.Warn("routineengine shape batch", "err", err, "run_id", runID)
-					} else if res != nil && res.UpdatedCount > 0 && e.notify != nil {
+					} else if res != nil && !res.UnchangedAll && len(res.States) > 0 && e.notify != nil {
 						e.notify(ctx, sceneID, res.States)
 					}
 				}

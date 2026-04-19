@@ -72,8 +72,10 @@ export default function RoutineNewClient() {
           New routine
         </h1>
         <p className="mt-1 max-w-xl text-sm text-slate-600 dark:text-slate-400">
-          Choose Python (script in Pyodide) or shape animation (declarative definition,
-          runs in the browser). Name your routine, then edit it on the next page.
+          Choose Python (script stored on the server) or shape animation
+          (declarative JSON). Execution runs on the server when you start a
+          routine from a scene—not in the browser. Name your routine, then edit
+          it on the next page.
         </p>
       </header>
 

@@ -82,16 +82,23 @@ func (h *RevisionHub) emit(key string, deltas []LightsSSEDelta) {
 		deltas = []LightsSSEDelta{}
 	}
 	h.mu.Lock()
-	defer h.mu.Unlock()
 	h.seq[key]++
 	v := h.seq[key]
 	msg := LightsSSEPayload{Seq: v, Deltas: deltas}
-	for _, ch := range h.subs[key] {
-		select {
-		case ch <- msg:
-		default:
-		}
+	subs := append([]chan LightsSSEPayload(nil), h.subs[key]...)
+	h.mu.Unlock()
+
+	// Do not hold mu while sending: unsubscribe needs the lock; blocking on ch would deadlock.
+	// Blocking send (not select/default): non-blocking sends dropped deltas when the SSE
+	// writer lagged, leaving clients on the initial seq with empty deltas forever.
+	for _, ch := range subs {
+		emitSendPayload(ch, msg)
 	}
+}
+
+func emitSendPayload(ch chan LightsSSEPayload, msg LightsSSEPayload) {
+	defer func() { recover() }() // send after unsubscribe closes ch
+	ch <- msg
 }
 
 // NotifyModelLightsChanged bumps the model topic and every scene that contains this model.
@@ -153,7 +160,8 @@ func (h *RevisionHub) NotifyAfterSceneLightPatch(ctx context.Context, st *store.
 }
 
 func (h *RevisionHub) subscribe(key string) (lastSeq uint64, ch <-chan LightsSSEPayload, unsub func()) {
-	c := make(chan LightsSSEPayload, 32)
+	// Large buffer smooths bursts while emit uses blocking sends so delivery is not dropped.
+	c := make(chan LightsSSEPayload, 1024)
 	h.mu.Lock()
 	lastSeq = h.seq[key]
 	h.subs[key] = append(h.subs[key], c)

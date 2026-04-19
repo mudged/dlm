@@ -69,7 +69,13 @@ GOOS=linux GOARCH=arm64 go build -o bin/dlm-arm64 ./cmd/server
    npm run dev
    ```
 
-   Open [http://localhost:3000](http://localhost:3000). Set `CORS_ALLOWED_ORIGINS=http://localhost:3000` on the Go process if you call the API from the browser without rewrites.
+   Open [http://localhost:3000](http://localhost:3000) (or `http://127.0.0.1:3000`; **`next dev -p 8000`** is also allowed). The Go server **defaults** `CORS_ALLOWED_ORIGINS` to common Next dev origins (`:3000` and `:8000`, localhost + 127.0.0.1) so **Server-Sent Events** (`EventSource` to the Go port, usually `:8080`) work; `fetch` to `/api/v1` still uses Next rewrites. If the Go API is **not** on `http://127.0.0.1:8080`, set **`DLM_BACKEND_ORIGIN`** and **`NEXT_PUBLIC_DLM_API_ORIGIN`** to the same base URL in `web/.env.local` and restart Next (see `web/.env.local.example`). Override with `CORS_ALLOWED_ORIGINS` for other page origins; set `CORS_ALLOWED_ORIGINS=-` to disable CORS headers entirely.
+
+### If the 3D view does not update during a routine (dev)
+
+1. In DevTools → **Network**, select the **`events`** row whose **Request URL** ends with **`/api/v1/scenes/<scene-id>/lights/events`** (not a generic `events` name from another tool). Open **EventStream**: the **data** lines must look like `{"seq":1,"deltas":[...]}`. If you see something like `{"key":"started"}` only, that is **not** this app’s light stream — pick the request whose URL contains **`/lights/events`**.
+2. **Go on a non-default port:** set **`NEXT_PUBLIC_DLM_API_ORIGIN`** and **`DLM_BACKEND_ORIGIN`** to that base URL (see `web/.env.local.example`).
+3. **Embedded UI (`go run` only):** rebuild the web export after UI changes: `cd web && npm run release:sync`, then restart the Go server.
 
 ## Commands
 

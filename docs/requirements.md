@@ -1778,3 +1778,42 @@ As a user watching **live** **light** **state** **in** **a** **three.js** **view
 - **Whether** **multiple** **tabs** **share** **one** **push** **connection** **or** **one** **per** **tab** **(**architecture** **/** **REQ-029** **alignment**)**.
 
 ---
+
+## REQ-042 — Routine run visibility and visualization resync when returning to a scene
+
+| Field | Value |
+|-------|-------|
+| **ID** | REQ-042 |
+| **Title** | Routine run visibility and visualization resync when returning to a scene |
+| **Priority** | Must |
+| **Actor(s)** | End user |
+
+**User story**
+
+As a user managing **routines** on a **scene**, I want the **web UI** to **show** whether **that** **scene** **already** **has** **an** **active** **routine** **run**, and I want the **three.js** **visualization** **on** **the** **scene** **detail** **page** **and** **on** **routine** **authoring** **pages** **(Python** **and** **shape**)** **to** **reflect** **the** **current** **authoritative** **light** **state**. If I **navigate** **away** **and** **later** **return** **while** **a** **run** **is** **still** **active** **on** **the** **server**, I want **the** **UI** **and** **viewport** **to** **resynchronize** **with** **backend** **state** **so** **I** **do** **not** **see** **a** **stale** **“not** **running”** **or** **frozen** **lights** **view**.
+
+**Scope**
+
+- In scope: **Client** **behavior** **for** **(**a**)** **detecting** **and** **displaying** **whether** **a** **given** **scene** **has** **a** **running** **routine** **(**per** **documented** **HTTP** **API** **for** **listing** **runs** **on** **a** **scene**, **REQ-021**)** **on** **the** **scene** **detail** **page** **and** **on** **the** **unified** **routine** **authoring** **surfaces** **(REQ-027**)** **;** **(**b**)** **keeping** **the** **live** **scene** **three.js** **view** **aligned** **with** **authoritative** **per-light** **state** **for** **that** **scene** **while** **the** **page** **is** **open** **(REQ-041** **push** **+** **deltas**, **REQ-039**)** **;** **(**c**)** **after** **a** **full** **navigation** **away** **and** **back** **(**or** **equivalent** **route** **remount**)** **while** **a** **routine** **run** **remains** **active**, **re-loading** **run** **status** **from** **the** **server** **and** **re-establishing** **live** **visualization** **so** **the** **displayed** **run** **state** **and** **light** **colours**/**brightness**/**on-off** **match** **the** **server** **(**initial** **scene** **fetch**, **re-subscription** **to** **push**, **or** **architecture-documented** **equivalent** **—** **including** **degraded** **polling** **when** **push** **is** **unhealthy** **per** **REQ-041** **responsive** **notes**)**.
+- Out of scope: **New** **routine** **types** **;** **persisting** **UI-only** **flags** **that** **override** **server** **truth** **;** **cross-tab** **synchronization** **beyond** **what** **the** **server** **and** **documented** **APIs** **already** **provide**.
+
+**Business rules**
+
+1. **Run** **detection** **:** **The** **product** **MUST** **use** **server-reported** **routine** **run** **state** **(**e.g.** **GET** **`/api/v1/scenes/{id}/routines/runs`** **or** **documented** **successor** **per** **REQ-021**/**architecture**)** **to** **determine** **whether** **a** **scene** **has** **an** **active** **run** **and** **which** **routine** **it** **is**, **and** **MUST** **reflect** **that** **in** **the** **UI** **on** **the** **scene** **detail** **page** **and** **on** **Python** **and** **shape** **routine** **pages** **when** **a** **scene** **is** **selected** **(**so** **the** **user** **can** **start**, **stop**, **or** **see** **that** **a** **run** **is** **already** **in** **progress**)**.
+2. **Live** **visualization** **:** **On** **those** **same** **pages**, **the** **three.js** **scene** **viewport** **MUST** **track** **current** **authoritative** **light** **state** **for** **the** **selected** **scene** **(**REQ-012**,** **REQ-015**,** **REQ-039**)** **using** **the** **push** **and** **delta** **rules** **in** **REQ-041** **while** **the** **connection** **is** **healthy** **;** **when** **push** **is** **not** **available**, **the** **product** **MUST** **fall** **back** **to** **documented** **slower** **refresh** **or** **full** **resync** **so** **the** **view** **does** **not** **remain** **indefinitely** **stale** **(**REQ-041** **responsive** **notes**)**.
+3. **Return** **navigation** **:** **When** **the** **user** **opens** **again** **the** **scene** **detail** **page** **or** **a** **routine** **authoring** **page** **for** **a** **scene** **that** **still** **has** **an** **active** **run** **on** **the** **server**, **the** **UI** **MUST** **re-fetch** **(**or** **equivalent**)** **run** **status** **and** **scene**/**light** **state** **so** **that** **(**a**)** **running** **vs** **stopped** **controls** **and** **labels** **match** **the** **server**, **and** **(**b**)** **the** **viewport** **shows** **the** **current** **lights** **(**not** **only** **the** **state** **from** **the** **previous** **visit**)**.
+4. **Conflict** **on** **start** **:** **If** **the** **user** **attempts** **to** **start** **a** **second** **run** **while** **one** **is** **already** **active** **(**HTTP** **409** **per** **REQ-021**)** **,** **the** **UI** **MUST** **recover** **to** **a** **consistent** **state** **(**e.g.** **surface** **the** **existing** **run** **id** **from** **the** **error** **payload** **or** **refresh** **runs** **)** **so** **the** **user** **can** **stop** **before** **retrying** **—** **documented** **in** **architecture** **if** **multiple** **patterns** **are** **allowed**.
+
+**Responsive / UX notes** *(when UI is involved)*
+
+- Mobile / Tablet / Desktop: **Run** **status** **(**running** **/** **not** **)** **and** **stop** **remain** **discoverable** **per** **REQ-002** **;** **no** **hover-only** **dependency** **for** **knowing** **a** **scene** **is** **busy**.
+
+**Dependencies**
+
+- REQ-002, REQ-015, REQ-021, REQ-027, REQ-038, REQ-039, REQ-041
+
+**Open questions**
+
+- None
+
+---

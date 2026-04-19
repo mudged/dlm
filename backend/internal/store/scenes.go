@@ -1271,10 +1271,10 @@ func (s *Store) patchSceneLightsBatchTx(ctx context.Context, tx *sql.Tx, sceneID
 			return nil, err
 		}
 		prevOn := prevSt.On
-		color := prevSt.Color
+		prevColor := prevSt.Color
 		brightness := prevSt.BrightnessPct
 		on := prevOn
-		prevColor := strings.ToLower(strings.TrimSpace(color))
+		color := prevColor
 		prevBr := brightness
 		if u.Patch.On != nil {
 			on = *u.Patch.On
@@ -1293,6 +1293,7 @@ func (s *Store) patchSceneLightsBatchTx(ctx context.Context, tx *sql.Tx, sceneID
 			brightness = *u.Patch.BrightnessPct
 		}
 
+		// Compare using the same color representation SetTriple uses (storage vs validated merge).
 		rowUnchanged := lightstate.EquivLightStateTriple(prevOn, prevColor, prevBr, on, color, brightness)
 		if rowUnchanged {
 			// no memory write

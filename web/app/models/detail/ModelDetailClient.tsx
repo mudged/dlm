@@ -26,6 +26,7 @@ import {
   parseLightsSSEMessage,
 } from "@/lib/lightDeltas";
 import type { Light, ModelDetail } from "@/lib/models";
+import { eventSourceUrl } from "@/lib/sseUrl";
 
 const PAGE_SIZE_OPTIONS = [25, 50, 100] as const;
 
@@ -454,7 +455,9 @@ export function ModelDetailClient() {
     if (!id || typeof window === "undefined") {
       return;
     }
-    const url = `/api/v1/models/${encodeURIComponent(id)}/lights/events`;
+    const url = eventSourceUrl(
+      `/api/v1/models/${encodeURIComponent(id)}/lights/events`,
+    );
     const es = new EventSource(url);
     es.onmessage = (ev) => {
       const msg = parseLightsSSEMessage(ev.data);
