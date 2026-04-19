@@ -9,8 +9,8 @@ The verifier appends rows to the table below. **Do not remove or reorder columns
 ## Column definitions
 
 - **ID**: Stable trace row ID (e.g. TRC-001), unique in this file.
-- **Functional Requirement**: REQ ID plus short title, matching `docs/requirements.md`.
+- **Functional Requirement**: REQ ID plus short title, matching `docs/agentic-development/requirements.md`.
 - **System Component**: Primary code location or service name implementing the requirement.
-- **Test Case Number**: Automated test identifier or stable name that maps to a scenario in `docs/acceptance_criteria.md`.
+- **Test Case Number**: Automated test identifier or stable name that maps to a scenario in `docs/agentic-development/acceptance_criteria.md`.
 - **Status**: `Pending` until verification; then `Pass` or `Fail`.
 - **Verification**: Brief evidence (e.g. test run id, date, manual check note).

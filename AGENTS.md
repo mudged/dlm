@@ -2,6 +2,15 @@
 
 This repo uses a **spec-driven, multi-agent** process. Agent definitions live under [`.github/agents/`](.github/agents/). Each definition is a Markdown file with YAML frontmatter (`name`, `description`) and instructions the AI should follow when acting in that role.
 
+## Documentation folders
+
+| Path | Audience |
+|------|-----------|
+| **[`docs/user/`](docs/user/)** | People installing or running the app (start with **[README.md](README.md)**). |
+| **`docs/agentic-development/`** | Specifications, acceptance criteria, architecture, traceability matrix, and templates used by agents and contributors. |
+
+See **[`docs/README.md`](docs/README.md)** for an overview.
+
 ## Product context
 
 - **Backend:** Go (HTTP API/service).
@@ -12,28 +21,28 @@ This repo uses a **spec-driven, multi-agent** process. Agent definitions live un
 
 | Order | Agent file | Cursor invoke | Responsibility |
 |------:|------------|---------------|----------------|
-| 1 | [`requirements.agent.md`](.github/agents/requirements.agent.md) | `@requirements` | Turn intent into `docs/requirements.md` and `docs/acceptance_criteria.md` (templates under `docs/templates/`). |
-| 2 | [`architect.agent.md`](.github/agents/architect.agent.md) | `@architect` | Produce `docs/architecture.md` with Go + Next.js structure, Pi deployment notes, and **Mermaid** diagrams for boundaries and flows. |
+| 1 | [`requirements.agent.md`](.github/agents/requirements.agent.md) | `@requirements` | Turn intent into `docs/agentic-development/requirements.md` and `docs/agentic-development/acceptance_criteria.md` (templates under `docs/agentic-development/templates/`). |
+| 2 | [`architect.agent.md`](.github/agents/architect.agent.md) | `@architect` | Produce `docs/agentic-development/architecture.md` with Go + Next.js structure, Pi deployment notes, and **Mermaid** diagrams for boundaries and flows. |
 | 3 | [`implementor.agent.md`](.github/agents/implementor.agent.md) | `@implementor` | Implement code and tests from architecture + Gherkin; TDD aligned with acceptance criteria. |
-| 4 | [`verifier.agent.md`](.github/agents/verifier.agent.md) | `@verifier` | Audit vs architecture, run tests, report gaps or update `docs/traceability_matrix.md` on success. |
+| 4 | [`verifier.agent.md`](.github/agents/verifier.agent.md) | `@verifier` | Audit vs architecture, run tests, report gaps or update `docs/agentic-development/traceability_matrix.md` on success. |
 
 **Handoffs:** Each agent’s instructions end with who to invoke next; follow that chain unless you intentionally revisit an earlier stage.
 
 ## Local build and run (REQ-008)
 
-**REQ-008** (see `docs/requirements.md`) requires a **single documented command** (script or Makefile target) that builds the Next static export for embed and starts the Go server. **`README.md` MUST stay aligned** with that command. When changing how the app is built or launched locally, update **requirements/architecture** if behavior changes, then **README**, then implementation.
+**REQ-008** (see `docs/agentic-development/requirements.md`) requires a **single documented command** (script or Makefile target) that builds the Next static export for embed and starts the Go server. **`README.md` MUST stay aligned** with that command: the hobbyist-facing README documents **`./scripts/run.sh`** from the repo root as the primary way to install and run (see **[README.md](README.md)**). **`README.md` MUST NOT** mention internal requirement IDs (`REQ-*`), traceability, or other identifiers that only exist under **`docs/agentic-development/`**—those belong in specifications and **[docs/user/advanced-setup.md](docs/user/advanced-setup.md)** for contributors. When changing how the app is built or launched locally, update **requirements/architecture** if behavior changes, then **README** (keep it approachable), **docs/user/advanced-setup.md** (technical detail), then implementation.
 
 ## Supporting documents (expected paths)
 
 Create and maintain these as the process runs (templates define shape):
 
-- `docs/requirements.md`
-- `docs/acceptance_criteria.md`
-- `docs/architecture.md`
-- `docs/traceability_matrix.md` (after successful verification)
-- `docs/templates/requirement-template.md`
-- `docs/templates/acceptance-criteria-template.md`
-- `docs/templates/traceability-matrix-template.md`
+- `docs/agentic-development/requirements.md`
+- `docs/agentic-development/acceptance_criteria.md`
+- `docs/agentic-development/architecture.md`
+- `docs/agentic-development/traceability_matrix.md` (after successful verification)
+- `docs/agentic-development/templates/requirement-template.md`
+- `docs/agentic-development/templates/acceptance-criteria-template.md`
+- `docs/agentic-development/templates/traceability-matrix-template.md`
 
 If a template file is missing, add it before strict compliance with “MUST use template” steps is possible.
 
