@@ -95,6 +95,45 @@ Open [http://localhost:3000](http://localhost:3000) (or `http://127.0.0.1:3000`)
 | Download Go deps | `cd backend && go mod download` |
 | Install frontend deps | `cd web && npm ci` |
 
+## Continuous integration (GitHub Actions)
+
+Workflows live under `.github/workflows/`.
+
+| Workflow file | When it runs | Purpose |
+|---------------|----------------|---------|
+| `ci.yml` | Pull requests and pushes to `main` | **Web lint and test** (`npm ci`, `npm run lint`, `npm run test` in `web/`), **Backend tests** (`go test ./...` in `backend/`), and **Build Go binary with embedded UI** (`npm ci` + `npm run release:sync` in `web/`, then `go build` in `backend/`). |
+
+### Branch protection (maintainers)
+
+Configure the repository’s branch protection rule for **`main`** to **require status checks** before merge. Add these **exact** job names so all three gates must pass:
+
+1. **Web lint and test**
+2. **Backend tests**
+3. **Build Go binary with embedded UI**
+
+Exact labels appear in GitHub under the PR checks UI; they match the `name:` field on each job in `ci.yml`.
+
+### Release binaries (maintainers)
+
+The **`release.yml`** workflow runs when you push a tag matching **`v*`** (for example **`v1.2.3`**). It:
+
+1. Builds the Next.js static export and copies it into **`backend/internal/webdist/`** (`npm ci` + `npm run release:sync` in `web/`).
+2. Cross-compiles **`CGO_ENABLED=0`** binaries into **`dist/`**:
+   - **`dlm_linux_arm64`** — Raspberry Pi / Linux ARM64
+   - **`dlm_linux_amd64`** — Linux x86_64
+   - **`dlm_windows_amd64.exe`** — Windows x86_64
+
+3. Creates or updates the **GitHub Release** for that tag and attaches those three files (`softprops/action-gh-release`).
+
+Cut a release locally:
+
+```bash
+git tag vX.Y.Z
+git push origin vX.Y.Z
+```
+
+Then confirm the workflow run succeeded and assets appear on the Releases page.
+
 ## High-throughput light updates (API-oriented)
 
 - Prefer **batch** routes when updating many lights (`PATCH /api/v1/models/{id}/lights/state/batch` and scene bulk routes in `docs/architecture.md`) instead of one HTTP request per light.
