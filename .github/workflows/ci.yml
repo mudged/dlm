@@ -1,5 +1,5 @@
 # CI: required checks for pull requests and pushes to main.
-# Branch protection should require both jobs (names below) to pass before merge.
+# Branch protection should require all jobs (names below) to pass before merge.
 name: CI
 
 on:
