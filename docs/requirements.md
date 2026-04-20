@@ -140,7 +140,7 @@ As an operator, I want the product **packaged as a single executable file** per 
 - In scope: Defining that the **primary deliverable** for a given OS/CPU (e.g. **linux/arm64** for Pi) is **one executable file** that fulfills the product’s runtime obligations (HTTP API and serving the UI per REQ-001), subject to how `docs/architecture.md` realizes that shape **within a single process/binary**.
 - In scope: Explicitly deferring **Docker / OCI images**, **Dockerfile**-mandated workflows, and **docker-compose** (or equivalent) as **required** distribution or runtime packaging **at this stage**.
 - Out of scope: Operators voluntarily using containers locally; third-party tools not shipped as part of the product.
-- Out of scope: **Microsoft Windows** and **macOS** executable variants unless added by a later requirement (initial focus remains Pi / **linux/arm64** unless extended).
+- Out of scope: **macOS** executable variants unless added by a later requirement (Windows and multiple Linux architectures are covered by REQ-043).
 
 **Business rules**
 
@@ -1817,3 +1817,158 @@ As a user managing **routines** on a **scene**, I want the **web UI** to **show*
 - None
 
 ---
+
+## REQ-043 — Cross-platform single Go executables (Windows, Linux, Linux ARM)
+
+| Field | Value |
+|-------|-------|
+| **ID** | REQ-043 |
+| **Title** | Cross-platform single Go executables (Windows, Linux, Linux ARM) |
+| **Priority** | Must |
+| **Actor(s)** | Operator / maintainer; integrator |
+
+**User story**
+
+As an operator, I want the product built and published as **one Go executable per major deployment platform** (Windows amd64, Linux amd64, and Linux ARM—for example arm64 for Raspberry Pi), so that I can download the right binary for my machine without building from source.
+
+**Scope**
+
+- In scope: At least three release targets: **windows/amd64**, **linux/amd64**, and **linux/arm64** (GOOS/GOARCH names or equivalent in documentation). Each target is one application binary that satisfies REQ-004 for that platform. Raspberry Pi 4 aligns with **linux/arm64** (REQ-003). **linux/arm** (v7) MAY be added in architecture if needed; the MUST set is the three above.
+- In scope: `docs/architecture.md` MUST list the canonical GOOS/GOARCH pairs, artifact naming (file name per target), and how the static UI is embedded in the same binary.
+- Out of scope: macOS binaries unless a later requirement adds them; OS-specific code signing or notarization policies unless captured later.
+
+**Business rules**
+
+1. For each canonical release target, distribution MUST be exactly one product executable file per logical version without requiring a separate Node.js runtime or second application daemon for routine operation, consistent with REQ-004.
+2. Built artifacts for each listed target MUST be produced by documented automated means (REQ-044) so operators need not invoke `go` cross-compilation manually for standard downloads.
+3. `docs/architecture.md` MUST cross-reference REQ-003 (Pi) and REQ-004 so deployment notes name which published artifact maps to Raspberry Pi (linux/arm64) and which to desktop Windows or Linux.
+
+**Responsive / UX notes** *(when UI is involved)*
+
+- N/A at requirements level; README coverage is REQ-046.
+
+**Dependencies**
+
+- REQ-003, REQ-004
+
+**Open questions**
+
+- Whether **linux/arm** (v7) must be first-class alongside arm64 for older Pi boards.
+
+---
+
+## REQ-044 — GitHub Actions: CI (build + test gates) and release binaries
+
+| Field | Value |
+|-------|-------|
+| **ID** | REQ-044 |
+| **Title** | GitHub Actions: CI (build + test gates) and release binaries |
+| **Priority** | Must |
+| **Actor(s)** | Maintainer; operator |
+
+**User story**
+
+As a maintainer, I want **continuous integration in GitHub Actions** that **builds and tests** the repository on **pull requests**, with those checks **required before merge**, and I want a **release workflow** that **tags** the repository and **publishes downloadable binaries** for each supported platform.
+
+**Scope**
+
+- In scope: GitHub Actions workflows that (a) run an automated **build and test** pipeline (Go tests, frontend lint/tests as defined for the repo) on pull requests (and typically on pushes to main); (b) align with repository policy so **merge to the protected branch is blocked** until those checks pass (branch protection / required status checks); (c) provide a **release process** (manual or tag-triggered per architecture) that creates a Git tag, associates release metadata as appropriate, and uploads per-platform binaries from REQ-043 as GitHub Release assets (or documented equivalent download surface).
+- Out of scope: Exact GitHub billing or org policy beyond documenting that required checks must pass before merge; third-party release hosts other than GitHub Releases unless architecture adds mirrors.
+
+**Business rules**
+
+1. **PR gate:** Submitting or merging must not proceed per repo policy when the documented CI build-and-test workflow fails (for example `go test ./...`, `npm run lint`, `npm test`, or equivalents aligned with project scripts).
+2. **Release:** A documented procedure (in `docs/advanced-setup.md` or `README.md` as appropriate for audience) MUST describe how to cut a version (tag) such that publish artifacts for windows/amd64, linux/amd64, and linux/arm64 attach to that release.
+3. `docs/architecture.md` MUST summarize CI and release (workflow names, trigger events, artifact outputs) after the architect pass.
+
+**Responsive / UX notes** *(when UI is involved)*
+
+- N/A
+
+**Dependencies**
+
+- REQ-043
+
+**Open questions**
+
+- Semantic versioning vs calendar tags for release names.
+
+---
+
+## REQ-045 — Deployment runtime prerequisites (Python for custom routines only)
+
+| Field | Value |
+|-------|-------|
+| **ID** | REQ-045 |
+| **Title** | Deployment runtime prerequisites (Python for custom routines only) |
+| **Priority** | Must |
+| **Actor(s)** | Operator / maintainer |
+
+**User story**
+
+As an operator, I want to run the published application on the deployment machine **without installing extra prerequisites** beyond what the OS already provides, **except** that **Python** must be available when I use **custom user-authored Python routines** (REQ-021, REQ-022).
+
+**Scope**
+
+- In scope: Baseline operation (HTTP API, embedded web UI, SQLite or documented storage, shape animation routines that do not execute user Python) must not require installing Node.js, a separate Go toolchain, or other product-specific runtimes on the deployment host beyond the single binary (REQ-004, REQ-043).
+- In scope: **Python** (interpreter meeting a minimum version documented in `docs/architecture.md`) is the only explicit additional runtime dependency for features that execute **user Python** routine code (REQ-021, REQ-022). Operators who do not use Python routines may omit Python only if architecture documents lazy behavior (attempt to run Python when missing must fail clearly).
+- Out of scope: Bundling a full Python distribution inside the Go binary unless architecture chooses to do so; Windows Store vs python.org install paths.
+
+**Business rules**
+
+1. README and `docs/architecture.md` MUST state clearly that Python routine execution requires Python on the PATH (or documented absolute path policy) and that no other product runtime besides the binary is needed for non-Python features.
+2. Operators following README download instructions (REQ-046) must be able to start the server and open the UI without running `npm install` or `go build` on the Pi or deployment host.
+
+**Responsive / UX notes** *(when UI is involved)*
+
+- N/A
+
+**Dependencies**
+
+- REQ-004, REQ-021, REQ-022, REQ-043
+
+**Open questions**
+
+- Minimum supported Python 3.x minor (for example 3.11 vs 3.12).
+
+---
+
+## REQ-046 — README: binary download, Raspberry Pi focus, systemd, updates
+
+| Field | Value |
+|-------|-------|
+| **ID** | REQ-046 |
+| **Title** | README: binary download, Raspberry Pi focus, systemd, updates |
+| **Priority** | Must |
+| **Actor(s)** | Operator / maintainer |
+
+**User story**
+
+As an operator deploying on a Raspberry Pi, I want **README.md** to tell me how to **download and run** the released binary, how to **install it as a service** that starts on boot, and how to **update** the application, without relying only on contributor-only documentation.
+
+**Scope**
+
+- In scope: README.md (hobbyist-facing) must include sections or clear subsections that cover (a) where to download official release binaries (GitHub Releases or documented URL) and which artifact to pick for Raspberry Pi (linux/arm64) vs other platforms (REQ-043); (b) minimal commands to copy the binary, make it executable (Unix), or run it on Windows/Linux on a fresh machine (REQ-045); (c) Raspberry Pi–focused instructions for running as a **systemd** service (`.service` unit example or equivalent) that starts after reboot; (d) how to update (replace binary, restart service, preserve `data/` or documented DB path per architecture) when a new release is published.
+- Out of scope: Duplicating every contributor command from `docs/advanced-setup.md`; REQ-046 demands operator-facing coverage in README.md while advanced detail may stay in `docs/advanced-setup.md`.
+
+**Business rules**
+
+1. README.md MUST lead with or prominently feature **download release binary and run** for operators, including Pi (linux/arm64) and at least a pointer to Windows and desktop Linux artifacts.
+2. README.md MUST include a worked **systemd** example (unit file snippet or copy-paste block) for Raspberry Pi OS or Debian-based Pi OS that runs the single binary with documented working directory and environment as needed.
+3. README.md MUST explain updating in plain steps: fetch new release, stop service, replace binary, start service, and notes on database or file compatibility per architecture.
+4. README.md MUST NOT introduce internal spec identifiers (`REQ-*`) per repository contributor policy—describe behavior in plain language (those remain in `docs/`).
+
+**Responsive / UX notes** *(when UI is involved)*
+
+- N/A
+
+**Dependencies**
+
+- REQ-003, REQ-043, REQ-044, REQ-045
+
+**Open questions**
+
+- Whether README also shows `./scripts/run.sh` for developers as a secondary path; recommended: keep both developer and binary-operator flows discoverable.
+
+---
+
