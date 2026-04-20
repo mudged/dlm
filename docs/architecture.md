@@ -1,8 +1,8 @@
 # Architecture
 
-This document defines technical structure and deployment for the product described in `docs/requirements.md` (**REQ-001–REQ-042**).
+This document defines technical structure and deployment for the product described in `docs/requirements.md` (**REQ-001–REQ-046**).
 
-**REQ-034–REQ-042:** **REQ-034** (faint boundary cuboid + **`margin_m`**, **same** **line** **style** **as** **inter-light** **wire** **§4.7**) **is** **covered** **in** **§3.12–§3.13**, **§4.7**, **§4.9**. **REQ-035–REQ-039** add **WLED devices**, **1:1 assignment**, **Devices UI** (**§4.15**), **routine** **automation** **on** **the** **Go** **service** **(**`internal/routineengine`** **—** **§3.16–§3.17.2**)** **,** **in-memory light state** (**§3.3**, **§3.9**, **§3.21**), **and** **WLED push** (**§3.19–§3.20**). **REQ-040** (**routine** **stop** **≤** **2** **s**)** **is** **§3.17**/**§3.17.2**. **REQ-041** (**SSE**/**WebSocket-class** **push** **+** **delta** **apply** **for** **shipped** **three.js** **viewports**)** **is** **§3.18**, **§4.3**, **§4.7**, **§4.9**, **§4.13**, **§4.14**. **REQ-042** (**detect** **active** **routine** **per** **scene** **;** **resync** **run** **chrome** **+** **three.js** **after** **navigation** **return**)** **is** **§4.16**, **§4.9**/**§4.13**/**§4.14** **(mount** **effects**)** **,** **§3.2** **(**`GET …/routines/runs`**, **`POST …/start` **409** **details**)** **,** **§8.23**. **The** **browser** **is** **an** **observer** **of** **authoritative** **server** **state** **for** **routines** **(**REQ-038** **,** **REQ-021**)** **—** **it** **must** **not** **host** **production** **routine** **loops** **.
+**REQ-034–REQ-042:** **REQ-034** (faint boundary cuboid + **`margin_m`**, **same** **line** **style** **as** **inter-light** **wire** **§4.7**) **is** **covered** **in** **§3.12–§3.13**, **§4.7**, **§4.9**. **REQ-035–REQ-039** add **WLED devices**, **1:1 assignment**, **Devices UI** (**§4.15**), **routine** **automation** **on** **the** **Go** **service** **(**`internal/routineengine`** **—** **§3.16–§3.17.2**)** **,** **in-memory light state** (**§3.3**, **§3.9**, **§3.21**), **and** **WLED push** (**§3.19–§3.20**). **REQ-040** (**routine** **stop** **≤** **2** **s**)** **is** **§3.17**/**§3.17.2**. **REQ-041** (**SSE**/**WebSocket-class** **push** **+** **delta** **apply** **for** **shipped** **three.js** **viewports**)** **is** **§3.18**, **§4.3**, **§4.7**, **§4.9**, **§4.13**, **§4.14**. **REQ-042** (**detect** **active** **routine** **per** **scene** **;** **resync** **run** **chrome** **+** **three.js** **after** **navigation** **return**)** **is** **§4.16**, **§4.9**/**§4.13**/**§4.14** **(mount** **effects**)** **,** **§3.2** **(**`GET …/routines/runs`**, **`POST …/start` **409** **details**)** **,** **§8.23**. **REQ-043–REQ-046** **(**multi-platform** **release** **binaries**, **GitHub** **Actions** **CI** **+** **release**, **deployment** **runtime** **prerequisites**, **README** **operator** **instructions**)** **are** **§3.4**, **§6.6–§6.12**.
 
 **REQ-001–REQ-033** **(summary):** **Go** **+** **embedded** **Next** **static** **export** **;** **models**/**scenes**/**routines** **in** **SQLite** **;** **per-light** **output** **state** **in** **`LightStateStore`** **(**not** **SQLite** **—** **REQ-039**)** **;** **three.js** **views** **§4.7**/**§4.9** **with** **server-push** **observer** **path** **per** **REQ-041** **;** **scene** **spatial** **API** **§3.15** **;** **routine** **automation** **(**Python** **+** **shape** **animation**)** **runs** **inside** **`internal/routineengine`** **:** **supervised** **`python3`** **with** **loopback** **HTTP** **to** **§3.15** **(**§3.17**)** **and** **Go** **`time.Ticker`** **shape** **simulation** **(**§3.17.2**)** **;** **runs** **progress** **headless** **without** **any** **browser** **(**REQ-038**)** **;** **Next.js** **MAY** **use** **Pyodide** **or** **similar** **only** **for** **REQ-022** **editor** **lint**/**format** **—** **not** **for** **applying** **routine** **effects** **;** **stop** **latency** **REQ-040** **§3.17**/**§3.17.2** **.
 
@@ -66,6 +66,10 @@ This meets REQ-004 rule 1 (**no separate Node.js runtime** in the distribution) 
 | REQ-040 | **§3.17**, **§3.17.2**: **after** **accepted** **`POST …/stop`**, **no** **further** **routine-originated** **state** **mutations** **within** **≤** **2** **SI** **s** **(**`python3`** **child** **`SIGTERM`**/**`SIGKILL`** **after** **`T_force`**, **shape** **`time.Ticker`** **cancelled** **before** **next** **tick**)** **. |
 | REQ-041 | **§3.18** **(**SSE** **event** **schema** **with** **`deltas[]`**)**, **§4.3**, **§4.7**, **§4.9**, **§4.13**, **§4.14**: **shipped** **web** **three.js** **uses** **`EventSource`** **(**or** **WebSocket** **if** **documented**)** **as** **primary** **observer** **after** **initial** **`GET`** **;** **merge** **deltas** **into** **existing** **meshes** **without** **full** **graph** **rebuild** **on** **each** **message** **when** **only** **subset** **changed** **(**§3.19**)**. |
 | REQ-042 | **§4.16**, **§4.9**, **§4.13**, **§4.14**, **§3.2** **(**runs** **list** **+** **start** **409** **payload**)** **,** **§8.23**: **UI** **reflects** **server** **truth** **for** **whether** **a** **scene** **has** **a** **`running`** **routine** **(**`GET …/routines/runs`**)** **;** **on** **mount** **/** **scene** **selection** **/** **return** **navigation**, **re-fetch** **scene** **+** **runs** **and** **re-subscribe** **`EventSource`** **`…/lights/events`** **(**REQ-041**)** **;** **dev** **`next`** **:** **`web/lib/sseUrl.ts`** **direct** **origin** **+** **`CORS_ALLOWED_ORIGINS`** **;** **409** **`scene_routine_conflict`** **:** **parse** **`error.details.run_id`** **/** **`routine_id`** **to** **restore** **Stop** **(**`web/lib/routines.ts` **—** **`SceneRoutineConflictError`** **)** **. |
+| REQ-043 | **§3.4**, **§6.6**: **three** **canonical** **release** **targets** **(**`GOOS`/`GOARCH`**)** **windows/amd64**, **linux/amd64**, **linux/arm64** **(**Pi** **4** **class**)** **;** **one** **executable** **per** **pair** **with** **embedded** **static** **UI** **and** **documented** **artifact** **names**. |
+| REQ-044 | **§6.7**, **§6.8**, **§6.11**, **§7** **(**CI** **diagram**)** **:** **GitHub** **Actions** **CI** **(**build** **+** **lint/test**)** **on** **PRs** **;** **branch** **protection** **requires** **green** **checks** **before** **merge** **;** **release** **workflow** **tags** **and** **uploads** **assets** **to** **GitHub** **Releases**. |
+| REQ-045 | **§6.9**: **deployment** **host** **needs** **only** **the** **product** **binary** **for** **baseline** **(**API** **+** **embedded** **UI** **+** **SQLite** **+** **shape** **animation**)** **;** **`python3`** **on** **`PATH`** **(**≥** **documented** **minimum** **—** **implementor** **picks** **e.g.** **3.11+**)** **required** **only** **when** **running** **user** **Python** **scene** **routines** **(**§3.17**)** **. |
+| REQ-046 | **§6.10**, **§3.7**: **`README.md`** **(**operator** **audience**)** **—** **download** **from** **GitHub** **Releases**, **Pi** **(**linux/arm64**)** **artifact** **choice**, **`systemd`** **unit** **example**, **update** **(**replace** **binary**, **restart** **service**, **preserve** **`DLM_DATA_DIR`**/**DB**)** **;** **no** **`REQ-*`** **identifiers** **in** **README** **body** **;** **developer** **`./scripts/run.sh`** **remains** **secondary** **(**REQ-008**)** **per** **`docs/advanced-setup.md`** **cross-links** **as** **needed**. |
 
 **Assumed Pi context:** Raspberry Pi 4 Model B, **64-bit OS**, **ARM64** userspace. **2–8 GB RAM** — with **no Node** at runtime, **4 GB** is practical for modest traffic; **off-device** `next export` builds recommended.
 
@@ -200,13 +204,35 @@ dlm/
 - **Upload naming:** **`name`** is a **required** multipart field (non-empty after trim); **not** inferred from filename alone.
 - **Empty model:** **Allowed**: CSV may contain **only** the header row (**0** lights); still creates a model row with **light_count = 0**.
 
-### 3.4 Build and cross-compile (release artifact)
+### 3.4 Build and cross-compile (release artifacts, REQ-043)
 
-- **Release binary (Pi):** After the **web static bundle** is copied into **`internal/webdist/`** (or embed path the implementor chooses):
+**Single embed step (all targets):** Every release build MUST bake the **same** Next.js **static export** into **`backend/internal/webdist/`** (or the package **`go:embed`** reads from—see §3.5) **before** invoking **`go build`**. The canonical sequence matches **`npm run release:sync`** from **`web/`** (same contract as **`scripts/run.sh`** / REQ-008), normally executed **once per CI job** **before** cross-compilation so **all** **`GOOS`/`GOARCH`** binaries embed **identical** UI bytes.
 
-  `GOOS=linux GOARCH=arm64 go build -o bin/dlm-arm64 ./cmd/server`
+**Canonical release targets** (REQ-043) — normative **`GOOS`/`GOARCH`** triple:
 
-- **Single file:** The **only** shipped application binary is **`dlm-arm64`** (name per project convention). **systemd** may wrap it with **`ExecStart=/usr/local/bin/dlm`** etc.; that is allowed per REQ-004.
+| GOOS | GOARCH | Primary use | Example artifact basename |
+|------|--------|-------------|---------------------------|
+| `linux` | `arm64` | Raspberry Pi 4 / 5 (64-bit OS), **REQ-003** | `dlm_linux_arm64` |
+| `linux` | `amd64` | Desktop / server Linux x86_64 | `dlm_linux_amd64` |
+| `windows` | `amd64` | Windows 10/11 x86_64 | `dlm_windows_amd64.exe` |
+
+**Optional:** **`linux/arm`** (**ARMv7**) MAY be added later for older 32-bit Pi OS installs; it is **not** part of the REQ-043 MUST set unless requirements change.
+
+**Cross-compile commands** (run from **`backend/`** after **`internal/webdist/`** is populated):
+
+```bash
+GOOS=linux  GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o ../dist/dlm_linux_arm64 ./cmd/server
+GOOS=linux  GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o ../dist/dlm_linux_amd64 ./cmd/server
+GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o ../dist/dlm_windows_amd64.exe ./cmd/server
+```
+
+**Notes:**
+
+- **Pure Go SQLite** (**`modernc.org/sqlite`**) avoids **cgo** so **linux/arm64** builds can run on **`ubuntu-latest`** runners without an ARM builder for **most** configurations; if the implementation enables **cgo**, architecture MUST document **Zig/`musl`** or **native** **ARM64** runners for Pi artifacts.
+- **`-trimpath`** and **`-ldflags="-s -w"`** reduce binary size (recommended for Pi SD cards); exact flags are implementor choice.
+- **Single file per platform:** Each row is **one** executable per REQ-004; **systemd** / **Windows Service** wrappers are **OS infrastructure**, not a second product binary.
+
+**CI packaging:** Built files SHOULD be uploaded from a **`dist/`** (or **`artifacts/`**) directory at repo root with **stable** names above so **GitHub Releases** **assets** are predictable (§6.8).
 
 ### 3.5 Embedding static UI
 
@@ -1182,6 +1208,77 @@ flowchart TB
 - **Rendering** **runs** **in** **the** **user’s** **browser**, **not** **on** **the** **Pi** **CPU** **unless** **the** **user** **opens** **the** **UI** **on** **the** **Pi** **itself** **(Chromium** **on** **Raspberry** **Pi** **OS)**. **REQ-028** **emissive** **spheres** **use** **standard** **three.js** **material** **paths** **(**`MeshStandardMaterial`** **+** **`emissive`**/**`emissiveIntensity`**) **that** **are** **broadly** **supported** **on** **WebGL2**; **avoid** **depending** **on** **optional** **post-processing** **bloom** **for** **baseline** **compliance**.
 - **Integrated** **GPUs** **(Pi** **browser,** **older** **laptops):** **Keep** **fragment** **work** **bounded** **—** **≤** **1000** **instanced** **spheres** **+** **tone** **mapping** **as** **in** **§4.7** **is** **the** **expected** **ceiling**; **profile** **if** **adding** **extra** **passes**.
 
+### 6.6 Canonical release targets and artifact map (REQ-043)
+
+- **Windows desktop / laptop:** Download **`dlm_windows_amd64.exe`** (**`GOOS=windows`** **`GOARCH=amd64`**).
+- **Linux x86_64:** Download **`dlm_linux_amd64`** (**`GOOS=linux`** **`GOARCH=amd64`**).
+- **Raspberry Pi (64-bit OS, REQ-003):** Download **`dlm_linux_arm64`** (**`GOOS=linux`** **`GOARCH=arm64`**). **Do not** deploy the **amd64** binary on Pi **64-bit** images.
+
+### 6.7 GitHub Actions — continuous integration (REQ-044)
+
+- **Workflow** **(example name:** **`ci.yml`**)** **:** **Triggers** **`pull_request`** **and** **`push`** **to** **`main`** **(**or** **default** **branch**)** **. **Jobs** **SHOULD** **run** **in** **parallel** **where** **possible:**
+  - **Frontend:** **`cd web && npm ci && npm run lint && npm test`** (**Node** **LTS** **—** **match** **README**/**AGENTS** **pin** **).
+  - **Backend:** **`cd backend && go test ./...`** **(**and** **`go vet`** **/** **`staticcheck`** **if** **adopted**)** **on** **`ubuntu-latest`** **with** **Go** **toolchain** **matching** **`go.mod`** **(**≥** **1.25** **per** **module** **)** **.
+- **Optional** **integration** **job:** **After** **`release:sync`** **equivalent** **(**web** **build** **+** **copy** **to** **`internal/webdist/`**)**, **`go build ./cmd/server`** **on** **`ubuntu-latest`** **proves** **the** **embed** **tree** **and** **compile** **succeed** **(**fast** **feedback** **before** **release** **cross-builds**)** **.
+
+### 6.8 GitHub Actions — release and downloadable binaries (REQ-044)
+
+- **Workflow** **(example name:** **`release.yml`**)** **:** **Triggered** **by** **`push`** **of** **tags** **`v*`** **(**semantic** **version** **recommended** **—** **e.g.** **`v1.2.3`**)** **or** **manual** **`workflow_dispatch`** **with** **input** **tag** **(**team** **policy**)** **.
+- **Steps** **(normative** **shape**)** **:**
+  1. **Checkout** **tag**.
+  2. **`npm ci`** **+** **`npm run release:sync`** **(**or** **equivalent**)** **to** **populate** **`backend/internal/webdist/`** **.
+  3. **Build** **three** **binaries** **per** **§3.4** **into** **`dist/`** **or** **artifact** **staging** **.
+  4. **Attach** **those** **files** **to** **a** **GitHub** **Release** **for** **the** **tag** **(**`softprops/action-gh-release`** **or** **`gh release upload`** **—** **implementor** **choice**)** **.
+
+### 6.9 Deployment runtime prerequisites (REQ-045)
+
+- **Always:** **No** **Node.js**, **no** **npm**, **no** **Go** **toolchain** **on** **the** **Pi** **/** **production** **host** **for** **running** **the** **shipped** **product** **—** **only** **the** **downloaded** **executable** **(**plus** **OS** **facilities** **like** **`systemd`** **)** **.
+- **`python3`:** Required on the server only when the operator runs user-authored Python scene routines (**§3.17**). The routine engine resolves the interpreter via **`PATH`**, overridden by **`DLM_PYTHON3`** when set (**existing** **`internal/routineengine`** **convention**). **Minimum** **CPython** **version** **(**e.g.** **3.11+**)** **must** **be** **stated** **in** **`README`** **(**operator** **)** **and** **this** **section** **after** **implementor** **verification** **.
+- **Shape** **animation** **only** **(**no** **Python** **routines** **started**)** **:** **May** **run** **without** **`python3`** **installed** **(**lazy** **failure** **with** **clear** **error** **when** **starting** **a** **Python** **routine** **—** **REQ-045** **open** **question** **resolved** **here**)** **.
+
+### 6.10 README operator documentation (REQ-046)
+
+- **`README.md`** (**hobbyist-facing**) **must** lead with or prominently feature: download the correct release asset (**§6.6**) from GitHub Releases, **`chmod +x`** on Unix, run the binary (**default** **`HTTP_LISTEN`** unset → **`:8080`** per **`internal/config`**).
+- **Raspberry Pi:** Worked **`systemd`** unit (**`User=`**, **`WorkingDirectory=`**, **`Environment=DLM_DATA_DIR=…`**, **`ExecStart=`** full path to **`dlm_linux_arm64`**, **`Restart=on-failure`**) so the service starts on boot.
+- **Updating** **:** **Stop** **service** **→** **replace** **binary** **→** **`systemctl daemon-reload`** **(**if** **unit** **changed**)** **→** **start** **service** **→** **note** **SQLite** **file** **under** **`DLM_DATA_DIR`** **/** **`DLM_DB_PATH`** **(**preserve** **across** **updates** **unless** **release** **notes** **require** **migration**)** **.
+- **`README`** **must** **not** **mention** **`REQ-*`** **IDs** **(**repository** **policy**)** **;** **developer** **build** **via** **`./scripts/run.sh`** **stays** **documented** **as** **the** **local** **contributor** **path** **(**REQ-008**)** **with** **detail** **in** **`docs/advanced-setup.md`** **if** **needed** **.
+
+### 6.11 Branch protection and merge gates (REQ-044)
+
+- **Repository** **settings** **:** **Require** **status** **checks** **from** **the** **CI** **workflow** **(**§6.7**)** **to** **pass** **before** **merging** **PRs** **into** **`main`** **(**exact** **check** **names** **depend** **on** **workflow** **job** **IDs** **—** **implementor** **lists** **them** **in** **`docs/advanced-setup.md`** **for** **maintainers**)** **.
+- **Release** **cut** **procedure** **(**maintainers**)** **:** **Document** **in** **`docs/advanced-setup.md`** **:** **tag** **`vX.Y.Z`**, **push** **tag**, **verify** **release** **workflow** **uploads** **§3.4** **artifacts** **.
+
+### 6.12 CI/CD automation boundary (REQ-044)
+
+```mermaid
+flowchart LR
+  subgraph dev["Developer"]
+    PR[Pull request]
+  end
+
+  subgraph gh["GitHub"]
+    GHA[GitHub Actions CI]
+    Protect[Branch protection required checks]
+    Rel[Release workflow on tag v*]
+    Assets[GitHub Release assets]
+  end
+
+  subgraph build["Build steps"]
+    Web[npm ci + lint + test]
+    GoTest[go test ./...]
+    Sync[npm run release:sync]
+    XBuild[go build windows amd64 linux amd64 linux arm64]
+  end
+
+  PR --> GHA
+  GHA --> Web
+  GHA --> GoTest
+  GHA --> Protect
+  Rel --> Sync
+  Sync --> XBuild
+  XBuild --> Assets
+```
+
 ---
 
 ## 7. System boundaries (flowchart)
@@ -1995,7 +2092,11 @@ sequenceDiagram
 | REQ-040 | §3.17 (Python `T_force`, stop latency), §3.17.2 (ticker halt) |
 | REQ-041 | §3.2 (`…/lights/events` schema), §3.18 (normative observer + Mermaid), §3.19 (delta equivalence), §4.3, §4.7, §4.9, §4.13, §4.14, §8.19 |
 | REQ-042 | §3.2 (`GET …/routines/runs`, `POST …/start` 409 + `error.details`), §4.9, §4.13, §4.14, §4.16, §8.23; `web/lib/useSceneLightsSSE.ts`, `web/lib/sseUrl.ts`, `SceneRoutineConflictError` in `web/lib/routines.ts` |
+| REQ-043 | §1, §3.4, §6.6 |
+| REQ-044 | §1, §6.7–§6.8, §6.11–§6.12 |
+| REQ-045 | §1, §6.9, §3.17 (Python child), §9 |
+| REQ-046 | §1, §6.10, §3.7 |
 
 ---
 
-**Next step:** Invoke **`@implementor`** **then** **`@verifier`** **to** **keep** **code** **aligned** **with** **this** **document** **(**including** **`internal/routineengine`** **(**supervised** **`python3`** **+** **shape** **`time.Ticker`**, **REQ-040** **stop** **semantics**)** **,** **`internal/lightstate`** **with** **SSE** **`deltas[]`** **(**REQ-041**)** **,** **REQ-042** **resync** **on** **navigation** **(**§4.16**, **§8.23**)** **,** **`internal/devices`** **/** **WLED** **push** **§3.20**, **`shape_animation`** **`definition_json`** **validation**, **routes**, **`/routines/shape/[id]`**, **`/devices`**, **two-kind** **create** **flow**, **and** **Next.js** **`EventSource`** **+** **incremental** **three.js** **apply** **—** **browser** **start**/**stop** **+** **observe** **only** **)** **and** **update** **`docs/traceability_matrix.md`**. **REQ-022** **editor** **remains** **CodeMirror** **6** **(**§4.13**)** **;** **production** **Python** **runs** **in** **OS** **`python3`** **(**§3.17**)** **. **REQ-023** **is** **the** **§4.12** **two-kind** **create** **path**. **REQ-027** **applies** **to** **§4.13** **and** **§4.14** **unified** **panels** **(**§8.18**, **§8.22**)**. **`web/lib/shapeAnimationEngine.ts`** **MAY** **mirror** **Go** **simulation** **for** **authoring** **ghost** **preview** **only** **(**§3.17.2**)** **;** **production** **shape** **ticks** **run** **in** **Go** **.**
+**Next step:** Invoke **`@implementor`** **then** **`@verifier`** **to** **keep** **code** **aligned** **with** **this** **document** **(**including** **GitHub** **Actions** **(**§6.7–§6.8**, **§6.11–§6.12**)** **:** **PR** **CI**, **branch** **protection**, **release** **`v*`** **workflow**, **three** **`GOOS`/`GOARCH`** **artifacts** **§3.4**, **`README`** **operator** **coverage** **§6.10** **`—`** **REQ-043–REQ-046** **)** **;** **existing** **`internal/routineengine`** **(**supervised** **`python3`** **/** **`DLM_PYTHON3`** **+** **shape** **`time.Ticker`**, **REQ-040** **stop** **)** **;** **`internal/lightstate`** **SSE** **`deltas[]`** **(**REQ-041**)** **;** **REQ-042** **resync** **(**§4.16**, **§8.23**)** **;** **`internal/devices`** **/** **WLED** **§3.20** **;** **`shape_animation`** **`definition_json`** **;** **routes** **/** **two-kind** **create** **;** **Next.js** **`EventSource`** **+** **incremental** **three.js** **apply** **—** **browser** **start**/**stop** **+** **observe** **only** **)** **and** **update** **`docs/traceability_matrix.md`**. **REQ-022** **editor** **CodeMirror** **6** **(**§4.13**)** **;** **production** **Python** **in** **OS** **`python3`** **(**§3.17**)** **. **`web/lib/shapeAnimationEngine.ts`** **MAY** **mirror** **Go** **for** **ghost** **preview** **only** **(**§3.17.2**)** **.**
