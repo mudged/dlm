@@ -1,0 +1,34 @@
+# Dependencies
+web/node_modules/
+
+# Next.js build/cache
+web/.next/
+web/out/
+web/tsconfig.tsbuildinfo
+
+# Go embed output (static export from Next)
+backend/internal/webdist/dist/
+
+# Compiled binaries & plugins
+backend/bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Tests & coverage
+*.test
+*.out
+coverage.*
+*.coverprofile
+profile.cov
+
+# Local data & secrets
+data/
+.env
+.env.*
+
+# Go workspace (optional local)
+go.work
+go.work.sum
