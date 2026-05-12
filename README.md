@@ -32,7 +32,7 @@ On first start with an **empty** database, the server inserts three models — *
 
 ## Prerequisites
 
-- **Go 1.22+** (module `go` directive); the devcontainer uses **`mcr.microsoft.com/devcontainers/go:1-bookworm`** (current **Go 1.x** on rebuild).
+- **Go ≥ 1.25** (`backend/go.mod` declares `go 1.25.0`; the Cursor Cloud/devcontainer setup installs Go 1.25.x).
 - **Node.js** — **Active LTS** in the devcontainer (`features/node` with **`version: "lts"`**); only needed to build `web/` (not on the Pi at runtime).
 - **Python 3** (optional) — install on the **host** (e.g. Raspberry Pi) and ensure `python3` is on `PATH` if you run **Python scene routines**; see `docs/architecture.md` §3.17 and §6.2. Other features do not require it.
 
@@ -92,8 +92,9 @@ GOOS=linux GOARCH=arm64 go build -o bin/dlm-arm64 ./cmd/server
 - **Batch writes:** Prefer `PATCH /api/v1/models/{id}/lights/state/batch` and scene bulk routes (`PATCH /api/v1/scenes/{id}/lights/state/...` per `docs/architecture.md` §3.15) instead of one HTTP request per light when updating hundreds of lights frequently.
 - **Connections:** Reuse HTTP keep-alive (default for Go’s server and typical browser `fetch` pools). For many parallel requests from a rich client, terminating **TLS + HTTP/2** in a reverse proxy while proxying HTTP/1.1 to the Go process is recommended in §3.18.
 - **Push notifications:** After light state commits, the server emits **Server-Sent Events** on:
-  - `GET /api/v1/models/{id}/lights/events` — `text/event-stream`, JSON lines `{"seq":<uint64>}`; subscribers typically `GET` the model or `GET …/lights/state` again to load authoritative state.
-  - `GET /api/v1/scenes/{id}/lights/events` — same shape for scene-composed views.
+  - `GET /api/v1/models/{id}/lights/events` — `text/event-stream`, JSON `data:` lines `{ "seq": <uint64>, "deltas": [ { "light_id", "on"?, "color"?, "brightness_pct"? }, … ] }` (`model_id` is implicit from the URL).
+  - `GET /api/v1/scenes/{id}/lights/events` — `text/event-stream`, JSON `data:` lines `{ "seq": <uint64>, "deltas": [ { "model_id", "light_id", "on"?, "color"?, "brightness_pct"? }, … ] }`.
+  - Clients merge `deltas[]` incrementally per **REQ-041** (`docs/requirements.md`) and `docs/architecture.md` §3.18; resync with `GET …/lights/state`, `GET /api/v1/models/{id}`, or `GET /api/v1/scenes/{id}` only on a sequence gap or `EventSource.onerror`.
 - **Long-lived SSE:** If connections drop behind a proxy, set a generous **`HTTP_WRITE_TIMEOUT_SEC`** (or `0` for no write deadline in Go) when debugging; the handler extends write deadlines periodically.
 
 ## License
