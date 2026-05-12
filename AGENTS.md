@@ -21,7 +21,7 @@ This repo uses a **spec-driven, multi-agent** process. Agent definitions live un
 
 ## Local build and run (REQ-008)
 
-**REQ-008** (see `docs/requirements.md`) requires a **single documented command** (script or Makefile target) that builds the Next static export for embed and starts the Go server. **`README.md` MUST stay aligned** with that command. When changing how the app is built or launched locally, update **requirements/architecture** if behavior changes, then **README**, then implementation.
+**REQ-008** (see `docs/requirements.md`) requires a **single documented command** (script or Makefile target) that builds the Next static export for embed and starts the Go server. **`README.md` MUST stay aligned** with that command: the hobbyist-facing README documents **`./scripts/run.sh`** from the repo root as the primary way to install and run (see **[README.md](README.md)**). **`README.md` MUST NOT** mention internal requirement IDs (`REQ-*`), traceability, or other identifiers that only exist in `docs/`—those belong in specifications and **[docs/advanced-setup.md](docs/advanced-setup.md)** for contributors. When changing how the app is built or launched locally, update **requirements/architecture** if behavior changes, then **README** (keep it approachable), **docs/advanced-setup.md** (technical detail), then implementation.
 
 ## Supporting documents (expected paths)
 

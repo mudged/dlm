@@ -1466,6 +1466,69 @@ Feature: Routine run visibility and visualization resync (REQ-042)
     Given docs/requirements.md defines REQ-021 and REQ-042
     When REQ-042 business rule 4 is read
     Then if the user attempts to start a second run while one is active the UI must recover to a consistent state so the user can stop before retrying
+
+Feature: Cross-platform release binaries (REQ-043)
+
+  Scenario: REQ-043 mandates windows amd64 linux amd64 and linux arm64 targets
+    Parent requirement: REQ-043
+    Given docs/requirements.md defines REQ-043
+    When requirement REQ-043 is read
+    Then the product must define at least windows amd64 linux amd64 and linux arm64 as canonical GOOS GOARCH release targets
+    And each target must be exactly one application executable consistent with REQ-004
+
+  Scenario: REQ-043 ties Pi deployment to linux arm64 artifact
+    Parent requirement: REQ-043
+    Given docs/requirements.md defines REQ-003 and REQ-043
+    When the REQ-043 business rules are read
+    Then docs architecture must explain which published artifact operators use for Raspberry Pi 4 class deployment as linux arm64
+
+Feature: GitHub Actions CI and release (REQ-044)
+
+  Scenario: REQ-044 requires PR CI build and test gate
+    Parent requirement: REQ-044
+    Given docs/requirements.md defines REQ-044
+    When requirement REQ-044 is read
+    Then GitHub Actions must run build and test stages on pull requests
+    And merge policy must treat failing CI as blocking per repository rules
+
+  Scenario: REQ-044 requires tagged release with per-platform binaries
+    Parent requirement: REQ-044
+    Given docs/requirements.md defines REQ-043 and REQ-044
+    When the REQ-044 scope and business rules are read
+    Then a documented release process must create a repository tag and attach downloadable binaries for each supported platform
+    And docs architecture must summarize workflow names triggers and artifact outputs after the architect pass
+
+Feature: Runtime prerequisites on deployment host (REQ-045)
+
+  Scenario: REQ-045 allows running without Node or Go on the deployment machine
+    Parent requirement: REQ-045
+    Given docs/requirements.md defines REQ-045
+    When requirement REQ-045 is read
+    Then baseline operation must not require installing Node.js or the Go toolchain on the deployment host beyond the shipped executable
+    And operators following README download instructions must be able to start the server without npm install or go build on that host
+
+  Scenario: REQ-045 names Python as the exception for user routines
+    Parent requirement: REQ-045
+    Given docs/requirements.md defines REQ-021 REQ-022 and REQ-045
+    When the REQ-045 business rules are read
+    Then README and docs architecture must state that executing user Python routines requires Python on PATH or a documented path policy
+    And no other product runtime beyond the binary is required for features that do not execute user Python
+
+Feature: README operator download Pi service and updates (REQ-046)
+
+  Scenario: README documents release download and Pi artifact choice
+    Parent requirement: REQ-046
+    Given docs/requirements.md defines REQ-046
+    When requirement REQ-046 is read
+    Then README must explain where to download official release binaries
+    And README must indicate which artifact to use for Raspberry Pi linux arm64 versus other platforms without using REQ internal identifiers in hobbyist text
+
+  Scenario: README documents systemd and updates on Raspberry Pi
+    Parent requirement: REQ-046
+    Given docs/requirements.md defines REQ-046
+    When the REQ-046 business rules are read
+    Then README must include a systemd service example for Raspberry Pi OS or Debian-based Pi OS that starts the binary on boot
+    And README must explain how to update by replacing the binary restarting the service and preserving documented data paths
 ```
 
 ---
