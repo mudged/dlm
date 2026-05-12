@@ -10,14 +10,55 @@ export type FormatResult =
   | { ok: true; text: string; usedBlack: boolean }
   | { ok: false; error: string };
 
+const PYTHON_EDITOR_WORKER_TIMEOUT_MS = 15_000;
+
 let worker: Worker | null = null;
 let nextId = 1;
 const pending = new Map<
   number,
   {
     resolve: (v: unknown) => void;
+    reject: (reason?: unknown) => void;
+    timeoutId: ReturnType<typeof setTimeout>;
   }
 >();
+
+function describeWorkerFailure(ev: Event): string {
+  const detail = ev as Event & {
+    message?: unknown;
+    error?: unknown;
+    data?: unknown;
+  };
+  if (typeof detail.message === "string" && detail.message.length > 0) {
+    return detail.message;
+  }
+  if (detail.error instanceof Error && detail.error.message.length > 0) {
+    return detail.error.message;
+  }
+  if (detail.error !== undefined && detail.error !== null) {
+    return String(detail.error);
+  }
+  if (detail.data !== undefined && detail.data !== null) {
+    return String(detail.data);
+  }
+  return ev.type || "unknown";
+}
+
+function rejectAllPending(reason: string) {
+  const err = new Error(`python editor worker failed: ${reason}`);
+  for (const slot of pending.values()) {
+    clearTimeout(slot.timeoutId);
+    slot.reject(err);
+  }
+  pending.clear();
+}
+
+function handleWorkerFailure(ev: Event) {
+  const failedWorker = worker;
+  rejectAllPending(describeWorkerFailure(ev));
+  worker = null;
+  failedWorker?.terminate();
+}
 
 function getWorker(): Worker {
   if (typeof window === "undefined") {
@@ -44,6 +85,7 @@ function getWorker(): Worker {
         return;
       }
       pending.delete(m.id);
+      clearTimeout(slot.timeoutId);
       if (m.type === "lintResult") {
         slot.resolve(m.diagnostics ?? []);
         return;
@@ -63,24 +105,39 @@ function getWorker(): Worker {
         }
       }
     };
+    worker.onerror = handleWorkerFailure;
+    worker.onmessageerror = handleWorkerFailure;
   }
   return worker;
 }
 
-export function lintPythonSource(source: string): Promise<PyLintDiagnostic[]> {
+function postWorkerRequest<T>(type: "lint" | "format", source: string): Promise<T> {
   const id = nextId++;
   const w = getWorker();
-  return new Promise((resolve) => {
-    pending.set(id, { resolve: resolve as (v: unknown) => void });
-    w.postMessage({ type: "lint", id, source });
+  return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      pending.delete(id);
+      reject(new Error("python editor worker timed out"));
+    }, PYTHON_EDITOR_WORKER_TIMEOUT_MS);
+    pending.set(id, {
+      resolve: resolve as (v: unknown) => void,
+      reject,
+      timeoutId,
+    });
+    try {
+      w.postMessage({ type, id, source });
+    } catch (e) {
+      clearTimeout(timeoutId);
+      pending.delete(id);
+      reject(e);
+    }
   });
 }
 
+export function lintPythonSource(source: string): Promise<PyLintDiagnostic[]> {
+  return postWorkerRequest<PyLintDiagnostic[]>("lint", source);
+}
+
 export function formatPythonSource(source: string): Promise<FormatResult> {
-  const id = nextId++;
-  const w = getWorker();
-  return new Promise((resolve) => {
-    pending.set(id, { resolve: resolve as (v: unknown) => void });
-    w.postMessage({ type: "format", id, source });
-  });
+  return postWorkerRequest<FormatResult>("format", source);
 }
