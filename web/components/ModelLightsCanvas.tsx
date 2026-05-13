@@ -16,7 +16,9 @@ import {
   SPHERE_RADIUS_M,
 } from "@/lib/wireSegments";
 import {
+  boundaryCornersForLights,
   configureVizWebGLRenderer,
+  MODEL_BOUNDARY_MARGIN_M,
   VIZ_VIEWPORT_BG,
   VIZ_VIEWPORT_BG_CSS,
 } from "@/lib/vizViewport";
@@ -158,10 +160,15 @@ function ModelLightsCanvas({
     controls.dampingFactor = 0.08;
     controls.screenSpacePanning = true;
 
-    const margin = SPHERE_RADIUS_M * 2;
+    // REQ-034 framing: the camera must see the padded AABB (tight light bounds + boundary
+    // margin), not just the tight bounds. We use the larger of the sphere-edge margin and the
+    // REQ-034 boundary margin so the boundary cuboid is always fully visible on first mount
+    // and after Reset camera (REQ-016) — architecture §4.7.
+    const boundaryMargin = MODEL_BOUNDARY_MARGIN_M;
+    const framingMargin = Math.max(SPHERE_RADIUS_M * 2, boundaryMargin);
     const { center, maxDim } = boundingFromLights(lights);
     const [cx, cy, cz] = center;
-    const framedDim = maxDim + margin;
+    const framedDim = maxDim + 2 * framingMargin;
     const target = new THREE.Vector3(cx, cy, cz);
 
     const forceDefaultFraming =
@@ -315,6 +322,24 @@ function ModelLightsCanvas({
       const lm = createInterLightWireLineMaterial();
       lineSegments = new THREE.LineSegments(lg, lm);
       scene.add(lineSegments);
+    }
+
+    // REQ-034: faint axis-aligned boundary cuboid (12 edges) sized to the tight light AABB
+    // expanded by MODEL_BOUNDARY_MARGIN_M on every axis, drawn with the same #D0D0D0 / 15%
+    // opacity material as the inter-light wire so it reads as one visual family
+    // (architecture §4.7).
+    let boundaryWire: THREE.LineSegments | null = null;
+    let boundaryBoxGeom: THREE.BoxGeometry | null = null;
+    let boundaryEdgesGeom: THREE.EdgesGeometry | null = null;
+    let boundaryMat: THREE.LineBasicMaterial | null = null;
+    if (lights.length > 0) {
+      const box = boundaryCornersForLights(lights, boundaryMargin);
+      boundaryBoxGeom = new THREE.BoxGeometry(box.size.x, box.size.y, box.size.z);
+      boundaryEdgesGeom = new THREE.EdgesGeometry(boundaryBoxGeom);
+      boundaryMat = createInterLightWireLineMaterial();
+      boundaryWire = new THREE.LineSegments(boundaryEdgesGeom, boundaryMat);
+      boundaryWire.position.set(box.center.x, box.center.y, box.center.z);
+      scene.add(boundaryWire);
     }
 
     const raycaster = new THREE.Raycaster();
@@ -501,6 +526,12 @@ function ModelLightsCanvas({
         lineSegments.geometry.dispose();
         (lineSegments.material as THREE.Material).dispose();
       }
+      if (boundaryWire) {
+        scene.remove(boundaryWire);
+      }
+      boundaryBoxGeom?.dispose();
+      boundaryEdgesGeom?.dispose();
+      boundaryMat?.dispose();
       disposeGrid();
       renderer.dispose();
       if (canvasEl.parentNode === container) {

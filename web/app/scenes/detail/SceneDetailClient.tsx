@@ -21,8 +21,12 @@ import {
   addSceneModel,
   deleteScene,
   fetchScene,
+  patchSceneMargin,
   patchSceneModelOffsets,
   removeSceneModel,
+  SCENE_BOUNDARY_MARGIN_DEFAULT_M,
+  SCENE_BOUNDARY_MARGIN_MAX_M,
+  SCENE_BOUNDARY_MARGIN_MIN_M,
   type SceneDetail,
 } from "@/lib/scenes";
 import { useSceneLightsSSE } from "@/lib/useSceneLightsSSE";
@@ -56,6 +60,12 @@ export function SceneDetailClient() {
   const [routines, setRoutines] = useState<RoutineDefinition[] | null>(null);
   const [routineRuns, setRoutineRuns] = useState<RoutineRun[]>([]);
   const [selectedRoutineId, setSelectedRoutineId] = useState("");
+  /**
+   * REQ-015 BR 13 — local pending margin while the user drags. Mirrors `scene.margin_m`
+   * after `load()`. `null` means "use the server-confirmed value as-is" (no pending edit).
+   */
+  const [pendingMarginM, setPendingMarginM] = useState<number | null>(null);
+  const [marginError, setMarginError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!id) {
@@ -70,6 +80,8 @@ export function SceneDetailClient() {
         fetchSceneRoutineRuns(id).catch(() => [] as RoutineRun[]),
       ]);
       setScene(s);
+      setPendingMarginM(null);
+      setMarginError(null);
       setRoutineRuns(runs);
       if (mRes.ok) {
         setModels((await mRes.json()) as ModelSummary[]);
@@ -173,6 +185,42 @@ export function SceneDetailClient() {
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Remove failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onApplyMargin(value: number) {
+    if (!id) {
+      return;
+    }
+    setMarginError(null);
+    if (!Number.isFinite(value)) {
+      setMarginError("Boundary margin must be a finite number.");
+      return;
+    }
+    if (
+      value < SCENE_BOUNDARY_MARGIN_MIN_M ||
+      value > SCENE_BOUNDARY_MARGIN_MAX_M
+    ) {
+      setMarginError(
+        `Boundary margin must be between ${SCENE_BOUNDARY_MARGIN_MIN_M} m and ${SCENE_BOUNDARY_MARGIN_MAX_M} m.`,
+      );
+      return;
+    }
+    setBusy(true);
+    try {
+      const updated = await patchSceneMargin(id, value);
+      setScene((prev) => (prev ? { ...prev, margin_m: updated.margin_m } : prev));
+      setPendingMarginM(null);
+    } catch (e) {
+      const err = e as Error & { code?: string };
+      setPendingMarginM(null);
+      setMarginError(
+        err.code === "invalid_margin_m"
+          ? err.message
+          : err.message || "Failed to update boundary margin.",
+      );
     } finally {
       setBusy(false);
     }
@@ -441,6 +489,15 @@ export function SceneDetailClient() {
           items={scene.items}
           cameraPersistenceKey={scene.id}
           cameraResetVersion={cameraResetVersion}
+          marginM={pendingMarginM ?? scene.margin_m}
+        />
+        <MarginEditor
+          savedMarginM={scene.margin_m}
+          pendingMarginM={pendingMarginM}
+          onPreview={setPendingMarginM}
+          onApply={onApplyMargin}
+          error={marginError}
+          disabled={busy}
         />
       </section>
 
@@ -618,6 +675,105 @@ function PlacementEditor({
       >
         Apply placement
       </Button>
+    </div>
+  );
+}
+
+/**
+ * REQ-015 BR 13 / REQ-034 — numeric `margin_m` editor with optimistic preview.
+ *
+ * - `savedMarginM` is the last server-confirmed value (from `GET /scenes/{id}` or the
+ *   `PATCH /scenes/{id}` response echo).
+ * - `pendingMarginM` (`null` when no pending edit) drives the boundary cuboid preview in
+ *   `SceneLightsCanvas` so the user sees the cuboid breathe while the input is dragged
+ *   without an HTTP round-trip per keystroke.
+ * - `Apply` commits via `PATCH /api/v1/scenes/{id}` and surfaces `invalid_margin_m` inline.
+ * - REQ-002: `Apply` is a real button (not hover-only); the numeric input has `min`/`max`/
+ *   `step` so up/down spin works on desktop and the iOS numeric keypad surfaces on touch.
+ */
+function MarginEditor({
+  savedMarginM,
+  pendingMarginM,
+  onPreview,
+  onApply,
+  error,
+  disabled,
+}: {
+  savedMarginM: number;
+  pendingMarginM: number | null;
+  onPreview: (next: number | null) => void;
+  onApply: (next: number) => void;
+  error: string | null;
+  disabled: boolean;
+}) {
+  const display = pendingMarginM ?? savedMarginM;
+  const isDirty =
+    pendingMarginM !== null && pendingMarginM !== savedMarginM;
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900/40 sm:flex-row sm:flex-wrap sm:items-end">
+      <label className="flex flex-1 flex-col gap-1 text-xs">
+        <span className="text-slate-600 dark:text-slate-400">
+          Boundary margin (m)
+        </span>
+        <input
+          type="number"
+          min={SCENE_BOUNDARY_MARGIN_MIN_M}
+          max={SCENE_BOUNDARY_MARGIN_MAX_M}
+          step={0.05}
+          inputMode="decimal"
+          value={Number.isFinite(display) ? display : SCENE_BOUNDARY_MARGIN_DEFAULT_M}
+          onChange={(e) => {
+            const raw = e.target.value;
+            if (raw === "") {
+              onPreview(null);
+              return;
+            }
+            const v = Number(raw);
+            if (Number.isFinite(v)) {
+              onPreview(v);
+            }
+          }}
+          className="min-h-11 w-32 rounded border border-slate-300 bg-white px-2 py-1 font-mono dark:border-slate-600 dark:bg-slate-900"
+        />
+      </label>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          icon={faCheck}
+          className="min-h-11"
+          disabled={disabled || !isDirty}
+          onClick={() => {
+            if (pendingMarginM !== null) {
+              onApply(pendingMarginM);
+            }
+          }}
+        >
+          Apply margin
+        </Button>
+        {isDirty ? (
+          <button
+            type="button"
+            className="min-h-11 rounded border border-slate-300 px-3 text-xs text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+            disabled={disabled}
+            onClick={() => onPreview(null)}
+          >
+            Reset to saved ({savedMarginM.toFixed(2)} m)
+          </button>
+        ) : null}
+      </div>
+      <p className="basis-full text-xs text-slate-500 dark:text-slate-400">
+        Symmetric padding ({SCENE_BOUNDARY_MARGIN_MIN_M}–{SCENE_BOUNDARY_MARGIN_MAX_M} m)
+        applied on every face of the scene’s axis-aligned light bounding box.
+        Default is {SCENE_BOUNDARY_MARGIN_DEFAULT_M} m.
+      </p>
+      {error ? (
+        <p
+          className="basis-full text-xs text-red-700 dark:text-red-400"
+          role="alert"
+        >
+          {error}
+        </p>
+      ) : null}
     </div>
   );
 }

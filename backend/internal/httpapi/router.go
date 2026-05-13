@@ -87,6 +87,7 @@ func NewSiteHandler(cfg *config.Config, content fs.FS, st *store.Store, rev *Rev
 	api.HandleFunc("POST /scenes/{id}/routines/runs/{runId}/stop", deps.postSceneRoutineRunStop)
 	api.HandleFunc("POST /scenes/{id}/routines/{routineId}/start", deps.postSceneRoutineStart)
 	api.HandleFunc("DELETE /scenes/{id}", deps.deleteScene)
+	api.HandleFunc("PATCH /scenes/{id}", deps.patchScene)
 	api.HandleFunc("GET /scenes/{id}", deps.getScene)
 	api.HandleFunc("GET /scenes", deps.listScenes)
 	api.HandleFunc("POST /scenes", deps.createScene)

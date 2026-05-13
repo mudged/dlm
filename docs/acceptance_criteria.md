@@ -1236,6 +1236,18 @@ Feature: Shape animation routines declarative authoring and run (REQ-033)
 
 Feature: Faint scene boundary cuboid in three.js views (REQ-034)
 
+  Scenario: REQ-034 displays a faint axis-aligned boundary cuboid on both viewports
+    Parent requirement: REQ-034
+    Given a model has lights spanning x in 0..2 metres y in 0..1 metres z in 0..0.5 metres
+    When the user opens the model detail page
+    Then the three.js viewport draws one THREE.LineSegments boundary cuboid centred at the AABB centre
+    And the cuboid extents equal the tight light AABB expanded by MODEL_BOUNDARY_MARGIN_M=0.3 on every axis in both directions
+    And the cuboid material is createInterLightWireLineMaterial() so the colour is #D0D0D0 with opacity 0.15 matching the inter-light wire segments
+    And the default camera framing distance equals max axis of the padded box plus the same boundary margin so the cuboid is fully visible
+    Given an existing scene whose persisted margin_m is 0.4 metres
+    When the user opens the scene detail page
+    Then the SceneLightsCanvas draws an analogous boundary cuboid in scene-space coordinates expanded by 0.4 metres per axis using that same shared material
+
   Scenario: REQ-034 defines axis-aligned boundary from light extremes plus symmetric margin
     Parent requirement: REQ-034
     Given docs/requirements.md defines REQ-034 REQ-010 and REQ-015
@@ -1244,6 +1256,25 @@ Feature: Faint scene boundary cuboid in three.js views (REQ-034)
     And models need not be regular cuboids because only light positions define the tight box
     And the model view must expand the tight box by exactly 0.3 meters on each axis in both directions
     And the scene view must expand the tight box by the scene persisted margin m on each axis in both directions
+
+  Scenario: REQ-015 boundary margin survives PATCH and reload
+    Parent requirement: REQ-015
+    Given an existing scene whose persisted margin_m is the default 0.3 metres
+    And the scene detail page is open in the browser
+    When the user changes the boundary margin input to 0.5 and clicks Apply margin
+    Then the front-end sends PATCH /api/v1/scenes/{id} with body {"margin_m":0.5}
+    And the server returns HTTP 200 with the updated scene summary containing margin_m=0.5
+    And the next render of the SceneLightsCanvas boundary cuboid grows by 0.2 metres on each axis without rebuilding the light cloud
+    And reloading the page yields a scene detail response whose margin_m is 0.5
+    And GET /api/v1/scenes/{id}/dimensions reports the same margin_m=0.5 used by region queries
+
+  Scenario: REQ-015 boundary margin rejects out-of-range values without mutating storage
+    Parent requirement: REQ-015
+    Given an existing scene whose persisted margin_m is 0.5
+    When the user submits PATCH /api/v1/scenes/{id} with body {"margin_m":-0.1}
+    Then the server returns HTTP 400 with error code invalid_margin_m and details min 0 max 5
+    And the persisted margin_m is still 0.5 on a subsequent GET
+    And the scene detail page displays the error message inline next to the Apply margin button
 
   Scenario: REQ-015 stores scene boundary margin m defaulting to 30 cm and allows edit
     Parent requirement: REQ-015

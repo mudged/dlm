@@ -3,10 +3,17 @@ package store
 import (
 	"context"
 	"errors"
+	"math"
 	"testing"
 
 	"example.com/dlm/backend/internal/wiremodel"
 )
+
+// floatEq compares two float64s with a tight epsilon, suitable for assertions involving
+// the scene margin_m fan-out (DefaultSceneBoundaryMarginM = 0.3, sub-millimetre precision).
+func floatEq(a, b float64) bool {
+	return math.Abs(a-b) < 1e-9
+}
 
 func TestPatchSceneLightsSceneAndBatch(t *testing.T) {
 	ctx := context.Background()
@@ -275,18 +282,21 @@ func TestScenes_SpatialQueriesAndDimensions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// AABB of lights (10..12, 0..2, 0..2) minus margin on min side (sx min 10 → 9); Y/Z min stay 0.
-	if dims.Origin.X != 9 || dims.Origin.Y != 0 || dims.Origin.Z != 0 {
+	// AABB of lights (10..12, 0..2, 0..2) padded by the scene's persisted margin (default
+	// DefaultSceneBoundaryMarginM = 0.3 per REQ-015 BR 12 / REQ-034 rule 3).
+	// Y/Z min stay clamped at 0 because 0 - 0.3 < 0.
+	const m = DefaultSceneBoundaryMarginM
+	if !floatEq(dims.Origin.X, 10-m) || dims.Origin.Y != 0 || dims.Origin.Z != 0 {
 		t.Fatalf("origin = %+v", dims.Origin)
 	}
-	if dims.Max.X != 13 || dims.Max.Y != 3 || dims.Max.Z != 3 {
+	if !floatEq(dims.Max.X, 12+m) || !floatEq(dims.Max.Y, 2+m) || !floatEq(dims.Max.Z, 2+m) {
 		t.Fatalf("max = %+v", dims.Max)
 	}
-	if dims.Size.Width != 4 || dims.Size.Height != 3 || dims.Size.Depth != 3 {
+	if !floatEq(dims.Size.Width, 2+2*m) || !floatEq(dims.Size.Height, 2+m) || !floatEq(dims.Size.Depth, 2+m) {
 		t.Fatalf("size = %+v", dims.Size)
 	}
-	if dims.MarginM != 1 {
-		t.Fatalf("margin_m = %v", dims.MarginM)
+	if dims.MarginM != m {
+		t.Fatalf("margin_m = %v want %v", dims.MarginM, m)
 	}
 
 	allLights, err := s.ListSceneLights(ctx, sc.ID)
@@ -404,5 +414,118 @@ func TestScenes_SpatialBulkUpdateAndInvalidGeometry(t *testing.T) {
 	}
 	if !detailAfter.Lights[0].On || !detailAfter.Lights[1].On || detailAfter.Lights[2].On {
 		t.Fatalf("state changed after invalid geometry: %+v", detailAfter.Lights)
+	}
+}
+
+// TestScenes_PatchMarginM_DefaultsAndRoundTrip covers REQ-015 BR 12 / REQ-034 rule 3:
+// new scenes default to 0.3 m, GET payloads expose margin_m, PATCH persists, and
+// GetSceneDimensions reflects the per-scene value.
+func TestScenes_PatchMarginM_DefaultsAndRoundTrip(t *testing.T) {
+	ctx := context.Background()
+	s := testDB(t)
+
+	sum, err := s.Create(ctx, "margin-default", []wiremodel.Light{
+		{ID: 0, X: 0, Y: 0, Z: 0},
+		{ID: 1, X: 1, Y: 1, Z: 1},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sc, err := s.CreateScene(ctx, "scene-margin", []string{sum.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !floatEq(sc.MarginM, DefaultSceneBoundaryMarginM) {
+		t.Fatalf("create margin = %v, want %v", sc.MarginM, DefaultSceneBoundaryMarginM)
+	}
+
+	d, err := s.GetScene(ctx, sc.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !floatEq(d.MarginM, DefaultSceneBoundaryMarginM) {
+		t.Fatalf("detail margin = %v, want %v", d.MarginM, DefaultSceneBoundaryMarginM)
+	}
+	list, err := s.ListScenes(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 1 || !floatEq(list[0].MarginM, DefaultSceneBoundaryMarginM) {
+		t.Fatalf("list margin = %+v", list)
+	}
+
+	updated, err := s.PatchSceneMarginM(ctx, sc.ID, 0.5)
+	if err != nil {
+		t.Fatalf("patch valid margin: %v", err)
+	}
+	if !floatEq(updated.MarginM, 0.5) || updated.ID != sc.ID || updated.ModelCount != 1 {
+		t.Fatalf("patch echo unexpected: %+v", updated)
+	}
+
+	d2, err := s.GetScene(ctx, sc.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !floatEq(d2.MarginM, 0.5) {
+		t.Fatalf("detail margin after patch = %v", d2.MarginM)
+	}
+
+	dims, err := s.GetSceneDimensions(ctx, sc.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Lights at sx 0..1, sy 0..1, sz 0..1; padded by 0.5 → [-0.5..1.5] clamped to [0..1.5].
+	if !floatEq(dims.MarginM, 0.5) {
+		t.Fatalf("dims margin = %v", dims.MarginM)
+	}
+	if !floatEq(dims.Max.X, 1.5) || !floatEq(dims.Max.Y, 1.5) || !floatEq(dims.Max.Z, 1.5) {
+		t.Fatalf("dims max = %+v", dims.Max)
+	}
+	if dims.Origin.X != 0 || dims.Origin.Y != 0 || dims.Origin.Z != 0 {
+		t.Fatalf("dims origin clamp = %+v", dims.Origin)
+	}
+}
+
+// TestScenes_PatchMarginM_InvalidValues exercises REQ-015 BR 13 validation:
+// reject NaN / Inf / negative / > MaxSceneBoundaryMarginM and leave the stored value untouched.
+func TestScenes_PatchMarginM_InvalidValues(t *testing.T) {
+	ctx := context.Background()
+	s := testDB(t)
+	sum, err := s.Create(ctx, "margin-invalid", []wiremodel.Light{
+		{ID: 0, X: 0, Y: 0, Z: 0},
+		{ID: 1, X: 1, Y: 1, Z: 1},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sc, err := s.CreateScene(ctx, "scene-margin-invalid", []string{sum.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cases := []float64{-1, -0.0001, MaxSceneBoundaryMarginM + 0.0001, math.NaN(), math.Inf(1), math.Inf(-1)}
+	for _, v := range cases {
+		if _, err := s.PatchSceneMarginM(ctx, sc.ID, v); !errors.Is(err, ErrInvalidMarginM) {
+			t.Fatalf("expect ErrInvalidMarginM for %v, got %v", v, err)
+		}
+	}
+	d, err := s.GetScene(ctx, sc.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !floatEq(d.MarginM, DefaultSceneBoundaryMarginM) {
+		t.Fatalf("margin mutated after invalid PATCH: %v", d.MarginM)
+	}
+
+	// Boundary values 0 and MaxSceneBoundaryMarginM are accepted.
+	if _, err := s.PatchSceneMarginM(ctx, sc.ID, 0); err != nil {
+		t.Fatalf("patch 0 should succeed: %v", err)
+	}
+	if _, err := s.PatchSceneMarginM(ctx, sc.ID, MaxSceneBoundaryMarginM); err != nil {
+		t.Fatalf("patch %v should succeed: %v", MaxSceneBoundaryMarginM, err)
+	}
+
+	if _, err := s.PatchSceneMarginM(ctx, "no-such-scene", 0.42); !errors.Is(err, ErrSceneNotFound) {
+		t.Fatalf("expect ErrSceneNotFound for unknown id, got %v", err)
 	}
 }

@@ -32,6 +32,11 @@ type patchSceneModelBody struct {
 	OffsetZ int `json:"offset_z"`
 }
 
+// patchSceneBody covers scene-level metadata PATCH (currently only margin_m — REQ-015 BR 13 / REQ-034).
+type patchSceneBody struct {
+	MarginM *float64 `json:"margin_m"`
+}
+
 type sceneCuboidBody struct {
 	Position   store.ScenePoint          `json:"position"`
 	Dimensions store.SceneDimensionsSize `json:"dimensions"`
@@ -266,6 +271,58 @@ func (a *apiDeps) postSceneModel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, pl)
+}
+
+// patchScene updates scene-level metadata (REQ-015 BR 13 / REQ-034). Currently only margin_m
+// is editable; future scene-wide fields (e.g. rename) MAY extend patchSceneBody without breaking
+// callers that send only margin_m.
+func (a *apiDeps) patchScene(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPatch {
+		writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	sceneID := r.PathValue("id")
+	if sceneID == "" {
+		writeAPIError(w, http.StatusBadRequest, "bad_request", "missing scene id")
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxSceneJSONBytes)
+	raw, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeAPIError(w, http.StatusBadRequest, "bad_request", "could not read body")
+		return
+	}
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.DisallowUnknownFields()
+	var body patchSceneBody
+	if err := dec.Decode(&body); err != nil {
+		writeAPIError(w, http.StatusBadRequest, "bad_request", "invalid JSON")
+		return
+	}
+	if dec.More() {
+		writeAPIError(w, http.StatusBadRequest, "bad_request", "invalid JSON")
+		return
+	}
+	if body.MarginM == nil {
+		writeAPIError(w, http.StatusBadRequest, "validation_failed", "no editable fields supplied (currently only margin_m)")
+		return
+	}
+	sum, err := a.store.PatchSceneMarginM(r.Context(), sceneID, *body.MarginM)
+	if errors.Is(err, store.ErrInvalidMarginM) {
+		writeAPIErrorDetail(w, http.StatusBadRequest, "invalid_margin_m",
+			"margin_m must be a finite number between 0 and 5 metres (inclusive)",
+			map[string]float64{"min": 0, "max": store.MaxSceneBoundaryMarginM})
+		return
+	}
+	if errors.Is(err, store.ErrSceneNotFound) {
+		writeAPIError(w, http.StatusNotFound, "not_found", "scene not found")
+		return
+	}
+	if err != nil {
+		writeAPIError(w, http.StatusInternalServerError, "internal_error", "could not update scene")
+		return
+	}
+	writeJSON(w, http.StatusOK, sum)
 }
 
 func (a *apiDeps) patchSceneModel(w http.ResponseWriter, r *http.Request) {

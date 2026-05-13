@@ -7,6 +7,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { boundingFromLights } from "@/lib/lightBounds";
 import type { Light } from "@/lib/models";
 import type { SceneItem } from "@/lib/scenes";
+import { SCENE_BOUNDARY_MARGIN_DEFAULT_M } from "@/lib/scenes";
 import {
   additiveGlowShellMaterialForOnLight,
   meshStandardMaterialForOnLight,
@@ -18,9 +19,11 @@ import {
   SPHERE_RADIUS_M,
 } from "@/lib/wireSegments";
 import {
+  boundaryCornersForLights,
   configureVizWebGLRenderer,
   VIZ_VIEWPORT_BG,
   VIZ_VIEWPORT_BG_CSS,
+  type LightPoint,
 } from "@/lib/vizViewport";
 import {
   sceneItemsStructureSignature,
@@ -34,6 +37,13 @@ type Props = {
   cameraPersistenceKey?: string;
   /** Increment to re-apply default framing (REQ-016). */
   cameraResetVersion?: number;
+  /**
+   * REQ-015 BR 12 / REQ-034 rule 3: persisted scene boundary margin (SI metres). The faint
+   * boundary cuboid expands the tight light AABB by this amount on every axis. Treated as
+   * `SCENE_BOUNDARY_MARGIN_DEFAULT_M` (0.3) when undefined so the cuboid still draws while
+   * the parent loads `GET /scenes/{id}` or for embedded previews without margin context.
+   */
+  marginM?: number;
   /**
    * When set, each animation frame reads `current` for semi-transparent shape overlays
    * (shape routine editor / preview only).
@@ -167,6 +177,16 @@ type SceneVizRuntime = {
   glowMaterialForOnLight: (L: Light) => THREE.MeshBasicMaterial;
 };
 
+/**
+ * Runtime hooks exposed by the main canvas effect so the REQ-015 BR 13 margin editor
+ * can rebuild only the boundary cuboid (REQ-034 rule 4 — geometry + margin trigger only;
+ * REQ-041 incremental rule — do not rebuild the rest of the scene graph).
+ */
+type SceneBoundaryRuntime = {
+  sceneLights: LightPoint[];
+  rebuild: (marginM: number) => void;
+};
+
 const GHOST_OPACITY = 0.32;
 const GHOST_LERP_PER_S = 22;
 
@@ -188,8 +208,12 @@ export default function SceneLightsCanvas({
   items,
   cameraPersistenceKey,
   cameraResetVersion = 0,
+  marginM,
   shapeGhostsSourceRef,
 }: Props) {
+  const effectiveMargin = Number.isFinite(marginM)
+    ? Math.max(0, marginM as number)
+    : SCENE_BOUNDARY_MARGIN_DEFAULT_M;
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasHostRef = useRef<HTMLDivElement>(null);
   const orbitRef = useRef<SavedOrbit | null>(null);
@@ -206,6 +230,7 @@ export default function SceneLightsCanvas({
     [items],
   );
   const vizRuntimeRef = useRef<SceneVizRuntime | null>(null);
+  const boundaryRuntimeRef = useRef<SceneBoundaryRuntime | null>(null);
   const itemsRef = useRef(items);
   itemsRef.current = items;
 
@@ -238,7 +263,10 @@ export default function SceneLightsCanvas({
     controls.dampingFactor = 0.08;
     controls.screenSpacePanning = true;
 
-    const margin = SPHERE_RADIUS_M * 2;
+    // REQ-034 framing: include the persisted boundary margin so the cuboid is visible on
+    // first mount and after Reset camera (architecture §4.7). Keep at least the sphere-edge
+    // margin so very small light clouds remain comfortable.
+    const framingMargin = Math.max(SPHERE_RADIUS_M * 2, effectiveMargin);
     const framingLights: Light[] = sorted.map((e) => ({
       id: e.L.id,
       x: e.L.sx,
@@ -250,7 +278,7 @@ export default function SceneLightsCanvas({
     }));
     const { center, maxDim } = boundingFromLights(framingLights);
     const [cx, cy, cz] = center;
-    const framedDim = maxDim + margin;
+    const framedDim = maxDim + 2 * framingMargin;
     const target = new THREE.Vector3(cx, cy, cz);
 
     const forceDefaultFraming =
@@ -405,6 +433,52 @@ export default function SceneLightsCanvas({
       lineSegments = new THREE.LineSegments(lg, lm);
       scene.add(lineSegments);
     }
+
+    // REQ-034 boundary cuboid (scene view): wire-frame box around the tight AABB of all
+    // sx/sy/sz lights expanded by the scene's persisted margin_m. We expose the mesh +
+    // dispose hooks through closures so the margin-effect can rebuild geometry on PATCH
+    // without tearing down the rest of the scene graph (REQ-041 incremental rule).
+    const sceneLights: LightPoint[] = sorted.map((e) => ({
+      x: e.L.sx,
+      y: e.L.sy,
+      z: e.L.sz,
+    }));
+    let boundaryWire: THREE.LineSegments | null = null;
+    let boundaryBoxGeom: THREE.BoxGeometry | null = null;
+    let boundaryEdgesGeom: THREE.EdgesGeometry | null = null;
+    let boundaryMat: THREE.LineBasicMaterial | null = null;
+    const buildBoundary = (lightsForBox: LightPoint[], m: number) => {
+      if (lightsForBox.length === 0) {
+        return;
+      }
+      const box = boundaryCornersForLights(lightsForBox, m);
+      boundaryBoxGeom = new THREE.BoxGeometry(box.size.x, box.size.y, box.size.z);
+      boundaryEdgesGeom = new THREE.EdgesGeometry(boundaryBoxGeom);
+      boundaryMat = createInterLightWireLineMaterial();
+      boundaryWire = new THREE.LineSegments(boundaryEdgesGeom, boundaryMat);
+      boundaryWire.position.set(box.center.x, box.center.y, box.center.z);
+      scene.add(boundaryWire);
+    };
+    const disposeBoundary = () => {
+      if (boundaryWire) {
+        scene.remove(boundaryWire);
+      }
+      boundaryBoxGeom?.dispose();
+      boundaryEdgesGeom?.dispose();
+      boundaryMat?.dispose();
+      boundaryWire = null;
+      boundaryBoxGeom = null;
+      boundaryEdgesGeom = null;
+      boundaryMat = null;
+    };
+    buildBoundary(sceneLights, effectiveMargin);
+    boundaryRuntimeRef.current = {
+      sceneLights,
+      rebuild: (m: number) => {
+        disposeBoundary();
+        buildBoundary(sceneLights, m);
+      },
+    };
 
     const raycaster = new THREE.Raycaster();
     const ndc = new THREE.Vector2();
@@ -696,6 +770,7 @@ export default function SceneLightsCanvas({
 
     return () => {
       vizRuntimeRef.current = null;
+      boundaryRuntimeRef.current = null;
       if (cameraPersistenceKey !== undefined) {
         orbitRef.current = {
           key: cameraPersistenceKey,
@@ -729,6 +804,7 @@ export default function SceneLightsCanvas({
         lineSegments.geometry.dispose();
         (lineSegments.material as THREE.Material).dispose();
       }
+      disposeBoundary();
       disposeGrid();
       while (ghostMeshes.length > 0) {
         popGhostMesh();
@@ -772,6 +848,17 @@ export default function SceneLightsCanvas({
       }
     }
   }, [items, vizSig]);
+
+  // REQ-034 rule 4 / REQ-041 incremental rule: rebuild ONLY the boundary cuboid when the
+  // scene's margin_m changes (e.g. via the REQ-015 BR 13 editor PATCH). The light cloud,
+  // wire segments, and camera state are intentionally untouched.
+  useEffect(() => {
+    const rt = boundaryRuntimeRef.current;
+    if (!rt) {
+      return;
+    }
+    rt.rebuild(effectiveMargin);
+  }, [effectiveMargin]);
 
   const tip = pinned ?? hover;
   const totalLights = items.reduce((a, it) => a + it.lights.length, 0);

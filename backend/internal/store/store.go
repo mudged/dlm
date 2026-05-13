@@ -200,7 +200,8 @@ func (s *Store) ensureSceneTables(ctx context.Context) error {
 		`CREATE TABLE IF NOT EXISTS scenes (
 			id TEXT PRIMARY KEY,
 			name TEXT NOT NULL UNIQUE,
-			created_at TEXT NOT NULL
+			created_at TEXT NOT NULL,
+			margin_m REAL NOT NULL DEFAULT 0.3
 		)`,
 		`CREATE TABLE IF NOT EXISTS scene_models (
 			scene_id TEXT NOT NULL,
@@ -219,10 +220,43 @@ func (s *Store) ensureSceneTables(ctx context.Context) error {
 			return fmt.Errorf("migrate scenes: %w", err)
 		}
 	}
+	if err := s.ensureSceneMarginMColumn(ctx); err != nil {
+		return err
+	}
 	if err := s.ensureSceneModelOrdinal(ctx); err != nil {
 		return err
 	}
 	return s.ensureRoutineTables(ctx)
+}
+
+// ensureSceneMarginMColumn adds the scenes.margin_m column to legacy databases that pre-date
+// REQ-015 BR 12 / REQ-034 rule 3. New databases already get the column from CREATE TABLE above;
+// this idempotent ALTER backfills 0.3 for existing rows.
+func (s *Store) ensureSceneMarginMColumn(ctx context.Context) error {
+	rows, err := s.db.QueryContext(ctx, `PRAGMA table_info(scenes)`)
+	if err != nil {
+		return fmt.Errorf("inspect scenes columns: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cid int
+		var name, ctype string
+		var notnull, pk int
+		var dflt sql.NullString
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			return fmt.Errorf("scan scenes columns: %w", err)
+		}
+		if name == "margin_m" {
+			return rows.Err()
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if _, err := s.db.ExecContext(ctx, `ALTER TABLE scenes ADD COLUMN margin_m REAL NOT NULL DEFAULT 0.3`); err != nil {
+		return fmt.Errorf("add scenes.margin_m: %w", err)
+	}
+	return nil
 }
 
 func (s *Store) ensureRoutineTables(ctx context.Context) error {

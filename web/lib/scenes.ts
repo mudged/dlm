@@ -1,10 +1,21 @@
 import type { Light } from "@/lib/models";
 
+/** REQ-015 BR 12 / REQ-034 rule 3: minimum accepted boundary margin (SI metres). */
+export const SCENE_BOUNDARY_MARGIN_MIN_M = 0;
+
+/** REQ-015 BR 13: maximum accepted boundary margin (SI metres) — also enforced by the backend. */
+export const SCENE_BOUNDARY_MARGIN_MAX_M = 5;
+
+/** REQ-015 BR 12: server-side default applied to new scenes and migrated legacy rows. */
+export const SCENE_BOUNDARY_MARGIN_DEFAULT_M = 0.3;
+
 export type SceneSummary = {
   id: string;
   name: string;
   created_at: string;
   model_count: number;
+  /** REQ-015 BR 12: persisted symmetric boundary margin in SI metres (default 0.3). */
+  margin_m: number;
 };
 
 export type SceneLight = Light & {
@@ -26,6 +37,8 @@ export type SceneDetail = {
   id: string;
   name: string;
   created_at: string;
+  /** REQ-015 BR 12: persisted symmetric boundary margin in SI metres (default 0.3). */
+  margin_m: number;
   items: SceneItem[];
 };
 
@@ -188,6 +201,37 @@ export async function addSceneModel(
     };
     throw new Error(j?.error?.message ?? `add model failed (${res.status})`);
   }
+}
+
+/**
+ * REQ-015 BR 13 / REQ-034 rule 3 — PATCH /api/v1/scenes/{id} with `margin_m` (SI metres).
+ *
+ * Throws an `Error` with `code === "invalid_margin_m"` when the backend rejects the value
+ * (out of [0, 5] or non-finite); throws a plain `Error` otherwise so callers can show a
+ * generic message.
+ */
+export async function patchSceneMargin(
+  sceneId: string,
+  marginM: number,
+): Promise<SceneSummary> {
+  const res = await fetch(`/api/v1/scenes/${encodeURIComponent(sceneId)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ margin_m: marginM }),
+  });
+  if (!res.ok) {
+    const j = (await res.json().catch(() => null)) as {
+      error?: { code?: string; message?: string };
+    };
+    const err = new Error(
+      j?.error?.message ?? `patch scene margin failed (${res.status})`,
+    ) as Error & { code?: string };
+    if (j?.error?.code) {
+      err.code = j.error.code;
+    }
+    throw err;
+  }
+  return (await res.json()) as SceneSummary;
 }
 
 export async function patchSceneModelOffsets(
