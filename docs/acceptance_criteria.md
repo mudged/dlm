@@ -579,6 +579,23 @@ Feature: Options factory reset with confirmation (REQ-017)
     When the REQ-017 business rule about REQ-002 is read
     Then opening Options starting factory reset and confirming or canceling must not require hover-only essential steps
 
+  Scenario: REQ-017 confirm dialog discloses all affected data categories
+    Parent requirement: REQ-017
+    Given the Options page is rendered in a browser
+    When the user opens the factory reset confirm dialog
+    Then the dialog body must contain the substring "devices"
+    And the dialog body must contain the substring "routines"
+    And the dialog body must contain the substring "sample Python routines"
+    And the dialog body must contain the substring "every model you uploaded"
+    And the dialog body must contain the substring "every scene"
+
+  Scenario: REQ-017 post-reset flash on models page mentions both sample models and sample Python routines
+    Parent requirement: REQ-017
+    Given factory reset has just completed successfully
+    When the models page is displayed with the factoryReset query parameter
+    Then the flash message must contain the substring "sample models"
+    And the flash message must contain the substring "sample Python routines"
+
 Feature: Application shell themes navigation branding and Font Awesome (REQ-018)
 
   Scenario: REQ-018 mandates light and dark themes with specified surfaces

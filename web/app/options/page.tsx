@@ -8,6 +8,9 @@ import {
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
+import {
+  FACTORY_RESET_DISCLOSURE,
+} from "@/lib/factoryReset";
 
 export default function OptionsPage() {
   const router = useRouter();
@@ -78,8 +81,8 @@ export default function OptionsPage() {
           Factory reset
         </h2>
         <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
-          Remove every model and scene, then restore only the three default
-          sample models (sphere, cube, cone). This cannot be undone.
+          {FACTORY_RESET_DISCLOSURE}{" "}
+          <span className="font-medium">This cannot be undone.</span>
         </p>
         <Button
           type="button"
@@ -104,11 +107,7 @@ export default function OptionsPage() {
           <h3 className="text-lg font-semibold">Erase all data?</h3>
         </div>
         <div className="space-y-3 px-4 py-4 text-sm text-slate-700 dark:text-slate-300">
-          <p>
-            All models you uploaded and every scene will be permanently deleted.
-            Custom light settings will be lost. After this completes, only the
-            three default sample models will remain.
-          </p>
+          <p>{FACTORY_RESET_DISCLOSURE}</p>
           <p className="text-amber-900 dark:text-amber-200">
             This action cannot be undone.
           </p>

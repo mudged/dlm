@@ -10,6 +10,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import type { ModelSummary } from "@/lib/models";
+import { POST_RESET_FLASH } from "@/lib/factoryReset";
 
 function ModelsListFallback() {
   return (
@@ -29,9 +30,7 @@ function ModelsListInner() {
 
   useEffect(() => {
     if (searchParams.get("factoryReset") === "1") {
-      setFlash(
-        "All data was reset. The three default sample models were restored.",
-      );
+      setFlash(POST_RESET_FLASH);
       router.replace("/models", { scroll: false });
     }
   }, [searchParams, router]);
