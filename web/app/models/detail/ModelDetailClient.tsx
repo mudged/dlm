@@ -442,8 +442,8 @@ export function ModelDetailClient() {
     void load();
   }, [load]);
 
-  // REQ-041: SSE with seq + deltas; merge locally; snapshot on gap or transport error.
-  useModelLightsSSE(id, setModel, load);
+  // REQ-041 / REQ-029: EventSource subscribes to GET /api/v1/models/{id}/lights/events via useModelLightsSSE.
+  useModelLightsSSE(id ?? undefined, setModel, load);
 
   // Reset list UI only when navigating to a different model, not on every model object refresh (e.g. PATCH).
   useEffect(() => {
