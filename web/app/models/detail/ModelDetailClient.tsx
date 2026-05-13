@@ -21,12 +21,8 @@ import {
   useState,
 } from "react";
 import { Button } from "@/components/ui/Button";
-import {
-  applyModelLightDeltas,
-  parseLightsSSEMessage,
-} from "@/lib/lightDeltas";
 import type { Light, ModelDetail } from "@/lib/models";
-import { eventSourceUrl } from "@/lib/sseUrl";
+import { useModelLightsSSE } from "@/lib/useModelLightsSSE";
 
 const PAGE_SIZE_OPTIONS = [25, 50, 100] as const;
 
@@ -447,48 +443,7 @@ export function ModelDetailClient() {
   }, [load]);
 
   // REQ-041: SSE with seq + deltas; merge locally; snapshot on gap or transport error.
-  const sseSeqRef = useRef<number | null>(null);
-  useEffect(() => {
-    sseSeqRef.current = null;
-  }, [id]);
-  useEffect(() => {
-    if (!id || typeof window === "undefined") {
-      return;
-    }
-    const url = eventSourceUrl(
-      `/api/v1/models/${encodeURIComponent(id)}/lights/events`,
-    );
-    const es = new EventSource(url);
-    es.onmessage = (ev) => {
-      const msg = parseLightsSSEMessage(ev.data);
-      if (!msg) {
-        return;
-      }
-      const prev = sseSeqRef.current;
-      if (prev !== null && msg.seq !== prev + 1) {
-        sseSeqRef.current = msg.seq;
-        void load();
-        return;
-      }
-      sseSeqRef.current = msg.seq;
-      const deltas = msg.deltas ?? [];
-      if (deltas.length === 0) {
-        return;
-      }
-      setModel((m) => {
-        if (!m || m.id !== id) {
-          return m;
-        }
-        return { ...m, lights: applyModelLightDeltas(m.lights, deltas) };
-      });
-    };
-    es.onerror = () => {
-      es.close();
-      sseSeqRef.current = null;
-      void load();
-    };
-    return () => es.close();
-  }, [id, load]);
+  useModelLightsSSE(id, setModel, load);
 
   // Reset list UI only when navigating to a different model, not on every model object refresh (e.g. PATCH).
   useEffect(() => {
