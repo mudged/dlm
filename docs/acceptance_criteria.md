@@ -1307,6 +1307,19 @@ Feature: Physical devices WLED first and extensibility (REQ-035)
     Then implementations must support adding a device using operator-supplied connection parameters
     And automated network discovery may be deferred until architecture implements it without blocking the manual add path
 
+  Scenario: REQ-035 rejects device base_url values that are not http or https with a host
+    Parent requirement: REQ-035
+    Given docs/requirements.md defines REQ-035 business rule 6 for base_url validation
+    When a caller submits a device with base_url that fails to parse or has a scheme other than http or https or has an empty host
+    Then the device registry must reject the request with HTTP 400 and the JSON error envelope code invalid_base_url
+    And the rejection must occur before any outbound HTTP request is attempted against the supplied address
+
+  Scenario: REQ-035 accepts and normalizes valid http or https base_url values
+    Parent requirement: REQ-035
+    Given docs/requirements.md defines REQ-035 business rule 6 for base_url validation
+    When a caller submits a device whose base_url parses as a URL with scheme http or https and a non-empty host
+    Then the device registry must accept the request and persist a normalized URL string preserving the logical destination
+
 Feature: Device model one-to-one assignment (REQ-036)
 
   Scenario: REQ-036 requires exclusive at-most-one assignment each side
@@ -1454,6 +1467,13 @@ Feature: Server-push visualization with incremental apply (REQ-041)
     When REQ-041 business rules 4 and 5 are read
     Then docs/architecture.md must name the chosen push transport URL or subscription pattern delta message schema and reconnect full resync behavior
     And the design must remain plausible on Raspberry Pi 4 constraints
+
+  Scenario: REQ-041 requires fan-out lookup failures to be logged at WARN with the affected scope
+    Parent requirement: REQ-041
+    Given docs/requirements.md defines REQ-041 business rule 6 for observability of fan-out failures
+    When the server emits a delta on one topic and then fails to enumerate dependent topics for the same change
+    Then the failure must be recorded by the structured logger at WARN level or higher
+    And the log record must include at minimum the scope identifier such as model_id and the wrapped underlying error
 
 Feature: Routine run visibility and visualization resync (REQ-042)
 

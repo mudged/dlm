@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"sync"
 	"time"
@@ -33,14 +34,34 @@ type RevisionHub struct {
 	mu   sync.Mutex
 	seq  map[string]uint64
 	subs map[string][]chan LightsSSEPayload
+	log  *slog.Logger
 }
 
-// NewRevisionHub constructs an empty hub.
+// NewRevisionHub constructs an empty hub. Fan-out lookup failures are reported
+// via slog.Default(); use NewRevisionHubWithLogger to inject a different logger
+// (e.g. the JSON handler wired in router.go).
 func NewRevisionHub() *RevisionHub {
+	return NewRevisionHubWithLogger(nil)
+}
+
+// NewRevisionHubWithLogger constructs an empty hub using the supplied logger
+// for REQ-041 BR 6 fan-out warnings. A nil logger falls back to slog.Default().
+func NewRevisionHubWithLogger(log *slog.Logger) *RevisionHub {
+	if log == nil {
+		log = slog.Default()
+	}
 	return &RevisionHub{
 		seq:  make(map[string]uint64),
 		subs: make(map[string][]chan LightsSSEPayload),
+		log:  log,
 	}
+}
+
+func (h *RevisionHub) logger() *slog.Logger {
+	if h == nil || h.log == nil {
+		return slog.Default()
+	}
+	return h.log
 }
 
 func modelTopic(modelID string) string { return "m:" + modelID }
@@ -110,6 +131,12 @@ func (h *RevisionHub) NotifyModelLightsChanged(ctx context.Context, st *store.St
 	h.emit(modelTopic(modelID), deltas)
 	scenes, err := st.ListSceneIDsForModel(ctx, modelID)
 	if err != nil {
+		// REQ-041 BR 6: scene subscribers will not see this delta until the
+		// next change. Surface so operators can correlate stuck SSE streams.
+		h.logger().Warn("revision_hub: scene fan-out lookup failed",
+			"model_id", modelID,
+			"err", err,
+		)
 		return
 	}
 	sceneDeltas := cloneDeltasWithModelID(modelID, deltas)
@@ -148,6 +175,11 @@ func (h *RevisionHub) NotifyAfterSceneLightPatch(ctx context.Context, st *store.
 		h.emit(modelTopic(mid), md)
 		others, err := st.ListSceneIDsForModel(ctx, mid)
 		if err != nil {
+			// REQ-041 BR 6: log so the missed cross-scene fan-out is visible.
+			h.logger().Warn("revision_hub: scene fan-out lookup failed",
+				"model_id", mid,
+				"err", err,
+			)
 			continue
 		}
 		for _, sid := range others {

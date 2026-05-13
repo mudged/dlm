@@ -8,7 +8,7 @@ import (
 // postFactoryReset wipes all application data and re-seeds default samples (REQ-017).
 func (d *apiDeps) postFactoryReset(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
 		return
 	}
 	const maxBody = 4096

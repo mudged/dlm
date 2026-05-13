@@ -293,6 +293,39 @@ func TestStatic_missingNextAsset_returnsNotFound(t *testing.T) {
 	}
 }
 
+func TestAPIv1FactoryReset_wrongMethod_returnsJSONEnvelope(t *testing.T) {
+	srv := httptest.NewServer(newTestHandler(t, nil))
+	t.Cleanup(srv.Close)
+
+	res, err := http.Get(srv.URL + "/api/v1/system/factory-reset")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusMethodNotAllowed {
+		t.Fatalf("status = %d want 405", res.StatusCode)
+	}
+	ct := res.Header.Get("Content-Type")
+	if !strings.HasPrefix(ct, "application/json") {
+		t.Fatalf("Content-Type = %q want application/json", ct)
+	}
+	var env struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&env); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if env.Error.Code != "method_not_allowed" {
+		t.Fatalf("code = %q want method_not_allowed", env.Error.Code)
+	}
+	if env.Error.Message == "" {
+		t.Fatalf("message empty")
+	}
+}
+
 func TestAPIv1FactoryReset_resetsToThreeSamples(t *testing.T) {
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "factory.db")

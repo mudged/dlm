@@ -71,6 +71,10 @@ func (a *apiDeps) postDevice(w http.ResponseWriter, r *http.Request) {
 		BaseURL:      body.BaseURL,
 		WLEDPassword: body.WLEDPassword,
 	})
+	if errors.Is(err, store.ErrInvalidBaseURL) {
+		writeAPIError(w, http.StatusBadRequest, "invalid_base_url", err.Error())
+		return
+	}
 	if err != nil {
 		msg := err.Error()
 		if strings.Contains(msg, "unsupported") || strings.Contains(msg, "required") {
@@ -143,6 +147,10 @@ func (a *apiDeps) patchDevice(w http.ResponseWriter, r *http.Request) {
 	})
 	if errors.Is(err, store.ErrDeviceNotFound) {
 		writeAPIError(w, http.StatusNotFound, "not_found", "device not found")
+		return
+	}
+	if errors.Is(err, store.ErrInvalidBaseURL) {
+		writeAPIError(w, http.StatusBadRequest, "invalid_base_url", err.Error())
 		return
 	}
 	if err != nil {

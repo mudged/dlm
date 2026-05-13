@@ -97,6 +97,79 @@ func TestStore_DeviceCreateListAssignUnassignDelete(t *testing.T) {
 	}
 }
 
+func TestStore_CreateDevice_baseURLValidation(t *testing.T) {
+	ctx := context.Background()
+	s := testDB(t)
+
+	rejectCases := []struct {
+		name string
+		in   string
+	}{
+		{"empty", ""},
+		{"whitespace", "   "},
+		{"file_scheme", "file:///etc/passwd"},
+		{"ftp_scheme", "ftp://example.com/"},
+		{"gopher_scheme", "gopher://example.com:70/"},
+		{"javascript_scheme", "javascript:alert(1)"},
+		{"http_no_host", "http:"},
+		{"http_only_path", "http://"},
+		{"not_a_url", "::::"},
+	}
+	for _, tc := range rejectCases {
+		t.Run("reject_"+tc.name, func(t *testing.T) {
+			_, err := s.CreateDevice(ctx, DeviceCreate{Name: "x", BaseURL: tc.in})
+			if !errors.Is(err, ErrInvalidBaseURL) {
+				t.Fatalf("want ErrInvalidBaseURL for %q, got %v", tc.in, err)
+			}
+		})
+	}
+
+	acceptCases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"http_hostname", "http://example.com", "http://example.com"},
+		{"https_ip_port_trailing_slash", "https://1.2.3.4:8080/", "https://1.2.3.4:8080"},
+		{"http_path_no_trailing_slash", "http://wled.local/api", "http://wled.local/api"},
+		{"http_path_trailing_slash", "http://wled.local/api/", "http://wled.local/api"},
+	}
+	for _, tc := range acceptCases {
+		t.Run("accept_"+tc.name, func(t *testing.T) {
+			d, err := s.CreateDevice(ctx, DeviceCreate{Name: "x-" + tc.name, BaseURL: tc.in})
+			if err != nil {
+				t.Fatalf("unexpected error for %q: %v", tc.in, err)
+			}
+			if d.BaseURL != tc.want {
+				t.Fatalf("base_url want %q got %q", tc.want, d.BaseURL)
+			}
+		})
+	}
+}
+
+func TestStore_PatchDevice_baseURLValidation(t *testing.T) {
+	ctx := context.Background()
+	s := testDB(t)
+	d, err := s.CreateDevice(ctx, DeviceCreate{Name: "patch", BaseURL: "http://wled.local"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	bad := "file:///etc/passwd"
+	if _, err := s.PatchDevice(ctx, d.ID, DevicePatch{BaseURL: &bad}); !errors.Is(err, ErrInvalidBaseURL) {
+		t.Fatalf("want ErrInvalidBaseURL on patch, got %v", err)
+	}
+
+	good := "https://wled.local:8080/"
+	out, err := s.PatchDevice(ctx, d.ID, DevicePatch{BaseURL: &good})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.BaseURL != "https://wled.local:8080" {
+		t.Fatalf("base_url normalize want %q got %q", "https://wled.local:8080", out.BaseURL)
+	}
+}
+
 func TestStore_FactoryReset_clearsDevices(t *testing.T) {
 	ctx := context.Background()
 	s := testDB(t)

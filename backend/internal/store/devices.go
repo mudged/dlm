@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -19,6 +20,34 @@ var ErrDeviceNotFound = errors.New("device not found")
 
 // ErrDeviceAssignmentConflict is returned when assign would break REQ-036 1:1 rules.
 var ErrDeviceAssignmentConflict = errors.New("device assignment conflict")
+
+// ErrInvalidBaseURL is returned when a supplied device base_url fails the
+// REQ-035 BR 6 allowlist (must be http:// or https:// with a non-empty host).
+// HTTP handlers map this to 400 invalid_base_url per architecture §3.20.
+var ErrInvalidBaseURL = errors.New("invalid base_url: must be http:// or https:// with a host")
+
+// normalizeBaseURL enforces the REQ-035 BR 6 allowlist on a device base_url.
+// Accepts: scheme http or https, non-empty host, parseable by net/url.Parse.
+// Rejects: empty/whitespace input, other schemes (file, ftp, gopher, javascript, …),
+// schemes with no host (e.g. "http:" alone). Returns the canonical string with
+// any trailing slash trimmed so equality on stored values is stable.
+func normalizeBaseURL(raw string) (string, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return "", ErrInvalidBaseURL
+	}
+	u, err := url.Parse(trimmed)
+	if err != nil {
+		return "", ErrInvalidBaseURL
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return "", ErrInvalidBaseURL
+	}
+	if u.Host == "" {
+		return "", ErrInvalidBaseURL
+	}
+	return strings.TrimRight(u.String(), "/"), nil
+}
 
 // Device is persisted device registry metadata (REQ-035 / architecture §3.3).
 type Device struct {
@@ -150,16 +179,20 @@ func (s *Store) GetDeviceForModel(ctx context.Context, modelID string) (Device, 
 func (s *Store) CreateDevice(ctx context.Context, in DeviceCreate) (Device, error) {
 	in.Type = strings.TrimSpace(in.Type)
 	in.Name = strings.TrimSpace(in.Name)
-	in.BaseURL = strings.TrimSpace(in.BaseURL)
 	if in.Type == "" {
 		in.Type = DeviceTypeWLED
 	}
 	if in.Type != DeviceTypeWLED {
 		return Device{}, fmt.Errorf("unsupported device type %q", in.Type)
 	}
-	if in.Name == "" || in.BaseURL == "" {
+	if in.Name == "" {
 		return Device{}, fmt.Errorf("name and base_url are required")
 	}
+	canonical, err := normalizeBaseURL(in.BaseURL)
+	if err != nil {
+		return Device{}, err
+	}
+	in.BaseURL = canonical
 	id := uuid.NewString()
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	var pw any
@@ -168,11 +201,10 @@ func (s *Store) CreateDevice(ctx context.Context, in DeviceCreate) (Device, erro
 	} else {
 		pw = nil
 	}
-	_, err := s.db.ExecContext(ctx, `
+	if _, err := s.db.ExecContext(ctx, `
 		INSERT INTO devices (id, type, name, base_url, wled_password, model_id, created_at)
 		VALUES (?, ?, ?, ?, ?, NULL, ?)
-	`, id, in.Type, in.Name, in.BaseURL, pw, now)
-	if err != nil {
+	`, id, in.Type, in.Name, in.BaseURL, pw, now); err != nil {
 		return Device{}, err
 	}
 	return s.GetDevice(ctx, id)
@@ -194,12 +226,12 @@ func (s *Store) PatchDevice(ctx context.Context, id string, p DevicePatch) (Devi
 		args = append(args, n)
 	}
 	if p.BaseURL != nil {
-		u := strings.TrimSpace(*p.BaseURL)
-		if u == "" {
-			return Device{}, fmt.Errorf("base_url cannot be empty")
+		canonical, err := normalizeBaseURL(*p.BaseURL)
+		if err != nil {
+			return Device{}, err
 		}
 		sets = append(sets, "base_url = ?")
-		args = append(args, u)
+		args = append(args, canonical)
 	}
 	if p.WLEDPassword != nil {
 		sets = append(sets, "wled_password = ?")

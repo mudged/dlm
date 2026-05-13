@@ -65,7 +65,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	revHub := httpapi.NewRevisionHub()
+	revHub := httpapi.NewRevisionHubWithLogger(log)
 	pusher := devices.NewPusher(st, nil)
 	if err := pusher.SyncAllAssignedModels(ctx); err != nil {
 		log.Warn("wled sync on startup", "err", err)

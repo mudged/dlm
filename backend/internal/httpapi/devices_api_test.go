@@ -155,6 +155,121 @@ func TestAPIv1Devices_createListAssignUnassign(t *testing.T) {
 	}
 }
 
+func TestAPIv1Devices_postRejectsInvalidBaseURL(t *testing.T) {
+	srv := httptest.NewServer(newTestHandler(t, nil))
+	t.Cleanup(srv.Close)
+	base := srv.URL + "/api/v1/devices"
+
+	cases := []struct {
+		name string
+		body string
+	}{
+		{"file_scheme", `{"name":"x","base_url":"file:///etc/passwd"}`},
+		{"ftp_scheme", `{"name":"x","base_url":"ftp://example.com/"}`},
+		{"empty_host", `{"name":"x","base_url":"http://"}`},
+		{"http_no_host", `{"name":"x","base_url":"http:"}`},
+		{"whitespace", `{"name":"x","base_url":"   "}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			res, err := http.Post(base, "application/json", strings.NewReader(tc.body))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer res.Body.Close()
+			if res.StatusCode != http.StatusBadRequest {
+				t.Fatalf("status=%d want 400", res.StatusCode)
+			}
+			var env struct {
+				Error struct {
+					Code    string `json:"code"`
+					Message string `json:"message"`
+				} `json:"error"`
+			}
+			if err := json.NewDecoder(res.Body).Decode(&env); err != nil {
+				t.Fatalf("decode: %v", err)
+			}
+			if env.Error.Code != "invalid_base_url" {
+				t.Fatalf("code = %q want invalid_base_url (msg=%q)", env.Error.Code, env.Error.Message)
+			}
+		})
+	}
+}
+
+func TestAPIv1Devices_patchRejectsInvalidBaseURL(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "devices_patch_invalid.db")
+	st, err := store.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	st.SetLightState(lightstate.New())
+	if err := st.LoadLightStateFromDB(ctx); err != nil {
+		t.Fatal(err)
+	}
+	d, err := st.CreateDevice(ctx, store.DeviceCreate{Name: "p", BaseURL: "http://wled.local"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := &config.Config{
+		HTTPListen:   ":8080",
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		DBPath:       path,
+	}
+	srv := httptest.NewServer(NewSiteHandler(cfg, nil, st, nil, nil))
+	t.Cleanup(srv.Close)
+
+	patchURL := srv.URL + "/api/v1/devices/" + d.ID
+	req, _ := http.NewRequest(http.MethodPatch, patchURL, strings.NewReader(`{"base_url":"file:///etc/passwd"}`))
+	req.Header.Set("Content-Type", "application/json")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status=%d want 400", res.StatusCode)
+	}
+	var env struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&env); err != nil {
+		t.Fatal(err)
+	}
+	if env.Error.Code != "invalid_base_url" {
+		t.Fatalf("code = %q want invalid_base_url", env.Error.Code)
+	}
+}
+
+func TestAPIv1Devices_postAcceptsHTTPAndNormalizes(t *testing.T) {
+	srv := httptest.NewServer(newTestHandler(t, nil))
+	t.Cleanup(srv.Close)
+	base := srv.URL + "/api/v1/devices"
+
+	body := `{"name":"trim","base_url":"https://1.2.3.4:8080/"}`
+	res, err := http.Post(base, "application/json", strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusCreated {
+		b, _ := io.ReadAll(res.Body)
+		t.Fatalf("status=%d body=%s", res.StatusCode, b)
+	}
+	var created map[string]any
+	if err := json.NewDecoder(res.Body).Decode(&created); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := created["base_url"].(string); got != "https://1.2.3.4:8080" {
+		t.Fatalf("base_url = %q want trailing slash trimmed", got)
+	}
+}
+
 func TestAPIv1Devices_assignConflict_returns409(t *testing.T) {
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "devices_409.db")

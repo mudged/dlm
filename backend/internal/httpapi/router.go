@@ -32,10 +32,10 @@ func NewSiteHandler(cfg *config.Config, content fs.FS, st *store.Store, rev *Rev
 	if st == nil {
 		panic("httpapi.NewSiteHandler: store is nil")
 	}
-	if rev == nil {
-		rev = NewRevisionHub()
-	}
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{}))
+	if rev == nil {
+		rev = NewRevisionHubWithLogger(log)
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", healthHandler)
@@ -45,7 +45,16 @@ func NewSiteHandler(cfg *config.Config, content fs.FS, st *store.Store, rev *Rev
 	deps.engine = routineengine.New(st, cfg.HTTPListen, func(ctx context.Context, sceneID string, states []store.ScenePatchedState) {
 		deps.notifyAfterSceneLightPatch(ctx, sceneID, states)
 	}, log)
-	api.HandleFunc("POST /system/factory-reset", deps.postFactoryReset)
+	// Register every method on this path to the same handler so the
+	// internal POST check can return the §3.2 JSON envelope on 405,
+	// rather than falling through to the `GET /{path...}` 404 catch-all.
+	for _, m := range []string{
+		http.MethodGet, http.MethodPost, http.MethodPut,
+		http.MethodPatch, http.MethodDelete, http.MethodOptions,
+		http.MethodHead,
+	} {
+		api.HandleFunc(m+" /system/factory-reset", deps.postFactoryReset)
+	}
 	api.HandleFunc("GET /devices", deps.listDevices)
 	api.HandleFunc("POST /devices", deps.postDevice)
 	api.HandleFunc("POST /devices/discover", deps.postDevicesDiscover)
