@@ -1,5 +1,6 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createModelSSEHandlers } from "./useModelLightsSSE";
+import { manageSSEConnection } from "./sseReconnect";
 import type { ModelDetail } from "@/lib/models";
 
 /** Minimal fake for SSE event dispatch — no React or browser needed. */
@@ -274,5 +275,191 @@ describe("createModelSSEHandlers", () => {
 
       expect(onReload).not.toHaveBeenCalled();
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Reconnect with backoff — tests for manageSSEConnection + createModelSSEHandlers
+// ---------------------------------------------------------------------------
+
+/** Wires up manageSSEConnection with createModelSSEHandlers for reconnect tests. */
+function makeReconnectSession(
+  seqRef: { current: number | null },
+  onReload: () => void,
+  setModel?: (updater: (m: ModelDetail | null) => ModelDetail | null) => void,
+  overrides?: { backoffStepsMs?: readonly number[]; jitterMs?: number },
+) {
+  const makeEs = vi.fn(() => makeFakeES());
+
+  const session = manageSSEConnection({
+    makeEs: makeEs as unknown as () => EventSource,
+    attach(es, { scheduleReconnect, resetBackoff }) {
+      const fakeEs = es as unknown as ReturnType<typeof makeFakeES>;
+      const handlers = createModelSSEHandlers({
+        seqRef,
+        modelId: "model-1",
+        setModel: setModel ?? vi.fn(),
+        onReload,
+        closeEs: () => fakeEs.close(),
+      });
+      fakeEs.onopen = () => {
+        resetBackoff();
+        handlers.onopen();
+      };
+      fakeEs.onmessage = handlers.onmessage;
+      fakeEs.onerror = () => {
+        handlers.onerror();
+        scheduleReconnect();
+      };
+    },
+    backoffStepsMs: overrides?.backoffStepsMs ?? [100, 200, 500, 1_000],
+    jitterMs: overrides?.jitterMs ?? 0,
+  });
+
+  const getEs = (callIndex = makeEs.mock.calls.length - 1) =>
+    makeEs.mock.results[callIndex].value as ReturnType<typeof makeFakeES>;
+
+  return { makeEs, session, getEs };
+}
+
+describe("SSE reconnect with backoff (manageSSEConnection + createModelSSEHandlers)", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("creates a new EventSource after the first backoff delay", () => {
+    vi.useFakeTimers();
+    const { makeEs, session, getEs } = makeReconnectSession(
+      { current: null },
+      vi.fn(),
+    );
+
+    expect(makeEs).toHaveBeenCalledTimes(1);
+
+    getEs(0).triggerError();
+    expect(makeEs).toHaveBeenCalledTimes(1); // timer not yet elapsed
+
+    vi.advanceTimersByTime(99);
+    expect(makeEs).toHaveBeenCalledTimes(1);
+
+    vi.advanceTimersByTime(1); // 100 ms total → first backoff fires
+    expect(makeEs).toHaveBeenCalledTimes(2);
+
+    session.destroy();
+  });
+
+  it("backoff delay grows on repeated failures", () => {
+    vi.useFakeTimers();
+    const { makeEs, session, getEs } = makeReconnectSession(
+      { current: null },
+      vi.fn(),
+    );
+
+    // attempt 0 → delay 100 ms
+    getEs(0).triggerError();
+    vi.advanceTimersByTime(100);
+    expect(makeEs).toHaveBeenCalledTimes(2);
+
+    // attempt 1 → delay 200 ms; 100 ms is not enough
+    getEs(1).triggerError();
+    vi.advanceTimersByTime(100);
+    expect(makeEs).toHaveBeenCalledTimes(2);
+
+    vi.advanceTimersByTime(100); // 200 ms total → fires
+    expect(makeEs).toHaveBeenCalledTimes(3);
+
+    session.destroy();
+  });
+
+  it("caps backoff at the last step for high attempt counts", () => {
+    vi.useFakeTimers();
+    const { makeEs, session, getEs } = makeReconnectSession(
+      { current: null },
+      vi.fn(),
+      undefined,
+      { backoffStepsMs: [100, 200], jitterMs: 0 },
+    );
+
+    // attempt 0 → 100 ms
+    getEs(0).triggerError();
+    vi.advanceTimersByTime(100);
+    expect(makeEs).toHaveBeenCalledTimes(2);
+
+    // attempt 1 → 200 ms
+    getEs(1).triggerError();
+    vi.advanceTimersByTime(200);
+    expect(makeEs).toHaveBeenCalledTimes(3);
+
+    // attempt 2 → still 200 ms (capped at last step)
+    getEs(2).triggerError();
+    vi.advanceTimersByTime(200);
+    expect(makeEs).toHaveBeenCalledTimes(4);
+
+    session.destroy();
+  });
+
+  it("resets backoff to base delay after a successful onopen", () => {
+    vi.useFakeTimers();
+    const { makeEs, session, getEs } = makeReconnectSession(
+      { current: null },
+      vi.fn(),
+    );
+
+    // First error → 100 ms
+    getEs(0).triggerError();
+    vi.advanceTimersByTime(100);
+    expect(makeEs).toHaveBeenCalledTimes(2);
+
+    // Successful open resets backoff
+    getEs(1).triggerOpen();
+
+    // Next error should again use the base delay (100 ms), not 200 ms
+    getEs(1).triggerError();
+    vi.advanceTimersByTime(100);
+    expect(makeEs).toHaveBeenCalledTimes(3);
+
+    session.destroy();
+  });
+
+  it("cancels the pending reconnect timer on destroy", () => {
+    vi.useFakeTimers();
+    const { makeEs, session, getEs } = makeReconnectSession(
+      { current: null },
+      vi.fn(),
+    );
+
+    getEs(0).triggerError();
+    session.destroy(); // cancels the timer before it fires
+
+    vi.advanceTimersByTime(1_000);
+    expect(makeEs).toHaveBeenCalledTimes(1); // no reconnect
+  });
+
+  it("does not open a new connection after destroy even if error fires late", () => {
+    vi.useFakeTimers();
+    const { makeEs, session, getEs } = makeReconnectSession(
+      { current: null },
+      vi.fn(),
+    );
+
+    session.destroy();
+    getEs(0).triggerError(); // error after destroy
+
+    vi.advanceTimersByTime(1_000);
+    expect(makeEs).toHaveBeenCalledTimes(1);
+  });
+
+  it("calls onReload and clears seqRef on error before reconnecting", () => {
+    vi.useFakeTimers();
+    const seqRef = { current: 5 as number | null };
+    const onReload = vi.fn();
+    const { session, getEs } = makeReconnectSession(seqRef, onReload);
+
+    getEs(0).triggerError();
+
+    expect(onReload).toHaveBeenCalledTimes(1);
+    expect(seqRef.current).toBeNull();
+
+    session.destroy();
   });
 });

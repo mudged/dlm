@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { ModelDetail } from "./models";
 import {
   confirmCaptureJob,
   createCaptureJob,
@@ -234,5 +235,176 @@ describe("discardCaptureJob (REQ-049)", () => {
       message: "Already discarded",
       code: "gone",
     });
+  });
+});
+
+// ── WI-20: stale-load guard (models detail page) ──────────────────────────────
+
+/**
+ * Mirrors the guard logic in ModelDetailClient.tsx `load(signal?)`.
+ * Returns the fetched model, or null if the signal was aborted.
+ */
+async function loadModelDetailGuarded(
+  id: string,
+  signal: AbortSignal,
+  onSuccess: (m: ModelDetail) => void,
+  onError: (msg: string) => void,
+  onLoadingDone: () => void,
+): Promise<void> {
+  try {
+    const res = await fetch(`/api/v1/models/${encodeURIComponent(id)}`, {
+      cache: "no-store",
+      signal,
+    });
+    if (signal.aborted) return;
+    const j = (await res.json().catch(() => null)) as ModelDetail & {
+      error?: { message?: string };
+    };
+    if (signal.aborted) return;
+    if (!res.ok) {
+      onError(j?.error?.message ?? `Could not load model (${res.status})`);
+      return;
+    }
+    onSuccess(j as ModelDetail);
+  } catch {
+    if (signal.aborted) return;
+    onError("Could not reach the API.");
+  } finally {
+    if (!signal.aborted) onLoadingDone();
+  }
+}
+
+describe("WI-20 stale-load guard — models detail page", () => {
+  const realFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+  });
+
+  function signalAwareFetchMock(
+    resolvers: Map<string, (r: Response) => void>,
+  ): typeof globalThis.fetch {
+    return vi.fn(async (url, init) => {
+      const signal = (init as RequestInit | undefined)?.signal;
+      return new Promise<Response>((resolve, reject) => {
+        resolvers.set(url as string, resolve);
+        signal?.addEventListener("abort", () => {
+          reject(new DOMException("This operation was aborted", "AbortError"));
+        });
+      });
+    }) as typeof globalThis.fetch;
+  }
+
+  it("out-of-order: id-A response arriving after id-B does not overwrite state", async () => {
+    const resolvers = new Map<string, (r: Response) => void>();
+    globalThis.fetch = signalAwareFetchMock(resolvers);
+
+    const applied: ModelDetail[] = [];
+    const errors: string[] = [];
+    const noopLoading = () => {};
+
+    const ctrlA = new AbortController();
+    const ctrlB = new AbortController();
+
+    // Start A, then immediately cancel (simulate fast id change to B)
+    const promA = loadModelDetailGuarded(
+      "model-a",
+      ctrlA.signal,
+      (m) => applied.push(m),
+      (msg) => errors.push(msg),
+      noopLoading,
+    );
+    ctrlA.abort();
+
+    // Start B (current navigation target)
+    const promB = loadModelDetailGuarded(
+      "model-b",
+      ctrlB.signal,
+      (m) => applied.push(m),
+      (msg) => errors.push(msg),
+      noopLoading,
+    );
+
+    // B resolves first
+    const modelB: ModelDetail = {
+      id: "model-b",
+      name: "B",
+      created_at: "2024-01-01T00:00:00Z",
+      light_count: 0,
+      lights: [],
+    };
+    resolvers
+      .get("/api/v1/models/model-b")!
+      (
+        new Response(JSON.stringify(modelB), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+    await promB;
+
+    // A's network response arrives late (stale — already cancelled)
+    const modelA: ModelDetail = {
+      id: "model-a",
+      name: "A",
+      created_at: "2024-01-01T00:00:00Z",
+      light_count: 0,
+      lights: [],
+    };
+    resolvers
+      .get("/api/v1/models/model-a")!
+      (
+        new Response(JSON.stringify(modelA), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+    await promA;
+
+    // Only B's result reached the state setter; A was cancelled before it could
+    expect(applied).toHaveLength(1);
+    expect(applied[0]!.id).toBe("model-b");
+    expect(errors).toHaveLength(0);
+  });
+
+  it("aborted load does not call onSuccess or onLoadingDone after unmount", async () => {
+    const resolvers = new Map<string, (r: Response) => void>();
+    globalThis.fetch = signalAwareFetchMock(resolvers);
+
+    const applied: ModelDetail[] = [];
+    const loadingDone: boolean[] = [];
+    const ctrl = new AbortController();
+
+    const prom = loadModelDetailGuarded(
+      "model-x",
+      ctrl.signal,
+      (m) => applied.push(m),
+      () => {},
+      () => loadingDone.push(true),
+    );
+
+    // Simulate unmount: abort the controller
+    ctrl.abort();
+
+    // Response arrives after unmount
+    const modelX: ModelDetail = {
+      id: "model-x",
+      name: "X",
+      created_at: "2024-01-01T00:00:00Z",
+      light_count: 0,
+      lights: [],
+    };
+    resolvers
+      .get("/api/v1/models/model-x")!
+      (
+        new Response(JSON.stringify(modelX), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+    await prom;
+
+    expect(applied).toHaveLength(0);
+    expect(loadingDone).toHaveLength(0);
   });
 });

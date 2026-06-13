@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"time"
 
 	"example.com/dlm/backend/internal/store"
 )
@@ -19,7 +18,7 @@ type Pusher struct {
 // NewPusher returns a pusher with a default HTTP client when hc is nil.
 func NewPusher(st *store.Store, hc *http.Client) *Pusher {
 	if hc == nil {
-		hc = &http.Client{Timeout: 5 * time.Second}
+		hc = deviceHTTPClient()
 	}
 	return &Pusher{Store: st, Client: hc}
 }

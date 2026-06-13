@@ -36,6 +36,10 @@ func (a *apiDeps) postCaptureStart(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusConflict, "capture_conflict", "a capture sweep is already running for this device")
 		return
 	}
+	if errors.Is(err, capture.ErrCaptureRoutineCheck) {
+		writeAPIError(w, http.StatusServiceUnavailable, "capture_routine_check_failed", "could not verify routine status before starting capture")
+		return
+	}
 	if err != nil {
 		writeAPIError(w, http.StatusInternalServerError, "internal_error", "could not start capture")
 		return
@@ -58,19 +62,28 @@ func (a *apiDeps) postCaptureStop(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusBadRequest, "bad_request", "missing device id")
 		return
 	}
-	if _, err := a.store.GetDevice(r.Context(), id); errors.Is(err, store.ErrDeviceNotFound) {
+	d, err := a.store.GetDevice(r.Context(), id)
+	if errors.Is(err, store.ErrDeviceNotFound) {
 		writeAPIError(w, http.StatusNotFound, "not_found", "device not found")
 		return
 	} else if err != nil {
 		writeAPIError(w, http.StatusInternalServerError, "internal_error", "could not load device")
 		return
 	}
+
+	st := capture.Status{State: "idle", LightCount: d.LightCount}
 	if a.capture != nil {
 		a.capture.Stop(id)
+		st = a.capture.GetStatus(id)
+		if st.LightCount == 0 {
+			st.LightCount = d.LightCount
+		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"device_id": id,
-		"state":     "idle",
+		"device_id":     id,
+		"state":         st.State,
+		"light_count":   st.LightCount,
+		"current_index": st.CurrentIndex,
 	})
 }
 

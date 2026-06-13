@@ -28,12 +28,25 @@ type LightsSSEPayload struct {
 	Deltas []LightsSSEDelta `json:"deltas"`
 }
 
+// subscriber is one SSE client's receive end. ch carries payloads; done is closed
+// (once) to signal the SSE handler goroutine to exit when the subscriber is too slow.
+type subscriber struct {
+	ch   chan LightsSSEPayload
+	done chan struct{}
+	once sync.Once
+}
+
+// disconnect closes done exactly once so the SSE handler goroutine unblocks and exits.
+func (s *subscriber) disconnect() {
+	s.once.Do(func() { close(s.done) })
+}
+
 // RevisionHub broadcasts monotonic revision numbers and per-commit deltas for model and
 // scene light-state topics (REQ-029, REQ-041). Safe for concurrent use.
 type RevisionHub struct {
 	mu   sync.Mutex
 	seq  map[string]uint64
-	subs map[string][]chan LightsSSEPayload
+	subs map[string][]*subscriber
 	log  *slog.Logger
 }
 
@@ -52,7 +65,7 @@ func NewRevisionHubWithLogger(log *slog.Logger) *RevisionHub {
 	}
 	return &RevisionHub{
 		seq:  make(map[string]uint64),
-		subs: make(map[string][]chan LightsSSEPayload),
+		subs: make(map[string][]*subscriber),
 		log:  log,
 	}
 }
@@ -106,20 +119,34 @@ func (h *RevisionHub) emit(key string, deltas []LightsSSEDelta) {
 	h.seq[key]++
 	v := h.seq[key]
 	msg := LightsSSEPayload{Seq: v, Deltas: deltas}
-	subs := append([]chan LightsSSEPayload(nil), h.subs[key]...)
+	subs := append([]*subscriber(nil), h.subs[key]...)
 	h.mu.Unlock()
 
-	// Do not hold mu while sending: unsubscribe needs the lock; blocking on ch would deadlock.
-	// Blocking send (not select/default): non-blocking sends dropped deltas when the SSE
-	// writer lagged, leaving clients on the initial seq with empty deltas forever.
-	for _, ch := range subs {
-		emitSendPayload(ch, msg)
+	// Do not hold mu while sending: unsubscribe needs the lock.
+	// Non-blocking send: a full or concurrently-closed channel goes to default.
+	// A subscriber that would block is disconnected so it cannot stall API handlers.
+	for _, sub := range subs {
+		if !emitSendPayload(sub.ch, msg) {
+			sub.disconnect()
+			h.logger().Warn("revision_hub: slow subscriber disconnected; client should reconnect",
+				"key", key,
+				"seq", v,
+			)
+		}
 	}
 }
 
-func emitSendPayload(ch chan LightsSSEPayload, msg LightsSSEPayload) {
-	defer func() { recover() }() // send after unsubscribe closes ch
-	ch <- msg
+// emitSendPayload attempts a non-blocking send. Returns true if the message was
+// enqueued, false if the channel buffer was full (or the channel was already closed).
+// Recovers from the panic caused by sending on a closed channel (concurrent unsubscribe).
+func emitSendPayload(ch chan LightsSSEPayload, msg LightsSSEPayload) (sent bool) {
+	defer func() { recover() }()
+	select {
+	case ch <- msg:
+		return true
+	default:
+		return false
+	}
 }
 
 // NotifyModelLightsChanged bumps the model topic and every scene that contains this model.
@@ -191,20 +218,26 @@ func (h *RevisionHub) NotifyAfterSceneLightPatch(ctx context.Context, st *store.
 	}
 }
 
-func (h *RevisionHub) subscribe(key string) (lastSeq uint64, ch <-chan LightsSSEPayload, unsub func()) {
-	// Large buffer smooths bursts while emit uses blocking sends so delivery is not dropped.
-	c := make(chan LightsSSEPayload, 1024)
+// subscribe registers a new SSE subscriber for the given topic key.
+// The caller must invoke unsub (exactly once, typically via defer) to remove the
+// subscriber and release its channel. The returned done channel is closed if emit
+// detects the subscriber is too slow; the SSE handler should exit when done fires.
+func (h *RevisionHub) subscribe(key string) (lastSeq uint64, ch <-chan LightsSSEPayload, done <-chan struct{}, unsub func()) {
+	sub := &subscriber{
+		ch:   make(chan LightsSSEPayload, 1024),
+		done: make(chan struct{}),
+	}
 	h.mu.Lock()
 	lastSeq = h.seq[key]
-	h.subs[key] = append(h.subs[key], c)
+	h.subs[key] = append(h.subs[key], sub)
 	h.mu.Unlock()
-	return lastSeq, c, func() {
+	return lastSeq, sub.ch, sub.done, func() {
 		h.mu.Lock()
 		defer h.mu.Unlock()
 		lst := h.subs[key]
 		out := lst[:0]
 		for _, x := range lst {
-			if x != c {
+			if x != sub {
 				out = append(out, x)
 			}
 		}
@@ -213,7 +246,7 @@ func (h *RevisionHub) subscribe(key string) (lastSeq uint64, ch <-chan LightsSSE
 		} else {
 			h.subs[key] = out
 		}
-		close(c)
+		close(sub.ch)
 	}
 }
 
@@ -271,7 +304,7 @@ func (a *apiDeps) getModelLightsEvents(w http.ResponseWriter, r *http.Request) {
 	fl.Flush()
 
 	key := modelTopic(modelID)
-	last, revCh, unsub := a.rev.subscribe(key)
+	last, revCh, done, unsub := a.rev.subscribe(key)
 	defer unsub()
 
 	if err := writeSSEData(w, fl, LightsSSEPayload{Seq: last, Deltas: []LightsSSEDelta{}}); err != nil {
@@ -285,6 +318,8 @@ func (a *apiDeps) getModelLightsEvents(w http.ResponseWriter, r *http.Request) {
 	for {
 		select {
 		case <-r.Context().Done():
+			return
+		case <-done:
 			return
 		case <-tick.C:
 			extend()
@@ -346,7 +381,7 @@ func (a *apiDeps) getSceneLightsEvents(w http.ResponseWriter, r *http.Request) {
 	fl.Flush()
 
 	key := sceneTopic(sceneID)
-	last, revCh, unsub := a.rev.subscribe(key)
+	last, revCh, done, unsub := a.rev.subscribe(key)
 	defer unsub()
 
 	if err := writeSSEData(w, fl, LightsSSEPayload{Seq: last, Deltas: []LightsSSEDelta{}}); err != nil {
@@ -360,6 +395,8 @@ func (a *apiDeps) getSceneLightsEvents(w http.ResponseWriter, r *http.Request) {
 	for {
 		select {
 		case <-r.Context().Done():
+			return
+		case <-done:
 			return
 		case <-tick.C:
 			extend()

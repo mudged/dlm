@@ -98,11 +98,12 @@ export default function ShapeRoutineEditorClient() {
     }
   }, [formState]);
 
-  const load = useCallback(async (rid: string) => {
+  const load = useCallback(async (rid: string, signal?: AbortSignal) => {
     setError(null);
     setLoaded(false);
     try {
       const r: RoutineDefinition = await fetchRoutine(rid);
+      if (signal?.aborted) return;
       if (r.type !== ROUTINE_TYPE_SHAPE_ANIMATION) {
         throw new Error("This routine is not a shape animation.");
       }
@@ -118,9 +119,10 @@ export default function ShapeRoutineEditorClient() {
         }
       }
     } catch (e) {
+      if (signal?.aborted) return;
       setError(e instanceof Error ? e.message : "Load failed");
     } finally {
-      setLoaded(true);
+      if (!signal?.aborted) setLoaded(true);
     }
   }, []);
 
@@ -129,7 +131,9 @@ export default function ShapeRoutineEditorClient() {
       router.replace("/routines/new?type=shape");
       return;
     }
-    void load(idParam);
+    const ctrl = new AbortController();
+    void load(idParam, ctrl.signal);
+    return () => ctrl.abort();
   }, [idParam, load, router]);
 
   useEffect(() => {

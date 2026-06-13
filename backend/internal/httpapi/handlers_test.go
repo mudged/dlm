@@ -8,12 +8,15 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"testing/fstest"
 	"time"
 
+	"example.com/dlm/backend/internal/capture"
 	"example.com/dlm/backend/internal/config"
 	"example.com/dlm/backend/internal/lightstate"
+	"example.com/dlm/backend/internal/reconstruct"
 	"example.com/dlm/backend/internal/store"
 	"example.com/dlm/backend/internal/wiremodel"
 )
@@ -383,7 +386,8 @@ func TestAPIv1FactoryReset_resetsToThreeSamples(t *testing.T) {
 		t.Fatalf("before reset want 1 device, got %d", len(devList.Devices))
 	}
 
-	res, err := http.Post(srv.URL+"/api/v1/system/factory-reset", "application/json", strings.NewReader("{}"))
+	res, err := http.Post(srv.URL+"/api/v1/system/factory-reset", "application/json",
+		strings.NewReader(`{"confirm":"FACTORY RESET"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -452,5 +456,236 @@ func TestAPIv1FactoryReset_resetsToThreeSamples(t *testing.T) {
 		if r.Type != store.RoutineTypePythonSceneScript || r.PythonSource == "" {
 			t.Fatalf("want python_scene_script with source, got %+v", r)
 		}
+	}
+}
+
+// TestAPIv1FactoryReset_missingConfirmation verifies that a POST with no
+// confirmation token is rejected with 422 and never reaches the reset path.
+func TestAPIv1FactoryReset_missingConfirmation(t *testing.T) {
+	srv := httptest.NewServer(newTestHandler(t, nil))
+	t.Cleanup(srv.Close)
+
+	res, err := http.Post(srv.URL+"/api/v1/system/factory-reset", "application/json",
+		strings.NewReader("{}"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusUnprocessableEntity {
+		b, _ := io.ReadAll(res.Body)
+		t.Fatalf("status = %d want 422, body = %s", res.StatusCode, b)
+	}
+	var env struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&env); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if env.Error.Code != "confirmation_required" {
+		t.Fatalf("code = %q want confirmation_required", env.Error.Code)
+	}
+}
+
+// TestAPIv1FactoryReset_wrongConfirmation verifies that a POST with an
+// incorrect phrase is rejected with 422 before any destructive work runs.
+func TestAPIv1FactoryReset_wrongConfirmation(t *testing.T) {
+	srv := httptest.NewServer(newTestHandler(t, nil))
+	t.Cleanup(srv.Close)
+
+	res, err := http.Post(srv.URL+"/api/v1/system/factory-reset", "application/json",
+		strings.NewReader(`{"confirm":"wrong phrase"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusUnprocessableEntity {
+		b, _ := io.ReadAll(res.Body)
+		t.Fatalf("status = %d want 422, body = %s", res.StatusCode, b)
+	}
+	var env struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&env); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if env.Error.Code != "confirmation_required" {
+		t.Fatalf("code = %q want confirmation_required", env.Error.Code)
+	}
+}
+
+// TestAPIv1FactoryReset_correctConfirmation verifies that the exact phrase
+// is accepted and the endpoint returns 200 ok.
+func TestAPIv1FactoryReset_correctConfirmation(t *testing.T) {
+	st := testStore(t)
+	if err := st.SeedDefaultSamples(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(newTestHandler(t, nil))
+	t.Cleanup(srv.Close)
+
+	res, err := http.Post(srv.URL+"/api/v1/system/factory-reset", "application/json",
+		strings.NewReader(`{"confirm":"FACTORY RESET"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(res.Body)
+		t.Fatalf("status = %d want 200, body = %s", res.StatusCode, b)
+	}
+	var okBody struct {
+		OK bool `json:"ok"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&okBody); err != nil || !okBody.OK {
+		t.Fatalf("decode ok: err=%v ok=%v", err, okBody.OK)
+	}
+}
+
+// spyEngine is a fake engineCtrl that records calls for ordering assertions.
+type spyEngine struct {
+	mu       sync.Mutex
+	order    []string // each element is the name of a method that was called
+}
+
+func (s *spyEngine) Start(_ context.Context, _, _, _ string) error { return nil }
+func (s *spyEngine) Stop(_ string)                                  {}
+func (s *spyEngine) Shutdown() {
+	s.mu.Lock()
+	s.order = append(s.order, "engine.Shutdown")
+	s.mu.Unlock()
+}
+func (s *spyEngine) calls() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]string, len(s.order))
+	copy(out, s.order)
+	return out
+}
+
+// spyCapture is a fake captureCtrl that records Shutdown calls.
+type spyCapture struct {
+	mu   sync.Mutex
+	shut bool
+}
+
+func (s *spyCapture) Start(_ context.Context, _ string) (capture.Status, error) {
+	return capture.Status{}, nil
+}
+func (s *spyCapture) Stop(_ string) {}
+func (s *spyCapture) GetStatus(_ string) capture.Status { return capture.Status{} }
+func (s *spyCapture) Shutdown() {
+	s.mu.Lock()
+	s.shut = true
+	s.mu.Unlock()
+}
+
+// spyReconstruct is a fake reconstructCtrl that records Shutdown calls.
+type spyReconstruct struct {
+	mu   sync.Mutex
+	shut bool
+}
+
+func (s *spyReconstruct) Create(_ context.Context, _ []io.Reader, _ []string, _ reconstruct.CreateParams) (string, error) {
+	return "", nil
+}
+func (s *spyReconstruct) Get(_ string) (*reconstruct.Job, bool) { return nil, false }
+func (s *spyReconstruct) Confirm(_ context.Context, _, _ string) (store.Summary, error) {
+	return store.Summary{}, nil
+}
+func (s *spyReconstruct) Discard(_ string) error { return nil }
+func (s *spyReconstruct) Shutdown() {
+	s.mu.Lock()
+	s.shut = true
+	s.mu.Unlock()
+}
+
+// TestAPIv1FactoryReset_stopsWorkersBeforeReset verifies that the factory-reset
+// handler calls Shutdown on the engine, capture, and reconstruct services before
+// wiping the DB.
+func TestAPIv1FactoryReset_stopsWorkersBeforeReset(t *testing.T) {
+	st := testStore(t)
+	if err := st.SeedDefaultSamples(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &config.Config{
+		HTTPListen:   ":8080",
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+	}
+	eng := &spyEngine{}
+	cap := &spyCapture{}
+	rec := &spyReconstruct{}
+	deps := &apiDeps{
+		store:       st,
+		rev:         NewRevisionHubWithLogger(noopLogger()),
+		engine:      eng,
+		capture:     cap,
+		reconstruct: rec,
+	}
+	srv := httptest.NewServer(buildSiteHandler(cfg, nil, deps, noopLogger()))
+	t.Cleanup(srv.Close)
+
+	res, err := http.Post(srv.URL+"/api/v1/system/factory-reset", "application/json",
+		strings.NewReader(`{"confirm":"FACTORY RESET"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(res.Body)
+		t.Fatalf("status = %d, body = %s", res.StatusCode, b)
+	}
+
+	if calls := eng.calls(); len(calls) == 0 || calls[0] != "engine.Shutdown" {
+		t.Errorf("engine.Shutdown not called; calls = %v", calls)
+	}
+	cap.mu.Lock()
+	capShut := cap.shut
+	cap.mu.Unlock()
+	if !capShut {
+		t.Error("capture.Shutdown not called")
+	}
+	rec.mu.Lock()
+	recShut := rec.shut
+	rec.mu.Unlock()
+	if !recShut {
+		t.Error("reconstruct.Shutdown not called")
+	}
+}
+
+// TestSiteHandler_Shutdown_invokesAllHooks verifies that SiteHandler.Shutdown
+// calls Shutdown on every registered service.
+func TestSiteHandler_Shutdown_invokesAllHooks(t *testing.T) {
+	eng := &spyEngine{}
+	cap := &spyCapture{}
+	rec := &spyReconstruct{}
+
+	sh := &SiteHandler{
+		Handler:     http.NewServeMux(),
+		engine:      eng,
+		capture:     cap,
+		reconstruct: rec,
+	}
+	sh.Shutdown(context.Background())
+
+	if calls := eng.calls(); len(calls) == 0 {
+		t.Error("engine.Shutdown not called")
+	}
+	cap.mu.Lock()
+	capShut := cap.shut
+	cap.mu.Unlock()
+	if !capShut {
+		t.Error("capture.Shutdown not called")
+	}
+	rec.mu.Lock()
+	recShut := rec.shut
+	rec.mu.Unlock()
+	if !recShut {
+		t.Error("reconstruct.Shutdown not called")
 	}
 }

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { FACTORY_RESET_DISCLOSURE, POST_RESET_FLASH } from "./factoryReset";
+import {
+  FACTORY_RESET_CONFIRM_PHRASE,
+  FACTORY_RESET_DISCLOSURE,
+  POST_RESET_FLASH,
+} from "./factoryReset";
 
 describe("FACTORY_RESET_DISCLOSURE (REQ-017 BR-2)", () => {
   it("mentions registered devices", () => {
@@ -24,6 +28,17 @@ describe("FACTORY_RESET_DISCLOSURE (REQ-017 BR-2)", () => {
 
   it("mentions in-flight routine runs being stopped", () => {
     expect(FACTORY_RESET_DISCLOSURE).toContain("in-flight routine runs");
+  });
+});
+
+describe("FACTORY_RESET_CONFIRM_PHRASE (WI-15)", () => {
+  it("is a non-empty string", () => {
+    expect(typeof FACTORY_RESET_CONFIRM_PHRASE).toBe("string");
+    expect(FACTORY_RESET_CONFIRM_PHRASE.length).toBeGreaterThan(0);
+  });
+
+  it("is FACTORY RESET", () => {
+    expect(FACTORY_RESET_CONFIRM_PHRASE).toBe("FACTORY RESET");
   });
 });
 

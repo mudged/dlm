@@ -98,11 +98,12 @@ export default function PythonRoutineEditorClient() {
     [],
   );
 
-  const load = useCallback(async (rid: string) => {
+  const load = useCallback(async (rid: string, signal?: AbortSignal) => {
     setError(null);
     setLoaded(false);
     try {
       const r: RoutineDefinition = await fetchRoutine(rid);
+      if (signal?.aborted) return;
       if (r.type !== ROUTINE_TYPE_PYTHON_SCENE_SCRIPT) {
         throw new Error("This routine is not a Python scene script.");
       }
@@ -111,9 +112,10 @@ export default function PythonRoutineEditorClient() {
       setDescription(r.description);
       setCode(r.python_source?.trim() ? r.python_source : PYTHON_ROUTINE_DEFAULT_SOURCE);
     } catch (e) {
+      if (signal?.aborted) return;
       setError(e instanceof Error ? e.message : "Load failed");
     } finally {
-      setLoaded(true);
+      if (!signal?.aborted) setLoaded(true);
     }
   }, []);
 
@@ -122,7 +124,9 @@ export default function PythonRoutineEditorClient() {
       router.replace("/routines/new?kind=python");
       return;
     }
-    void load(idParam);
+    const ctrl = new AbortController();
+    void load(idParam, ctrl.signal);
+    return () => ctrl.abort();
   }, [idParam, load, router]);
 
   useEffect(() => {

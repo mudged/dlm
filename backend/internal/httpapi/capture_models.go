@@ -15,8 +15,12 @@ import (
 
 // maxCaptureUploadBytes is the per-request body limit for video uploads.
 // Deliberately much larger than the 1 MiB CSV model limit (REQ-048).
+// maxCaptureConfirmBodyBytes limits the JSON confirm payload (name only).
 // Allowed video container extensions for reconstruction feeds (REQ-048).
-const maxCaptureUploadBytes = 512 << 20 // 512 MiB
+const (
+	maxCaptureUploadBytes       = 512 << 20 // 512 MiB
+	maxCaptureConfirmBodyBytes  = 4096
+)
 
 var allowedVideoExts = map[string]bool{
 	".mp4":  true,
@@ -70,6 +74,10 @@ func (a *apiDeps) postModelsCapture(w http.ResponseWriter, r *http.Request) {
 	}
 
 	jobID, err := a.reconstruct.Create(r.Context(), fileReaders, fileNames, reconstruct.CreateParams{})
+	if errors.Is(err, reconstruct.ErrCapExceeded) {
+		writeAPIError(w, http.StatusServiceUnavailable, "capacity_exceeded", "a reconstruction job is already in progress; try again later")
+		return
+	}
 	if err != nil {
 		writeAPIError(w, http.StatusBadRequest, "bad_request", err.Error())
 		return
@@ -125,11 +133,12 @@ func (a *apiDeps) postModelsCaptureConfirm(w http.ResponseWriter, r *http.Reques
 
 	jobID := r.PathValue("jobId")
 
+	r.Body = http.MaxBytesReader(w, r.Body, maxCaptureConfirmBodyBytes)
 	var body struct {
 		Name string `json:"name"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeAPIError(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
+		writeAPIError(w, http.StatusBadRequest, "bad_request", "invalid JSON body or payload too large")
 		return
 	}
 	name := strings.TrimSpace(body.Name)

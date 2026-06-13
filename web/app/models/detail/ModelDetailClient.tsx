@@ -22,6 +22,7 @@ import {
 } from "react";
 import { Button } from "@/components/ui/Button";
 import type { Light, ModelDetail } from "@/lib/models";
+import { applyFetchIfNotStale } from "@/lib/sseResyncGuard";
 import { useModelLightsSSE } from "@/lib/useModelLightsSSE";
 
 const PAGE_SIZE_OPTIONS = [25, 50, 100] as const;
@@ -81,6 +82,14 @@ function LightStateEditor({
   const [bp, setBp] = useState(light.brightness_pct);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     setOn(light.on);
@@ -120,6 +129,9 @@ function LightStateEditor({
         brightness_pct?: number;
         error?: { message?: string };
       };
+      if (!mountedRef.current) {
+        return;
+      }
       if (!res.ok) {
         setErr(j?.error?.message ?? `Update failed (${res.status})`);
         return;
@@ -138,9 +150,13 @@ function LightStateEditor({
         brightness_pct: j.brightness_pct,
       });
     } catch {
-      setErr("Could not reach the API.");
+      if (mountedRef.current) {
+        setErr("Could not reach the API.");
+      }
     } finally {
-      setSaving(false);
+      if (mountedRef.current) {
+        setSaving(false);
+      }
     }
   };
 
@@ -213,6 +229,14 @@ function BulkLightStatePanel({
   const [bp, setBp] = useState(100);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const seedKey = selectedIds.join(",");
   useEffect(() => {
@@ -254,6 +278,9 @@ function BulkLightStatePanel({
           brightness_pct?: number;
           error?: { message?: string };
         };
+        if (!mountedRef.current) {
+          return;
+        }
         if (!res.ok) {
           setErr(j?.error?.message ?? `Update failed (${res.status})`);
           return;
@@ -300,6 +327,9 @@ function BulkLightStatePanel({
         }[];
         error?: { message?: string };
       };
+      if (!mountedRef.current) {
+        return;
+      }
       if (!res.ok) {
         setErr(j?.error?.message ?? `Bulk update failed (${res.status})`);
         return;
@@ -310,9 +340,13 @@ function BulkLightStatePanel({
       }
       onApplied(j.states);
     } catch {
-      setErr("Could not reach the API.");
+      if (mountedRef.current) {
+        setErr("Could not reach the API.");
+      }
     } finally {
-      setSaving(false);
+      if (mountedRef.current) {
+        setSaving(false);
+      }
     }
   };
 
@@ -407,8 +441,12 @@ export function ModelDetailClient() {
   const [cameraResetVersion, setCameraResetVersion] = useState(0);
   const shiftAnchorRef = useRef<number | null>(null);
   const headerSelectRef = useRef<HTMLInputElement>(null);
+  // Caller-owned SSE sequence ref — shared with useModelLightsSSE so the
+  // resync callbacks can guard against stale GET results overwriting newer
+  // SSE-merged state.
+  const modelSseSeqRef = useRef<number | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (signal?: AbortSignal) => {
     if (!id) {
       setError("Missing model id.");
       setLoading(false);
@@ -416,6 +454,42 @@ export function ModelDetailClient() {
     }
     setError(null);
     setLoading(true);
+    const seqAtStart = modelSseSeqRef.current;
+    try {
+      const res = await fetch(`/api/v1/models/${encodeURIComponent(id)}`, {
+        cache: "no-store",
+        signal,
+      });
+      if (signal?.aborted) return;
+      const j = (await res.json().catch(() => null)) as ModelDetail & {
+        error?: { message?: string };
+      };
+      if (signal?.aborted) return;
+      if (!res.ok) {
+        setError(j?.error?.message ?? `Could not load model (${res.status})`);
+        setModel(null);
+        return;
+      }
+      const fetched = j as ModelDetail;
+      setModel((m) => applyFetchIfNotStale(m, seqAtStart, modelSseSeqRef.current, fetched));
+    } catch {
+      if (signal?.aborted) return;
+      setError("Could not reach the API.");
+      setModel(null);
+    } finally {
+      if (!signal?.aborted) setLoading(false);
+    }
+  }, [id]);
+
+  // Lightweight SSE resync: updates model state without toggling the page-level
+  // `loading` flag (keeps the 3D canvas and lights table mounted). Used as the
+  // `onReload` callback for the SSE hook so sequence gaps or errors resync
+  // silently. Falls back to no-op on network errors (SSE reconnect will retry).
+  // Race guard: if SSE applied new events while the GET was in flight, the
+  // (potentially older) GET result is discarded to avoid clobbering live state.
+  const resyncModel = useCallback(async () => {
+    if (!id) return;
+    const seqAtStart = modelSseSeqRef.current;
     try {
       const res = await fetch(`/api/v1/models/${encodeURIComponent(id)}`, {
         cache: "no-store",
@@ -423,27 +497,25 @@ export function ModelDetailClient() {
       const j = (await res.json().catch(() => null)) as ModelDetail & {
         error?: { message?: string };
       };
-      if (!res.ok) {
-        setError(j?.error?.message ?? `Could not load model (${res.status})`);
-        setModel(null);
-        setLoading(false);
-        return;
-      }
-      setModel(j as ModelDetail);
+      if (!res.ok || !j) return;
+      const fetched = j as ModelDetail;
+      setModel((m) => applyFetchIfNotStale(m, seqAtStart, modelSseSeqRef.current, fetched));
     } catch {
-      setError("Could not reach the API.");
-      setModel(null);
-    } finally {
-      setLoading(false);
+      // Silent: SSE reconnect will trigger another resync if needed.
     }
   }, [id]);
 
   useEffect(() => {
-    void load();
+    const ctrl = new AbortController();
+    void load(ctrl.signal);
+    return () => ctrl.abort();
   }, [load]);
 
   // REQ-041 / REQ-029: EventSource subscribes to GET /api/v1/models/{id}/lights/events via useModelLightsSSE.
-  useModelLightsSSE(id ?? undefined, setModel, load);
+  // resyncModel (not load) is the onReload so SSE gaps never set loading=true.
+  useModelLightsSSE(id ?? undefined, setModel, resyncModel, {
+    seqRef: modelSseSeqRef,
+  });
 
   // Reset list UI only when navigating to a different model, not on every model object refresh (e.g. PATCH).
   useEffect(() => {

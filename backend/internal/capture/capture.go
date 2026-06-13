@@ -24,6 +24,9 @@ var (
 	// ErrCaptureConflict is returned when a sweep is already running for the
 	// device, or when an active routine run exists for its assigned model.
 	ErrCaptureConflict = errors.New("capture sweep already running for this device")
+	// ErrCaptureRoutineCheck is returned when the active-routine conflict guard
+	// cannot be evaluated (e.g. store query failure).  Start must fail closed.
+	ErrCaptureRoutineCheck = errors.New("could not check for active routine run")
 )
 
 // driver drives raw LED frames on a WLED device.
@@ -51,8 +54,9 @@ type Status struct {
 }
 
 const (
-	stateIdle    = "idle"
-	stateRunning = "running"
+	stateIdle     = "idle"
+	stateRunning  = "running"
+	stateStopping = "stopping"
 )
 
 // sweepEntry holds per-device sweep state and its cancellation channel.
@@ -113,6 +117,7 @@ func New(getter deviceGetter, drv driver, checker RoutineChecker, opts *Controll
 //   - store.ErrDeviceNotFound  — device does not exist
 //   - ErrCaptureNoLights       — device.light_count == 0
 //   - ErrCaptureConflict       — sweep already running, or model has active routine
+//   - ErrCaptureRoutineCheck   — active-routine guard could not be evaluated
 func (c *Controller) Start(ctx context.Context, deviceID string) (Status, error) {
 	d, err := c.getter.GetDevice(ctx, deviceID)
 	if err != nil {
@@ -122,9 +127,12 @@ func (c *Controller) Start(ctx context.Context, deviceID string) (Status, error)
 		return Status{}, ErrCaptureNoLights
 	}
 
-	// Best-effort routine-conflict guard (TODO(REQ-047): extend with routine-run cross-check).
 	if c.checker != nil && d.ModelID != nil && *d.ModelID != "" {
-		if busy, cherr := c.checker.ModelHasActiveRoutineRun(ctx, *d.ModelID); cherr == nil && busy {
+		busy, cherr := c.checker.ModelHasActiveRoutineRun(ctx, *d.ModelID)
+		if cherr != nil {
+			return Status{}, errors.Join(ErrCaptureRoutineCheck, cherr)
+		}
+		if busy {
 			return Status{}, ErrCaptureConflict
 		}
 	}
@@ -134,9 +142,9 @@ func (c *Controller) Start(ctx context.Context, deviceID string) (Status, error)
 	c.mu.Lock()
 	if entry, exists := c.sweeps[deviceID]; exists {
 		entry.mu.Lock()
-		running := entry.state == stateRunning
+		active := entry.state == stateRunning || entry.state == stateStopping
 		entry.mu.Unlock()
-		if running {
+		if active {
 			c.mu.Unlock()
 			return Status{}, ErrCaptureConflict
 		}
@@ -172,21 +180,23 @@ func (c *Controller) runSweep(d store.Device, entry *sweepEntry, n int) {
 		select {
 		case <-entry.stop:
 			_ = c.drv.DriveAllOff(ctx, d, n)
-			entry.mu.Lock()
-			entry.state = stateIdle
-			entry.mu.Unlock()
+			c.removeSweep(d.ID)
 			return
 		case <-ticker.C:
 			idx++
 			if idx >= n {
 				_ = c.drv.DriveAllOff(ctx, d, n)
-				entry.mu.Lock()
-				entry.state = stateIdle
-				entry.mu.Unlock()
+				c.removeSweep(d.ID)
 				return
 			}
 		}
 	}
+}
+
+func (c *Controller) removeSweep(deviceID string) {
+	c.mu.Lock()
+	delete(c.sweeps, deviceID)
+	c.mu.Unlock()
 }
 
 // Stop signals the running sweep for deviceID to stop and waits for all LEDs
@@ -195,10 +205,16 @@ func (c *Controller) runSweep(d store.Device, entry *sweepEntry, n int) {
 func (c *Controller) Stop(deviceID string) {
 	c.mu.Lock()
 	entry, exists := c.sweeps[deviceID]
-	c.mu.Unlock()
 	if !exists {
+		c.mu.Unlock()
 		return
 	}
+	entry.mu.Lock()
+	if entry.state == stateRunning {
+		entry.state = stateStopping
+	}
+	entry.mu.Unlock()
+	c.mu.Unlock()
 	entry.doStop()
 }
 

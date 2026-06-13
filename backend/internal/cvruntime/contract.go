@@ -20,8 +20,12 @@ type JobSpec struct {
 	Marker    *Marker   `json:"marker,omitempty"`
 	ScaleHint *float64  `json:"scale_hint_m,omitempty"`
 	// DwellMS is the blink-detection window from REQ-047; forwarded to the child.
+	// When zero, reconstruct.Manager substitutes DefaultDwellMS before launch.
 	DwellMS int `json:"dwell_ms"`
 }
+
+// DefaultDwellMS matches the capture sweep default (REQ-047) and reconstruct.py.
+const DefaultDwellMS = 1000
 
 // FeedRef is a reference to a single video-feed file.
 type FeedRef struct {

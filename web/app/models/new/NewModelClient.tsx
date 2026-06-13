@@ -17,6 +17,10 @@ import {
   getCaptureJob,
 } from "@/lib/models";
 import type { CaptureJob, CaptureJobLight, Light } from "@/lib/models";
+import {
+  buildNewModelUrl,
+  initialVideoPhaseFromJobId,
+} from "@/lib/newModelRoute";
 
 // ── shared helpers ────────────────────────────────────────────────────────────
 
@@ -90,13 +94,13 @@ function CsvPanel() {
       };
       if (!res.ok) {
         setError(j?.error?.message ?? `Upload failed (${res.status})`);
-        setSubmitting(false);
         return;
       }
       const id = j && "id" in j && typeof j.id === "string" ? j.id : null;
       router.push(id ? `/models/detail?id=${encodeURIComponent(id)}` : "/models");
     } catch {
       setError("Could not reach the API.");
+    } finally {
       setSubmitting(false);
     }
   }
@@ -178,8 +182,8 @@ function VideoPanel({
   const router = useRouter();
   const params = useSearchParams();
 
-  const [phase, setPhase] = useState<VideoPhase>(
-    initialJobId ? { kind: "polling", jobId: initialJobId } : { kind: "idle" },
+  const [phase, setPhase] = useState<VideoPhase>(() =>
+    initialVideoPhaseFromJobId(initialJobId),
   );
   const [files, setFiles] = useState<File[]>([]);
   const [useMarker, setUseMarker] = useState(false);
@@ -201,14 +205,8 @@ function VideoPanel({
 
   const setJobIdInUrl = useCallback(
     (jobId: string | null) => {
-      const tab = params.get("tab") ?? "video";
-      if (jobId) {
-        router.replace(
-          `/models/new?tab=${encodeURIComponent(tab)}&jobId=${encodeURIComponent(jobId)}`,
-        );
-      } else {
-        router.replace(`/models/new?tab=${encodeURIComponent(tab)}`);
-      }
+      const tab = params.get("tab") === "csv" ? "csv" : "video";
+      router.replace(buildNewModelUrl(tab, jobId));
     },
     [params, router],
   );
@@ -676,7 +674,7 @@ export function NewModelClient() {
   const jobId = params.get("jobId");
 
   function switchTab(t: Tab) {
-    router.push(`/models/new?tab=${t}`);
+    router.push(buildNewModelUrl(t, jobId));
   }
 
   return (

@@ -44,6 +44,8 @@ func TestParseLightsCSV_wrongHeader(t *testing.T) {
 }
 
 func TestParseLightsCSV_nonContiguousIDs(t *testing.T) {
+	// Two rows with IDs 0 and 2: ID 2 is out of range [0,2), so the error
+	// should identify id 2 specifically and still mention "sequential".
 	csv := "id,x,y,z\n0,0,0,0\n2,1,1,1\n"
 	_, err := ParseLightsCSV(strings.NewReader(csv))
 	if err == nil {
@@ -54,7 +56,36 @@ func TestParseLightsCSV_nonContiguousIDs(t *testing.T) {
 		t.Fatalf("want ParseError, got %T", err)
 	}
 	if !strings.Contains(strings.ToLower(pe.Message), "sequential") {
-		t.Fatalf("message = %q", pe.Message)
+		t.Fatalf("message should mention 'sequential', got: %q", pe.Message)
+	}
+	if !strings.Contains(pe.Message, "2") {
+		t.Fatalf("message should name the offending id 2, got: %q", pe.Message)
+	}
+}
+
+func TestParseLightsCSV_duplicateID(t *testing.T) {
+	// Three rows with IDs 0, 1, 0: duplicate 0 should produce a specific error.
+	csv := "id,x,y,z\n0,0,0,0\n1,1,1,1\n0,2,2,2\n"
+	_, err := ParseLightsCSV(strings.NewReader(csv))
+	if err == nil {
+		t.Fatal("expected error for duplicate id")
+	}
+	pe, ok := err.(*ParseError)
+	if !ok {
+		t.Fatalf("want ParseError, got %T", err)
+	}
+	if !strings.Contains(pe.Message, "0") {
+		t.Fatalf("message should name the duplicate id 0, got: %q", pe.Message)
+	}
+}
+
+func TestMissingIDsError_message(t *testing.T) {
+	err := MissingIDsError([]int{2, 5})
+	if !strings.Contains(err.Message, "2") || !strings.Contains(err.Message, "5") {
+		t.Fatalf("MissingIDsError should name ids 2 and 5, got: %q", err.Message)
+	}
+	if !strings.Contains(strings.ToLower(err.Message), "sequential") {
+		t.Fatalf("MissingIDsError should mention 'sequential', got: %q", err.Message)
 	}
 }
 

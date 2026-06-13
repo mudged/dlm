@@ -58,8 +58,12 @@ def _parse_args(argv=None):
     p.add_argument("--with-marker", action="store_true",   help="Embed ArUco marker in scene")
     p.add_argument("--dwell-ms",    type=int, default=333, help="Blink dwell (ms)")
     p.add_argument("--fps",         type=int, default=30,  help="Video frame rate")
-    p.add_argument("--width",       type=int, default=320, help="Frame width (px)")
-    p.add_argument("--height",      type=int, default=240, help="Frame height (px)")
+    p.add_argument("--width",       type=int, default=320, help="Frame width (px) for feed 0")
+    p.add_argument("--height",      type=int, default=240, help="Frame height (px) for feed 0")
+    p.add_argument("--feed1-width", type=int, default=None,
+                   help="Frame width (px) for feed 1 (default: same as --width)")
+    p.add_argument("--feed1-height", type=int, default=None,
+                   help="Frame height (px) for feed 1 (default: same as --height)")
     p.add_argument("--seed",        type=int, default=42,  help="Random seed")
     p.add_argument(
         "--occlude-in-feed",
@@ -68,6 +72,12 @@ def _parse_args(argv=None):
         metavar=("FEED_IDX", "LIGHT_IDX"),
         default=None,
         help="Suppress one light in one feed to test missing detection",
+    )
+    p.add_argument(
+        "--leading-gap-ms",
+        type=int,
+        default=50,
+        help="Dark gap before the first blink (ms); set to 0 to start light 0 at frame 0",
     )
     return p.parse_args(argv)
 
@@ -165,12 +175,15 @@ def generate(args) -> Path:
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    W, H, FPS = args.width, args.height, args.fps
+    W0, H0, FPS = args.width, args.height, args.fps
+    W1 = args.feed1_width if args.feed1_width is not None else W0
+    H1 = args.feed1_height if args.feed1_height is not None else H0
+    feed_sizes = [(W0, H0), (W1, H1)]
     dwell_ms = args.dwell_ms
     n_lights = args.n_lights
 
-    # Both cameras share the same intrinsic matrix, matching reconstruct.py.
-    K = _make_K(W, H)
+    # Per-feed intrinsics (matches reconstruct.py's _estimate_K per resolution).
+    Ks = [_make_K(w, h) for w, h in feed_sizes]
 
     # ── 3D light positions ────────────────────────────────────────────────────
     # Scattered in front of both cameras at z ≈ 0.8–1.2 m.
@@ -222,14 +235,17 @@ def generate(args) -> Path:
         marker_centre_world = np.array([0.15, -0.10, 0.60])  # noqa: F821 world metres
 
     # ── Frame timing ─────────────────────────────────────────────────────────
-    dwell_frames = max(1, round(dwell_ms * FPS / 1000))
-    gap_frames   = max(1, round(50 * FPS / 1000))   # 50 ms dark gap
+    dwell_frames        = max(1, round(dwell_ms * FPS / 1000))
+    gap_frames          = max(1, round(50 * FPS / 1000))   # 50 ms between lights
+    leading_gap_frames  = max(0, round(args.leading_gap_ms * FPS / 1000))
 
     # ── Occlusion spec ────────────────────────────────────────────────────────
     occlude_feed, occlude_light = (args.occlude_in_feed or (None, None))
 
     # ── Render videos ─────────────────────────────────────────────────────────
     for cam_idx, (R, t) in enumerate(cameras):
+        W, H = feed_sizes[cam_idx]
+        K = Ks[cam_idx]
         frames: list[np.ndarray] = []
 
         # Pre-compute marker billboard centre for this camera.
@@ -253,8 +269,12 @@ def generate(args) -> Path:
                                        MARKER_BILLBOARD_PX)
             return f
 
-        # Leading dark gap.
-        for _ in range(gap_frames):
+        # Scale blob radius with resolution so angular size stays similar when
+        # feeds use different frame sizes (WI-28 mixed-intrinsics fixtures).
+        blob_radius = max(4, round(6 * max(W, H) / 320))
+
+        # Leading dark gap (configurable; default 50 ms).
+        for _ in range(leading_gap_frames):
             frames.append(_base_frame())
 
         for light_idx, pt3d in enumerate(lights_3d):
@@ -264,7 +284,7 @@ def generate(args) -> Path:
             for _ in range(dwell_frames):
                 f = _base_frame()
                 if not occluded:
-                    _draw_blob(f, pt2d)
+                    _draw_blob(f, pt2d, radius=blob_radius)
                 frames.append(f)
 
             # Dark gap between lights.
@@ -283,10 +303,11 @@ def generate(args) -> Path:
             for i, p in enumerate(lights_3d)
         ],
         "dwell_ms": dwell_ms,
+        "leading_gap_ms": args.leading_gap_ms,
         "marker": marker_spec,
         "cameras": [
             {"R": R.tolist(), "t": t.tolist(), "K": K.tolist()}
-            for R, t in cameras
+            for (R, t), K in zip(cameras, Ks)
         ],
         "occlude": (
             {"feed": occlude_feed, "light": occlude_light}

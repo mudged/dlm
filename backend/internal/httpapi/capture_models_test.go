@@ -81,6 +81,8 @@ func (f *fakeReconstructCtrl) Discard(jobID string) error {
 	return nil
 }
 
+func (f *fakeReconstructCtrl) Shutdown() {}
+
 func newCaptureModelsTestServer(t *testing.T) (*httptest.Server, *fakeReconstructCtrl) {
 	t.Helper()
 	cfg := &config.Config{
@@ -253,6 +255,28 @@ func TestAPIv1CaptureModels_confirm_returns201(t *testing.T) {
 	}
 }
 
+func TestAPIv1CaptureModels_confirmOversizedBody_returns400(t *testing.T) {
+	srv, fake := newCaptureModelsTestServer(t)
+
+	fake.jobs["job-to-confirm"] = &reconstruct.Job{
+		ID:     "job-to-confirm",
+		Status: reconstruct.StatusSucceeded,
+		Result: &cvruntime.Result{Status: "succeeded"},
+	}
+
+	oversizedName := strings.Repeat("x", maxCaptureConfirmBodyBytes)
+	body := strings.NewReader(`{"name":"` + oversizedName + `"}`)
+	res, err := http.Post(srv.URL+"/api/v1/models/capture/job-to-confirm/confirm", "application/json", body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusBadRequest {
+		b, _ := io.ReadAll(res.Body)
+		t.Fatalf("status = %d, want 400, body = %s", res.StatusCode, b)
+	}
+}
+
 func TestAPIv1CaptureModels_confirmDuplicateName_returns409(t *testing.T) {
 	// Create a server with a fake that returns ErrDuplicateName.
 	cfg := &config.Config{
@@ -297,6 +321,7 @@ func (dupNameFake) Confirm(_ context.Context, _, _ string) (store.Summary, error
 	return store.Summary{}, store.ErrDuplicateName
 }
 func (dupNameFake) Discard(_ string) error { return nil }
+func (dupNameFake) Shutdown()              {}
 
 func TestAPIv1CaptureModels_confirmUnknownJob_returns404(t *testing.T) {
 	srv, _ := newCaptureModelsTestServer(t)

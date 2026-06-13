@@ -19,11 +19,19 @@ import (
 	"example.com/dlm/backend/internal/store"
 )
 
+// engineCtrl is the interface the HTTP layer uses for the routine engine.
+type engineCtrl interface {
+	Start(ctx context.Context, runID, sceneID, routineID string) error
+	Stop(runID string)
+	Shutdown()
+}
+
 // captureCtrl is the interface the HTTP layer uses to drive capture sweeps.
 type captureCtrl interface {
 	Start(ctx context.Context, deviceID string) (capture.Status, error)
 	Stop(deviceID string)
 	GetStatus(deviceID string) capture.Status
+	Shutdown()
 }
 
 // reconstructCtrl is the interface the HTTP layer uses to manage reconstruction jobs.
@@ -32,6 +40,7 @@ type reconstructCtrl interface {
 	Get(id string) (*reconstruct.Job, bool)
 	Confirm(ctx context.Context, jobID, name string) (store.Summary, error)
 	Discard(jobID string) error
+	Shutdown()
 }
 
 // apiDeps holds API handlers' shared dependencies.
@@ -39,9 +48,39 @@ type apiDeps struct {
 	store       *store.Store
 	rev         *RevisionHub
 	pusher      devicePusher
-	engine      *routineengine.Engine
+	engine      engineCtrl
 	capture     captureCtrl
 	reconstruct reconstructCtrl
+}
+
+// SiteHandler wraps the HTTP handler and holds references to background
+// services so the caller can shut them all down on process exit or factory
+// reset.  It implements http.Handler so it can be passed directly to
+// http.Server and httptest.NewServer.
+type SiteHandler struct {
+	http.Handler
+	engine      engineCtrl
+	capture     captureCtrl
+	reconstruct reconstructCtrl
+}
+
+// Shutdown stops the routine engine, capture sweeps, and reconstruction jobs.
+// It should be called after the HTTP server has drained (srv.Shutdown) so that
+// no new work is started while the workers are stopping.
+//
+// Ordering: engine first (may mutate light state), then capture (raw LED
+// frames), then reconstruct (Python CV children).  The engine's Shutdown
+// waits up to 5 s for goroutines to drain; the others are fire-and-cancel.
+func (s *SiteHandler) Shutdown(ctx context.Context) {
+	if s.engine != nil {
+		s.engine.Shutdown()
+	}
+	if s.capture != nil {
+		s.capture.Shutdown()
+	}
+	if s.reconstruct != nil {
+		s.reconstruct.Shutdown()
+	}
 }
 
 // NewSiteHandler wires /health, /api/v1/, and optional static UI from content (Next export).
@@ -49,7 +88,7 @@ type apiDeps struct {
 // st must be non-nil (models API requires persistence).
 // rev may be nil; a private RevisionHub is used so in-process notifications still work (REQ-029 SSE).
 // pusher may be nil; when set, logical light changes are pushed to assigned WLED devices (REQ-035–REQ-039).
-func NewSiteHandler(cfg *config.Config, content fs.FS, st *store.Store, rev *RevisionHub, pusher *devices.Pusher) http.Handler {
+func NewSiteHandler(cfg *config.Config, content fs.FS, st *store.Store, rev *RevisionHub, pusher *devices.Pusher) *SiteHandler {
 	if st == nil {
 		panic("httpapi.NewSiteHandler: store is nil")
 	}
@@ -59,23 +98,33 @@ func NewSiteHandler(cfg *config.Config, content fs.FS, st *store.Store, rev *Rev
 	}
 
 	deps := &apiDeps{store: st, rev: rev, pusher: pusher}
-	deps.engine = routineengine.New(st, cfg.HTTPListen, func(ctx context.Context, sceneID string, states []store.ScenePatchedState) {
+	eng := routineengine.New(st, cfg.HTTPListen, func(ctx context.Context, sceneID string, states []store.ScenePatchedState) {
 		deps.notifyAfterSceneLightPatch(ctx, sceneID, states)
 	}, log)
+	deps.engine = eng
+
 	// When a real pusher is available, wire up a capture controller so the
 	// sweep endpoints have a live driver.  When pusher is nil (API-only
 	// construction, e.g. tests that pass nil) deps.capture stays nil and the
 	// start handler returns 503 — see capture.go comment.
+	var capCtrl captureCtrl
 	if pusher != nil {
-		deps.capture = capture.New(st, pusher, st, nil)
+		capCtrl = capture.New(st, pusher, st, nil)
+		deps.capture = capCtrl
 	}
 
 	// Wire the reconstruction manager. The work-dir base lives under DataDir so
 	// it survives across restarts alongside the database.
 	captureWorkDir := filepath.Join(cfg.DataDir, "runtime", "capture")
-	deps.reconstruct = reconstruct.New(reconstruct.RealRunner{}, st, captureWorkDir)
+	recMgr := reconstruct.New(reconstruct.RealRunner{}, st, captureWorkDir)
+	deps.reconstruct = recMgr
 
-	return buildSiteHandler(cfg, content, deps, log)
+	return &SiteHandler{
+		Handler:     buildSiteHandler(cfg, content, deps, log),
+		engine:      eng,
+		capture:     capCtrl,
+		reconstruct: recMgr,
+	}
 }
 
 // buildSiteHandler wires all routes and middleware from a pre-built apiDeps.

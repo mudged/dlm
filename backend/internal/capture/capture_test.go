@@ -54,6 +54,16 @@ func (g *fakeGetter) GetDevice(_ context.Context, _ string) (store.Device, error
 	return g.device, g.err
 }
 
+// fakeRoutineChecker stubs ModelHasActiveRoutineRun for conflict-guard tests.
+type fakeRoutineChecker struct {
+	busy bool
+	err  error
+}
+
+func (c *fakeRoutineChecker) ModelHasActiveRoutineRun(_ context.Context, _ string) (bool, error) {
+	return c.busy, c.err
+}
+
 func newController(t *testing.T, d store.Device, drv *fakeDriver) *capture.Controller {
 	t.Helper()
 	getter := &fakeGetter{device: d}
@@ -111,9 +121,12 @@ func TestCapture_sweepCallsInOrder_thenAllOff(t *testing.T) {
 	if ctrl.GetStatus("d1").State != "idle" {
 		t.Fatalf("state after completion = %q want idle", ctrl.GetStatus("d1").State)
 	}
+	if ctrl.ActiveSweepCount() != 0 {
+		t.Fatalf("ActiveSweepCount = %d want 0 after completion", ctrl.ActiveSweepCount())
+	}
 }
 
-func TestCapture_stopMidSweep_callsAllOff(t *testing.T) {
+func TestCapture_stopMidSweep_reportsStoppingThenIdle(t *testing.T) {
 	drv := &fakeDriver{}
 	dev := store.Device{ID: "d2", LightCount: 10}
 	// Use a longer dwell so we can stop mid-sweep reliably.
@@ -127,6 +140,11 @@ func TestCapture_stopMidSweep_callsAllOff(t *testing.T) {
 	time.Sleep(30 * time.Millisecond)
 	ctrl.Stop("d2")
 
+	st := ctrl.GetStatus("d2")
+	if st.State != "stopping" {
+		t.Fatalf("state immediately after Stop = %q want stopping", st.State)
+	}
+
 	// Wait for the goroutine to finish.
 	deadline := time.Now().Add(400 * time.Millisecond)
 	for time.Now().Before(deadline) {
@@ -137,6 +155,9 @@ func TestCapture_stopMidSweep_callsAllOff(t *testing.T) {
 	}
 	if ctrl.GetStatus("d2").State != "idle" {
 		t.Fatalf("state after Stop = %q want idle", ctrl.GetStatus("d2").State)
+	}
+	if ctrl.ActiveSweepCount() != 0 {
+		t.Fatalf("ActiveSweepCount = %d want 0 after stop completes", ctrl.ActiveSweepCount())
 	}
 
 	calls := drv.snapshot()
@@ -201,5 +222,110 @@ func TestCapture_deviceNotFound(t *testing.T) {
 	_, err := ctrl.Start(context.Background(), "missing")
 	if !errors.Is(err, store.ErrDeviceNotFound) {
 		t.Fatalf("err = %v, want ErrDeviceNotFound", err)
+	}
+}
+
+func TestCapture_routineCheckError_refusesStart(t *testing.T) {
+	drv := &fakeDriver{}
+	modelID := "m1"
+	dev := store.Device{ID: "d6", LightCount: 3, ModelID: &modelID}
+	checker := &fakeRoutineChecker{err: errors.New("db unavailable")}
+	ctrl := capture.New(&fakeGetter{device: dev}, drv, checker, &capture.ControllerOpts{Dwell: 20 * time.Millisecond})
+
+	_, err := ctrl.Start(context.Background(), "d6")
+	if !errors.Is(err, capture.ErrCaptureRoutineCheck) {
+		t.Fatalf("err = %v, want ErrCaptureRoutineCheck", err)
+	}
+
+	time.Sleep(50 * time.Millisecond)
+	if calls := drv.snapshot(); len(calls) != 0 {
+		t.Fatalf("expected no sweep goroutine (0 drive calls), got %d", len(calls))
+	}
+	if st := ctrl.GetStatus("d6"); st.State != "idle" {
+		t.Fatalf("state = %q want idle", st.State)
+	}
+}
+
+func TestCapture_activeRoutine_returnsConflict(t *testing.T) {
+	drv := &fakeDriver{}
+	modelID := "m1"
+	dev := store.Device{ID: "d7", LightCount: 3, ModelID: &modelID}
+	checker := &fakeRoutineChecker{busy: true}
+	ctrl := capture.New(&fakeGetter{device: dev}, drv, checker, &capture.ControllerOpts{Dwell: 20 * time.Millisecond})
+
+	_, err := ctrl.Start(context.Background(), "d7")
+	if !errors.Is(err, capture.ErrCaptureConflict) {
+		t.Fatalf("err = %v, want ErrCaptureConflict", err)
+	}
+
+	time.Sleep(50 * time.Millisecond)
+	if calls := drv.snapshot(); len(calls) != 0 {
+		t.Fatalf("expected no sweep goroutine (0 drive calls), got %d", len(calls))
+	}
+}
+
+func TestCapture_completedSweepsDoNotRetainMapEntries(t *testing.T) {
+	drv := &fakeDriver{}
+	getter := &fakeGetterByID{
+		devices: map[string]store.Device{
+			"a": {ID: "a", LightCount: 2},
+			"b": {ID: "b", LightCount: 2},
+			"c": {ID: "c", LightCount: 2},
+		},
+	}
+	ctrl := capture.New(getter, drv, nil, &capture.ControllerOpts{Dwell: 10 * time.Millisecond})
+
+	for _, id := range []string{"a", "b", "c"} {
+		if _, err := ctrl.Start(context.Background(), id); err != nil {
+			t.Fatalf("Start %s: %v", id, err)
+		}
+	}
+
+	deadline := time.Now().Add(500 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		if ctrl.ActiveSweepCount() == 0 {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("ActiveSweepCount = %d want 0 after all sweeps complete", ctrl.ActiveSweepCount())
+}
+
+type fakeGetterByID struct {
+	devices map[string]store.Device
+}
+
+func (g *fakeGetterByID) GetDevice(_ context.Context, id string) (store.Device, error) {
+	d, ok := g.devices[id]
+	if !ok {
+		return store.Device{}, store.ErrDeviceNotFound
+	}
+	return d, nil
+}
+
+func TestCapture_noActiveRoutine_startsSweep(t *testing.T) {
+	drv := &fakeDriver{}
+	modelID := "m1"
+	dev := store.Device{ID: "d8", LightCount: 2, ModelID: &modelID}
+	checker := &fakeRoutineChecker{busy: false}
+	ctrl := capture.New(&fakeGetter{device: dev}, drv, checker, &capture.ControllerOpts{Dwell: 20 * time.Millisecond})
+
+	st, err := ctrl.Start(context.Background(), "d8")
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	if st.State != "running" {
+		t.Fatalf("state = %q want running", st.State)
+	}
+
+	deadline := time.Now().Add(300 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		if len(drv.snapshot()) >= 3 {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if len(drv.snapshot()) < 3 {
+		t.Fatalf("expected sweep to run, got calls: %+v", drv.snapshot())
 	}
 }

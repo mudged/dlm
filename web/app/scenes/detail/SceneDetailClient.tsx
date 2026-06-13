@@ -29,6 +29,7 @@ import {
   SCENE_BOUNDARY_MARGIN_MIN_M,
   type SceneDetail,
 } from "@/lib/scenes";
+import { applyFetchIfNotStale } from "@/lib/sseResyncGuard";
 import { useSceneLightsSSE } from "@/lib/useSceneLightsSSE";
 import {
   ROUTINE_TYPE_PYTHON_SCENE_SCRIPT,
@@ -67,7 +68,7 @@ export function SceneDetailClient() {
   const [pendingMarginM, setPendingMarginM] = useState<number | null>(null);
   const [marginError, setMarginError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (signal?: AbortSignal) => {
     if (!id) {
       return;
     }
@@ -75,10 +76,11 @@ export function SceneDetailClient() {
     try {
       const [s, mRes, rList, runs] = await Promise.all([
         fetchScene(id),
-        fetch("/api/v1/models", { cache: "no-store" }),
+        fetch("/api/v1/models", { cache: "no-store", signal }),
         fetchRoutines().catch(() => [] as RoutineDefinition[]),
         fetchSceneRoutineRuns(id).catch(() => [] as RoutineRun[]),
       ]);
+      if (signal?.aborted) return;
       setScene(s);
       setPendingMarginM(null);
       setMarginError(null);
@@ -90,19 +92,45 @@ export function SceneDetailClient() {
       }
       setRoutines(rList);
     } catch (e) {
+      if (signal?.aborted) return;
       setError(e instanceof Error ? e.message : "Failed to load scene");
       setScene(null);
     }
   }, [id]);
 
   useEffect(() => {
-    void load();
+    const ctrl = new AbortController();
+    void load(ctrl.signal);
+    return () => ctrl.abort();
   }, [load]);
 
   // REQ-041 / REQ-029: EventSource subscribes to GET /api/v1/scenes/{id}/lights/events via useSceneLightsSSE.
   const sceneSseLiveRef = useRef(false);
-  useSceneLightsSSE(id ?? undefined, setScene, load, {
+  // Caller-owned SSE sequence ref — shared with useSceneLightsSSE so the
+  // resync callbacks can guard against stale GET results overwriting newer
+  // SSE-merged state.
+  const sceneSseSeqRef = useRef<number | null>(null);
+
+  // Lightweight SSE resync: updates scene state without toggling any loading
+  // flag and without resetting pendingMarginM (preserves in-progress boundary
+  // margin previews). Used as the `onReload` callback for the SSE hook so
+  // sequence gaps or errors resync silently.
+  // Race guard: if SSE applied new events while the GET was in flight, the
+  // stale GET result is discarded to avoid clobbering live state.
+  const resyncScene = useCallback(async () => {
+    if (!id) return;
+    const seqAtStart = sceneSseSeqRef.current;
+    try {
+      const s = await fetchScene(id);
+      setScene((prev) => applyFetchIfNotStale(prev, seqAtStart, sceneSseSeqRef.current, s));
+    } catch {
+      // Silent: SSE reconnect will trigger another resync if needed.
+    }
+  }, [id]);
+
+  useSceneLightsSSE(id ?? undefined, setScene, resyncScene, {
     sseLiveRef: sceneSseLiveRef,
+    seqRef: sceneSseSeqRef,
   });
 
   useEffect(() => {
@@ -114,9 +142,15 @@ export function SceneDetailClient() {
         try {
           const runs = await fetchSceneRoutineRuns(id);
           setRoutineRuns(runs);
+          // Only fetch the full scene when SSE is down. Also guard against a
+          // stale GET overwriting newer SSE-merged state: capture the seq before
+          // the fetch and skip applying if SSE advanced during the round-trip.
           if (!sceneSseLiveRef.current) {
+            const seqAtStart = sceneSseSeqRef.current;
             const s = await fetchScene(id);
-            setScene(s);
+            setScene((prev) =>
+              applyFetchIfNotStale(prev, seqAtStart, sceneSseSeqRef.current, s),
+            );
           }
         } catch {
           /* ignore poll errors */

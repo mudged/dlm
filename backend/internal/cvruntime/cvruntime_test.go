@@ -2,9 +2,11 @@ package cvruntime
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 )
@@ -51,6 +53,11 @@ func TestResolve_NoRuntimeFound(t *testing.T) {
 // unit tests on Unix.  The "interpreter" is a shell script that ignores the
 // entrypoint and spec-file arguments and writes cannedJSON to stdout.
 func makeStubRuntime(t *testing.T, cannedJSON string) string {
+	return makeStubRuntimeWithExit(t, cannedJSON, 0)
+}
+
+// makeStubRuntimeWithExit is like makeStubRuntime but the stub exits with exitCode.
+func makeStubRuntimeWithExit(t *testing.T, cannedJSON string, exitCode int) string {
 	t.Helper()
 	if runtime.GOOS == "windows" {
 		t.Skip("shell-script stub not supported on Windows")
@@ -62,12 +69,10 @@ func makeStubRuntime(t *testing.T, cannedJSON string) string {
 		t.Fatal(err)
 	}
 
-	// Use printf to avoid echo interpretation of special characters.
-	stub := "#!/bin/sh\nprintf '%s\\n' '" + cannedJSON + "'\n"
+	stub := fmt.Sprintf("#!/bin/sh\nprintf '%%s\\n' '%s'\nexit %d\n", cannedJSON, exitCode)
 	if err := os.WriteFile(filepath.Join(binDir, "python3"), []byte(stub), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// Dummy entrypoint — the stub ignores it but resolve/run expect the file.
 	if err := os.WriteFile(filepath.Join(dir, "reconstruct.py"), []byte(""), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -135,7 +140,6 @@ func TestRun_StubInterpreter(t *testing.T) {
 func TestRun_ChildReportsFailure(t *testing.T) {
 	errMsg := "camera feed unreadable"
 	const cannedJSON = `{"status":"failed","light_count":0,"lights":[],"missing":[],"low_confidence":[],"error":"camera feed unreadable"}`
-	_ = errMsg
 
 	dir := makeStubRuntime(t, cannedJSON)
 	t.Setenv("DLM_CV_RUNTIME_DIR", dir)
@@ -143,6 +147,25 @@ func TestRun_ChildReportsFailure(t *testing.T) {
 	result, err := Run(context.Background(), JobSpec{Feeds: []FeedRef{{Path: "/tmp/x.mp4"}}, DwellMS: 500})
 	if err != nil {
 		t.Fatalf("Run() returned Go error for child-reported failure; want nil Go error, got: %v", err)
+	}
+	if result.Status != "failed" {
+		t.Errorf("Status = %q, want %q", result.Status, "failed")
+	}
+	if result.Error == nil || *result.Error != errMsg {
+		t.Errorf("Error = %v, want %q", result.Error, errMsg)
+	}
+}
+
+func TestRun_ChildReportsFailure_NonZeroExit(t *testing.T) {
+	errMsg := "no blink events detected in any feed"
+	const cannedJSON = `{"status":"failed","light_count":0,"lights":[],"missing":[],"low_confidence":[],"error":"no blink events detected in any feed"}`
+
+	dir := makeStubRuntimeWithExit(t, cannedJSON, 1)
+	t.Setenv("DLM_CV_RUNTIME_DIR", dir)
+
+	result, err := Run(context.Background(), JobSpec{Feeds: []FeedRef{{Path: "/tmp/x.mp4"}}, DwellMS: 500})
+	if err != nil {
+		t.Fatalf("Run() should parse failed JSON even when child exits 1; got: %v", err)
 	}
 	if result.Status != "failed" {
 		t.Errorf("Status = %q, want %q", result.Status, "failed")
@@ -194,6 +217,66 @@ func TestRun_ContextCancel_KillsChild(t *testing.T) {
 		}
 	case <-time.After(killGracePeriod + 3*time.Second):
 		t.Fatal("Run() did not return within expected time after context cancel")
+	}
+}
+
+// makeVerboseStubRuntime creates a stub interpreter that writes more than
+// stdoutCapBytes to stdout and exits 0, used to verify the cap is enforced.
+func makeVerboseStubRuntime(t *testing.T) string {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("shell-script stub not supported on Windows")
+	}
+
+	dir := t.TempDir()
+	binDir := filepath.Join(dir, "python", "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Emit 5 MiB of null bytes to exceed the 4 MiB cap and exit 0.
+	// Pipe-free (avoids SIGPIPE in parallel test runs): dd writes directly to stdout.
+	stub := "#!/bin/sh\ndd if=/dev/zero bs=1048576 count=5 2>/dev/null\n"
+	if err := os.WriteFile(filepath.Join(binDir, "python3"), []byte(stub), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "reconstruct.py"), []byte(""), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+func TestRun_StdoutCapExceeded(t *testing.T) {
+	dir := makeVerboseStubRuntime(t)
+	t.Setenv("DLM_CV_RUNTIME_DIR", dir)
+
+	_, err := Run(context.Background(), JobSpec{Feeds: []FeedRef{{Path: "/tmp/feed.mp4"}}, DwellMS: 500})
+	if err == nil {
+		t.Fatal("Run() expected error when stdout cap exceeded, got nil")
+	}
+	if !strings.Contains(err.Error(), "stdout exceeded") {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
+func TestRun_NormalChildStillParsed(t *testing.T) {
+	// Confirm that a well-behaved child (output well within cap) is still
+	// parsed correctly — regression guard for the limitedWriter change.
+	const cannedJSON = `{"status":"succeeded","light_count":1,` +
+		`"lights":[{"id":0,"x":1.0,"y":2.0,"z":3.0}],` +
+		`"missing":[],"low_confidence":[],"error":null}`
+
+	dir := makeStubRuntime(t, cannedJSON)
+	t.Setenv("DLM_CV_RUNTIME_DIR", dir)
+
+	result, err := Run(context.Background(), JobSpec{Feeds: []FeedRef{{Path: "/tmp/feed.mp4"}}, DwellMS: 500})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.Status != "succeeded" {
+		t.Errorf("Status = %q, want succeeded", result.Status)
+	}
+	if len(result.Lights) != 1 || result.Lights[0].ID != 0 {
+		t.Errorf("unexpected lights: %v", result.Lights)
 	}
 }
 

@@ -70,10 +70,10 @@ func main() {
 	if err := pusher.SyncAllAssignedModels(ctx); err != nil {
 		log.Warn("wled sync on startup", "err", err)
 	}
-	handler := httpapi.NewSiteHandler(cfg, ui, st, revHub, pusher)
+	siteHandler := httpapi.NewSiteHandler(cfg, ui, st, revHub, pusher)
 	srv := &http.Server{
 		Addr:              cfg.HTTPListen,
-		Handler:           handler,
+		Handler:           siteHandler,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       cfg.ReadTimeout,
 		WriteTimeout:      cfg.WriteTimeout,
@@ -92,11 +92,14 @@ func main() {
 
 	<-ctx.Done()
 
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Error("shutdown", "err", err)
 		os.Exit(1)
 	}
+	// Stop background workers after the HTTP server has drained so no new
+	// work can be started while they are shutting down.
+	siteHandler.Shutdown(shutdownCtx)
 	log.Info("stopped")
 }

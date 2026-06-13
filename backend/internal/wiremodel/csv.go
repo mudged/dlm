@@ -94,6 +94,16 @@ func ValidateLights(lights []Light) error {
 	return validateContiguousIDs(lights, n)
 }
 
+// MissingIDsError returns a ParseError that names the specific light IDs that
+// were absent from a CV result, giving callers a user-actionable message
+// instead of a generic contiguity failure.
+func MissingIDsError(missing []int) *ParseError {
+	return &ParseError{Message: fmt.Sprintf(
+		"lights %v were not detected; ids must form a sequential sequence starting at 0 — re-capture or discard this result",
+		missing,
+	)}
+}
+
 func parseFiniteFloat(s string) (float64, error) {
 	v, err := strconv.ParseFloat(strings.TrimSpace(s), 64)
 	if err != nil {
@@ -113,17 +123,30 @@ func validateContiguousIDs(lights []Light, n int) error {
 	for _, L := range lights {
 		id := L.ID
 		if id < 0 || id >= n {
-			return &ParseError{Message: "light ids must be sequential starting at 0 with no gaps (expected ids 0 through n-1 for each row)"}
+			return &ParseError{Message: fmt.Sprintf(
+				"light id %d is out of the expected range 0–%d; ids must be a sequential sequence starting at 0 with no gaps or duplicates",
+				id, n-1,
+			)}
 		}
 		if seen[id] {
-			return &ParseError{Message: "light ids must be sequential starting at 0 with no gaps (duplicate id)"}
+			return &ParseError{Message: fmt.Sprintf(
+				"light id %d appears more than once; ids must be a sequential sequence starting at 0 with no gaps or duplicates",
+				id,
+			)}
 		}
 		seen[id] = true
 	}
-	for i := range seen {
-		if !seen[i] {
-			return &ParseError{Message: "light ids must be sequential starting at 0 with no gaps"}
+	var missing []int
+	for i, ok := range seen {
+		if !ok {
+			missing = append(missing, i)
 		}
+	}
+	if len(missing) > 0 {
+		return &ParseError{Message: fmt.Sprintf(
+			"light ids %v are missing; ids must be a sequential sequence 0–%d with no gaps",
+			missing, n-1,
+		)}
 	}
 	return nil
 }

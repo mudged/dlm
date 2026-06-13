@@ -76,7 +76,7 @@ func TestAPIv1Capture_startStatusStop(t *testing.T) {
 	d, err := st.CreateDevice(context.Background(), store.DeviceCreate{
 		Name:       "test-strip",
 		BaseURL:    "http://wled.test",
-		LightCount: 5,
+		LightCount: 100,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -105,8 +105,8 @@ func TestAPIv1Capture_startStatusStop(t *testing.T) {
 	if startBody["device_id"] != d.ID {
 		t.Fatalf("device_id = %v want %s", startBody["device_id"], d.ID)
 	}
-	if lc, _ := startBody["light_count"].(float64); lc != 5 {
-		t.Fatalf("light_count = %v want 5", startBody["light_count"])
+	if lc, _ := startBody["light_count"].(float64); lc != 100 {
+		t.Fatalf("light_count = %v want 100", startBody["light_count"])
 	}
 
 	// GET status → 200 with state field
@@ -127,7 +127,7 @@ func TestAPIv1Capture_startStatusStop(t *testing.T) {
 		t.Fatalf("missing state in %s", b2)
 	}
 
-	// POST stop → 200 idle
+	// POST stop mid-sweep → 200 stopping (sweep still turning LEDs off)
 	res3, err := http.Post(base+"/stop", "application/json", strings.NewReader(""))
 	if err != nil {
 		t.Fatal(err)
@@ -141,8 +141,8 @@ func TestAPIv1Capture_startStatusStop(t *testing.T) {
 	if err := json.Unmarshal(b3, &stopBody); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if stopBody["state"] != "idle" {
-		t.Fatalf("stop state = %v want idle", stopBody["state"])
+	if stopBody["state"] != "stopping" {
+		t.Fatalf("stop state = %v want stopping", stopBody["state"])
 	}
 	if stopBody["device_id"] != d.ID {
 		t.Fatalf("device_id = %v want %s", stopBody["device_id"], d.ID)

@@ -12,6 +12,7 @@ import (
 	"example.com/dlm/backend/internal/wiremodel"
 )
 
+
 // captureHandler is a minimal slog.Handler that records every record in memory
 // so tests can assert on level + attributes (REQ-041 BR 6 fan-out logging).
 type captureHandler struct {
@@ -68,7 +69,7 @@ func TestRevisionHub_NotifyModelLightsChanged_logsWhenSceneLookupFails(t *testin
 	hub := NewRevisionHubWithLogger(log)
 
 	// Subscribe BEFORE breaking the store so we can assert the model topic still ticks.
-	lastSeq, ch, unsub := hub.subscribe(modelTopic(sum.ID))
+	lastSeq, ch, _, unsub := hub.subscribe(modelTopic(sum.ID))
 	defer unsub()
 	if lastSeq != 0 {
 		t.Fatalf("lastSeq before any emit = %d want 0", lastSeq)
@@ -139,5 +140,85 @@ func TestRevisionHub_NotifyModelLightsChanged_logsWhenSceneLookupFails(t *testin
 			buf.WriteByte('\n')
 		}
 		t.Fatalf("expected WARN log with scene fan-out + model_id=%s + err; got:\n%s", sum.ID, buf.String())
+	}
+}
+
+// TestRevisionHub_SlowSubscriberDoesNotBlockEmit verifies that a subscriber whose
+// channel buffer is full never delays emit and that other (draining) subscribers
+// continue to receive payloads. The slow subscriber must be disconnected (done closed).
+func TestRevisionHub_SlowSubscriberDoesNotBlockEmit(t *testing.T) {
+	hub := NewRevisionHub()
+	key := modelTopic("test-slow")
+
+	// Slow subscriber: subscribe but never drain the channel.
+	_, _, slowDone, slowUnsub := hub.subscribe(key)
+	defer slowUnsub()
+
+	// Fast subscriber: drains normally.
+	_, fastCh, _, fastUnsub := hub.subscribe(key)
+	defer fastUnsub()
+
+	delta := LightsSSEDelta{LightID: 0, On: true, Color: "#ffffff", BrightnessPct: 100}
+
+	// Flood the hub with more messages than the slow subscriber's buffer (1024).
+	// All of these should complete quickly; none should block on the slow subscriber.
+	const floods = 1030
+	done := make(chan struct{})
+	go func() {
+		for i := 0; i < floods; i++ {
+			hub.emit(key, []LightsSSEDelta{delta})
+		}
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// emit completed without blocking — pass.
+	case <-time.After(5 * time.Second):
+		t.Fatal("emit blocked on slow subscriber for >5 s")
+	}
+
+	// The slow subscriber must have been disconnected.
+	select {
+	case <-slowDone:
+		// disconnected as expected.
+	case <-time.After(time.Second):
+		t.Fatal("slow subscriber done channel was not closed after buffer overflow")
+	}
+
+	// The fast subscriber must have received at least some messages.
+	got := drainSubscriber(fastCh, floods, 2*time.Second)
+	if len(got) == 0 {
+		t.Fatal("fast subscriber received no messages while slow subscriber was blocking")
+	}
+}
+
+// TestRevisionHub_NormalSubscribersReceiveOrderedDeltas verifies that a healthy subscriber
+// receives payloads with monotonically increasing sequence numbers in order.
+func TestRevisionHub_NormalSubscribersReceiveOrderedDeltas(t *testing.T) {
+	hub := NewRevisionHub()
+	key := modelTopic("test-order")
+
+	_, ch, _, unsub := hub.subscribe(key)
+	defer unsub()
+
+	const n = 10
+	delta := LightsSSEDelta{LightID: 1, On: false, Color: "#000000", BrightnessPct: 0}
+	for i := 0; i < n; i++ {
+		hub.emit(key, []LightsSSEDelta{delta})
+	}
+
+	msgs := drainSubscriber(ch, n, 2*time.Second)
+	if len(msgs) != n {
+		t.Fatalf("expected %d messages, got %d", n, len(msgs))
+	}
+	for i, m := range msgs {
+		want := uint64(i + 1)
+		if m.Seq != want {
+			t.Fatalf("message[%d]: seq = %d, want %d", i, m.Seq, want)
+		}
+		if len(m.Deltas) != 1 || m.Deltas[0].LightID != delta.LightID {
+			t.Fatalf("message[%d]: unexpected deltas: %+v", i, m.Deltas)
+		}
 	}
 }

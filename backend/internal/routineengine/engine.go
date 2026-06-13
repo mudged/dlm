@@ -45,6 +45,7 @@ type Engine struct {
 
 	mu     sync.Mutex
 	active map[string]context.CancelFunc
+	wg     sync.WaitGroup
 }
 
 // New creates an engine. listenAddr is the same string passed to http.Server (e.g. ":8080").
@@ -91,6 +92,33 @@ func (e *Engine) Start(ctx context.Context, runID, sceneID, routineID string) er
 	}
 }
 
+// Shutdown cancels every active run and waits (up to 5 s) for all goroutines
+// to exit.  After Shutdown returns the engine accepts new Start calls, so it
+// can be reused after a factory reset.
+func (e *Engine) Shutdown() {
+	e.mu.Lock()
+	cancels := make([]context.CancelFunc, 0, len(e.active))
+	for _, cancel := range e.active {
+		cancels = append(cancels, cancel)
+	}
+	e.mu.Unlock()
+
+	for _, cancel := range cancels {
+		cancel()
+	}
+
+	done := make(chan struct{})
+	go func() {
+		e.wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		e.log.Warn("routineengine shutdown: timed out waiting for goroutines")
+	}
+}
+
 // Stop cancels the supervisor for runID.
 func (e *Engine) Stop(runID string) {
 	e.mu.Lock()
@@ -131,7 +159,9 @@ func (e *Engine) startPython(parent context.Context, runID, sceneID, source stri
 	ctx, cancel := context.WithCancel(parent)
 	e.registerCancel(runID, cancel)
 
+	e.wg.Add(1)
 	go func() {
+		defer e.wg.Done()
 		defer e.unregister(runID)
 		// Always mark the run stopped when the goroutine exits — whether the
 		// process exited cleanly, errored, crashed, or a temp-file error
@@ -192,7 +222,9 @@ func (e *Engine) startShape(parent context.Context, runID, sceneID, definitionJS
 		return
 	}
 
+	e.wg.Add(1)
 	go func() {
+		defer e.wg.Done()
 		defer e.unregister(runID)
 		ticker := time.NewTicker(time.Second / 60)
 		defer ticker.Stop()

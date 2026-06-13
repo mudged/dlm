@@ -8,47 +8,34 @@ import {
 } from "@/lib/lightDeltas";
 import type { SceneDetail } from "@/lib/scenes";
 import { eventSourceUrl } from "@/lib/sseUrl";
+import { manageSSEConnection } from "@/lib/sseReconnect";
 
 /**
- * Subscribes to scene light SSE (REQ-041) and merges deltas into React state.
- * On sequence gap or connection error, calls onReload for a full scene fetch.
- * Optionally updates `sseLiveRef` so callers can avoid redundant polling while SSE is healthy.
+ * Core SSE handler factory — extracted so it can be unit-tested without React.
+ * @internal exported for tests only
  */
-export function useSceneLightsSSE(
-  sceneId: string | undefined,
-  setScene: Dispatch<SetStateAction<SceneDetail | null>>,
-  onReload: () => void | Promise<void>,
-  options?: {
-    enabled?: boolean;
-    sseLiveRef?: MutableRefObject<boolean>;
-  },
-): void {
-  const enabled = options?.enabled ?? true;
-  const sseLiveRef = options?.sseLiveRef;
-  const seqRef = useRef<number | null>(null);
+export function createSceneSSEHandlers(params: {
+  seqRef: { current: number | null };
+  sseLiveRef?: { current: boolean };
+  sceneId: string;
+  setScene: Dispatch<SetStateAction<SceneDetail | null>>;
+  onReload: () => void | Promise<void>;
+  closeEs: () => void;
+}): {
+  onopen: () => void;
+  onmessage: (ev: { data: string }) => void;
+  onerror: () => void;
+} {
+  const { seqRef, sseLiveRef, sceneId, setScene, onReload, closeEs } = params;
 
-  useEffect(() => {
-    seqRef.current = null;
-    if (sseLiveRef) {
-      sseLiveRef.current = false;
-    }
-  }, [sceneId, sseLiveRef]);
-
-  useEffect(() => {
-    if (!sceneId || typeof window === "undefined" || !enabled) {
-      return;
-    }
-    const es = new EventSource(
-      eventSourceUrl(
-        `/api/v1/scenes/${encodeURIComponent(sceneId)}/lights/events`,
-      ),
-    );
-    es.onopen = () => {
+  return {
+    onopen() {
       if (sseLiveRef) {
         sseLiveRef.current = true;
       }
-    };
-    es.onmessage = (ev) => {
+    },
+
+    onmessage(ev) {
       const msg = parseLightsSSEMessage(ev.data);
       if (!msg) {
         if (process.env.NODE_ENV === "development") {
@@ -85,20 +72,85 @@ export function useSceneLightsSSE(
         }
         return { ...s, items: applySceneLightDeltas(s.items, deltas) };
       });
-    };
-    es.onerror = () => {
-      es.close();
+    },
+
+    onerror() {
+      closeEs();
       if (sseLiveRef) {
         sseLiveRef.current = false;
       }
       seqRef.current = null;
       void onReload();
-    };
+    },
+  };
+}
+
+/**
+ * Subscribes to scene light SSE (REQ-041) and merges deltas into React state.
+ * On sequence gap or connection error, calls onReload for a full scene fetch.
+ * Reconnects automatically with bounded exponential backoff after transient errors.
+ * Optionally updates `sseLiveRef` so callers can avoid redundant polling while SSE is healthy.
+ * Optionally accepts a caller-owned `seqRef` so the caller can read the latest applied
+ * SSE sequence number (e.g. to guard background refetches against stale overwrites).
+ */
+export function useSceneLightsSSE(
+  sceneId: string | undefined,
+  setScene: Dispatch<SetStateAction<SceneDetail | null>>,
+  onReload: () => void | Promise<void>,
+  options?: {
+    enabled?: boolean;
+    sseLiveRef?: MutableRefObject<boolean>;
+    seqRef?: MutableRefObject<number | null>;
+  },
+): void {
+  const enabled = options?.enabled ?? true;
+  const sseLiveRef = options?.sseLiveRef;
+  const internalSeqRef = useRef<number | null>(null);
+  const seqRef = options?.seqRef ?? internalSeqRef;
+
+  useEffect(() => {
+    seqRef.current = null;
+    if (sseLiveRef) {
+      sseLiveRef.current = false;
+    }
+  }, [sceneId, seqRef, sseLiveRef]);
+
+  useEffect(() => {
+    if (!sceneId || typeof window === "undefined" || !enabled) {
+      return;
+    }
+    const session = manageSSEConnection({
+      makeEs: () =>
+        new EventSource(
+          eventSourceUrl(
+            `/api/v1/scenes/${encodeURIComponent(sceneId)}/lights/events`,
+          ),
+        ),
+      attach(es, { scheduleReconnect, resetBackoff }) {
+        const handlers = createSceneSSEHandlers({
+          seqRef,
+          sseLiveRef,
+          sceneId,
+          setScene,
+          onReload,
+          closeEs: () => es.close(),
+        });
+        es.onopen = () => {
+          resetBackoff();
+          handlers.onopen();
+        };
+        es.onmessage = handlers.onmessage;
+        es.onerror = () => {
+          handlers.onerror();
+          scheduleReconnect();
+        };
+      },
+    });
     return () => {
-      es.close();
+      session.destroy();
       if (sseLiveRef) {
         sseLiveRef.current = false;
       }
     };
-  }, [sceneId, enabled, setScene, onReload, sseLiveRef]);
+  }, [sceneId, enabled, setScene, onReload, seqRef, sseLiveRef]);
 }

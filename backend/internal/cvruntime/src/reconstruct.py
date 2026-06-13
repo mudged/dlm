@@ -33,6 +33,7 @@ import json
 import math
 import sys
 import traceback
+from collections import Counter
 from typing import Optional
 
 import cv2
@@ -57,17 +58,38 @@ MIN_BLOB_AREA = 4
 # as low_confidence.
 LOW_CONF_REPROJ_PX = 4.0
 
+# Minimum camera-frame depth (Z_cam) for a triangulated point to be accepted as
+# lying *in front of* a camera (cheirality).  A point whose depth is ≤ this in
+# any contributing camera is geometrically behind/at that camera and is treated
+# as missing rather than emitted as a valid coordinate.  Small positive value so
+# numerical noise near a true zero does not flip the sign.
+CHEIRALITY_MIN_DEPTH = 1e-6
+
 # If no marker is visible and no scale_hint_m is provided the triangulated
 # coordinates are expressed in normalised baseline units (distance between
 # camera 0 and camera 1 = 1.0).  We use 1.0 so the output is at least
 # self-consistent; callers should always supply scale_hint_m for real jobs.
 DEFAULT_SCALE_M = 1.0
 
-# Frames read at the start of each feed to build the background model.
+# Number of frames sampled from the video to build the background model.
 BG_FRAMES = 10
+
+# Maximum number of frames decoded during the background-sampling pass.
+# Bounds CPU time on long videos while still spreading samples far enough
+# apart to catch each light in its off-state (≈ 60 s at 30 fps).
+BG_MAX_SCAN_FRAMES = 1800
+
+# Stride used when the container reports no total frame count.
+BG_STRIDE_FALLBACK = 30
 
 # Seconds of video scanned when searching for an ArUco marker.
 MARKER_SCAN_SECS = 5.0
+
+# Blink dwell validation (when dwell_ms > 0): accept blinks whose on-duration is
+# within this fraction of the expected dwell.  Rejects stray flashes and stuck-on
+# segments outside the REQ-047 sweep window.
+DWELL_MIN_FRAC = 0.4
+DWELL_MAX_FRAC = 2.5
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -105,6 +127,36 @@ def _rodrigues(rvec) -> np.ndarray:
     return R
 
 
+def _validate_positive_finite(value, name: str) -> Optional[str]:
+    """Returns an error message when *value* is not a finite number > 0."""
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return f"{name} must be a finite number > 0"
+    if not math.isfinite(v) or v <= 0:
+        return f"{name} must be a finite number > 0"
+    return None
+
+
+def _accept_blink_duration(duration_s: float, dwell_ms: int) -> bool:
+    """
+    Returns True when *duration_s* is within the expected dwell window.
+
+    When dwell_ms <= 0 validation is disabled (callers that omit dwell_ms still
+    get the Python-side default of 1000 ms; Go forwards 1000 ms by default too).
+    """
+    if dwell_ms <= 0:
+        return True
+    expected_s = dwell_ms / 1000.0
+    return (
+        DWELL_MIN_FRAC * expected_s <= duration_s <= DWELL_MAX_FRAC * expected_s
+    )
+
+
+def _blink_duration_s(start_frame: int, end_frame_inclusive: int, fps: float) -> float:
+    return (end_frame_inclusive - start_frame + 1) / fps
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Stage 1 — Per-feed blink detection
 # ──────────────────────────────────────────────────────────────────────────────
@@ -112,96 +164,159 @@ def _rodrigues(rvec) -> np.ndarray:
 def detect_blinks(
     video_path: str,
     dwell_ms: int,
-) -> tuple[list[tuple[int, float, float]], int, int, np.ndarray]:
+) -> tuple[list[tuple[float, float, float]], int, int, np.ndarray]:
     """
     Opens *video_path* and detects blink events via an on/off state machine.
 
     Frame-rate independence: blinks are delimited by brightness transitions,
     not by a fixed frame count, so cameras recording at different FPS or
     starting/stopping at different times all align correctly (REQ-048 BR 2).
+    When *dwell_ms* > 0, on-duration must fall within
+    ``[DWELL_MIN_FRAC, DWELL_MAX_FRAC] × dwell_ms`` or the blink is rejected
+    (stray flashes / stuck-on segments).  Each accepted blink also records the
+    *time* (seconds from the start of the clip) at which it began, so that
+    which it began, so that cross-feed correspondence (`align_detections`) can
+    use the sweep cadence to recover light indices robustly even when a feed
+    misses or adds a blink — rather than blindly trusting positional ordinals.
 
     Returns
     -------
-    blinks : list of (ordinal, cx, cy)
-        Image-space centroid at full resolution; 0-based ordinals.
+    blinks : list of (t_start_s, cx, cy)
+        ``t_start_s`` is the time (in seconds, from the start of this clip) at
+        which the blink turned on.  ``cx, cy`` is the image-space centroid at
+        full resolution.
     frame_w, frame_h : int
         Full-resolution frame dimensions.
     K : np.ndarray
         Estimated 3×3 camera intrinsic matrix.
     """
-    cap = cv2.VideoCapture(video_path)
-    if not cap.isOpened():
-        raise IOError(f"Cannot open video: {video_path!r}")
+    # ── Pass 1: metadata + background ────────────────────────────────────────
+    # The background is built by sampling BG_FRAMES frames spread across the
+    # full video (up to BG_MAX_SCAN_FRAMES decoded frames), then taking the
+    # per-pixel minimum.  Spreading samples across the video means every light
+    # appears dark in at least some samples (during other lights' blink
+    # periods), so a light that is on throughout the first few consecutive
+    # frames never contaminates its own background pixel.
+    cap_bg = cv2.VideoCapture(video_path)
+    try:
+        if not cap_bg.isOpened():
+            raise IOError(f"Cannot open video: {video_path!r}")
 
-    frame_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    frame_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    if frame_w == 0 or frame_h == 0:
-        cap.release()
-        raise IOError(f"Video reports zero dimensions: {video_path!r}")
+        frame_w = int(cap_bg.get(cv2.CAP_PROP_FRAME_WIDTH))
+        frame_h = int(cap_bg.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        if frame_w == 0 or frame_h == 0:
+            raise IOError(f"Video reports zero dimensions: {video_path!r}")
 
-    K = _estimate_K(frame_w, frame_h)
-    scale = _downscale_factor(frame_h, frame_w)
-    proc_w = max(1, int(frame_w * scale))
-    proc_h = max(1, int(frame_h * scale))
+        # Frame rate is used only to convert blink frame indices into seconds for
+        # cadence-based cross-feed alignment.  A bad/zero FPS falls back to a sane
+        # default; alignment only needs a consistent per-feed time base.
+        fps = cap_bg.get(cv2.CAP_PROP_FPS)
+        if not fps or fps <= 0 or math.isnan(fps):
+            fps = 30.0
 
-    _log(f"  feed {video_path!r}: {frame_w}×{frame_h} → proc {proc_w}×{proc_h}")
+        K = _estimate_K(frame_w, frame_h)
+        scale = _downscale_factor(frame_h, frame_w)
+        proc_w = max(1, int(frame_w * scale))
+        proc_h = max(1, int(frame_h * scale))
 
-    # Build background model from the darkest pixel across BG_FRAMES.
-    # Using the per-pixel minimum is robust against a light being on in the
-    # very first frame.
-    bg_acc: list[np.ndarray] = []
-    for _ in range(BG_FRAMES):
-        ret, frame = cap.read()
-        if not ret:
-            break
-        small = cv2.resize(frame, (proc_w, proc_h), interpolation=cv2.INTER_AREA)
-        bg_acc.append(cv2.cvtColor(small, cv2.COLOR_BGR2GRAY))
+        _log(f"  feed {video_path!r}: {frame_w}×{frame_h} → proc {proc_w}×{proc_h}")
+
+        # Compute stride so that BG_FRAMES samples span the first
+        # min(total_frames, BG_MAX_SCAN_FRAMES) frames of the clip.
+        total_frames = int(cap_bg.get(cv2.CAP_PROP_FRAME_COUNT))
+        scan_limit = (
+            min(total_frames, BG_MAX_SCAN_FRAMES) if total_frames > 0
+            else BG_MAX_SCAN_FRAMES
+        )
+        stride = max(1, scan_limit // BG_FRAMES)
+
+        bg_acc: list[np.ndarray] = []
+        fi = 0
+        while len(bg_acc) < BG_FRAMES:
+            ret, frame = cap_bg.read()
+            if not ret:
+                break
+            if fi % stride == 0:
+                small = cv2.resize(frame, (proc_w, proc_h), interpolation=cv2.INTER_AREA)
+                bg_acc.append(cv2.cvtColor(small, cv2.COLOR_BGR2GRAY))
+            fi += 1
+    finally:
+        cap_bg.release()
 
     if bg_acc:
         background = np.min(np.stack(bg_acc, axis=0), axis=0)
     else:
         background = np.zeros((proc_h, proc_w), dtype=np.uint8)
 
-    # Reset to frame 0 and detect blinks over the full clip.
-    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+    # ── Pass 2: blink detection ───────────────────────────────────────────────
+    # A fresh VideoCapture open restarts from frame 0 deterministically across
+    # container backends (MP4, MKV, AVI, …).  CAP_PROP_POS_FRAMES = 0 seeking
+    # is unreliable on some phone-upload containers and can misalign the blink
+    # pass relative to the background frames, causing missed or spurious blinks.
+    cap = cv2.VideoCapture(video_path)
+    try:
+        if not cap.isOpened():
+            raise IOError(f"Cannot open video (detection pass): {video_path!r}")
 
-    blinks: list[tuple[int, float, float]] = []
-    ordinal = 0
-    in_blink = False
-    accum: list[tuple[float, float]] = []
+        blinks: list[tuple[float, float, float]] = []
+        frame_idx = -1
+        blink_start_frame = 0
+        in_blink = False
+        accum: list[tuple[float, float]] = []
 
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+            frame_idx += 1
 
-        small = cv2.resize(frame, (proc_w, proc_h), interpolation=cv2.INTER_AREA)
-        gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
-        diff = cv2.absdiff(gray, background)
+            small = cv2.resize(frame, (proc_w, proc_h), interpolation=cv2.INTER_AREA)
+            gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
+            diff = cv2.absdiff(gray, background)
 
-        blob = _find_bright_blob(diff)
+            blob = _find_bright_blob(diff)
 
-        if blob is not None:
-            # Scale centroid back to full-resolution coordinates.
-            cx_full = blob[0] / scale
-            cy_full = blob[1] / scale
-            if not in_blink:
-                in_blink = True
-                accum = [(cx_full, cy_full)]
+            if blob is not None:
+                # Scale centroid back to full-resolution coordinates.
+                cx_full = blob[0] / scale
+                cy_full = blob[1] / scale
+                if not in_blink:
+                    in_blink = True
+                    blink_start_frame = frame_idx
+                    accum = [(cx_full, cy_full)]
+                else:
+                    accum.append((cx_full, cy_full))
             else:
-                accum.append((cx_full, cy_full))
-        else:
-            if in_blink:
-                _finalise_blink(blinks, ordinal, accum)
-                ordinal += 1
-                accum = []
-                in_blink = False
+                if in_blink:
+                    duration_s = _blink_duration_s(
+                        blink_start_frame, frame_idx - 1, fps
+                    )
+                    if _accept_blink_duration(duration_s, dwell_ms):
+                        _finalise_blink(
+                            blinks, blink_start_frame / fps, accum
+                        )
+                    else:
+                        _log(
+                            f"    rejected blink at frame {blink_start_frame}: "
+                            f"duration {duration_s * 1000:.0f} ms outside "
+                            f"dwell window ({dwell_ms} ms)"
+                        )
+                    accum = []
+                    in_blink = False
 
-    # Handle clip ending while still inside a blink.
-    if in_blink and accum:
-        _finalise_blink(blinks, ordinal, accum)
-
-    cap.release()
+        # Handle clip ending while still inside a blink.
+        if in_blink and accum:
+            duration_s = _blink_duration_s(blink_start_frame, frame_idx, fps)
+            if _accept_blink_duration(duration_s, dwell_ms):
+                _finalise_blink(blinks, blink_start_frame / fps, accum)
+            else:
+                _log(
+                    f"    rejected trailing blink at frame {blink_start_frame}: "
+                    f"duration {duration_s * 1000:.0f} ms outside "
+                    f"dwell window ({dwell_ms} ms)"
+                )
+    finally:
+        cap.release()
     _log(f"    → {len(blinks)} blink(s) detected")
     return blinks, frame_w, frame_h, K
 
@@ -225,13 +340,13 @@ def _find_bright_blob(
 
 
 def _finalise_blink(
-    blinks: list[tuple[int, float, float]],
-    ordinal: int,
+    blinks: list[tuple[float, float, float]],
+    t_start_s: float,
     accum: list[tuple[float, float]],
 ) -> None:
     cx = sum(p[0] for p in accum) / len(accum)
     cy = sum(p[1] for p in accum) / len(accum)
-    blinks.append((ordinal, cx, cy))
+    blinks.append((t_start_s, cx, cy))
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -239,22 +354,134 @@ def _finalise_blink(
 # ──────────────────────────────────────────────────────────────────────────────
 
 def align_detections(
-    feed_blinks: list[list[tuple[int, float, float]]],
+    feed_blinks: list[list[tuple[float, float, float]]],
 ) -> dict[int, list[tuple[int, float, float]]]:
     """
     Merges per-feed blink lists into:
         light_index → [(feed_idx, cx, cy), …]
 
-    Per REQ-047 / REQ-048 BR 2, ordinal k in a feed maps directly to light
-    index k.  Alignment is by ordinal sequence, not wall-clock time, so
-    cameras that start or stop at different moments still agree.
+    Per REQ-047 / REQ-048 BR 2, the *k-th dwell window* of the capture sweep
+    corresponds to light index ``k``.  The sweep lights each light for a fixed
+    dwell and steps through them in order, so blinks arrive at a steady
+    **cadence**.  Rather than blindly trusting each feed's positional ordinal
+    (which silently drifts when a feed misses or adds a blink — occlusion,
+    noise, thresholding), we recover each blink's *slot* (dwell-window index)
+    from its **timing** relative to that cadence:
+
+      * A **missed** blink leaves a ~2× cadence gap → the slot is skipped, so
+        that light simply has one fewer view in this feed (it is not back-filled
+        by a later blink).  Downstream lights keep their correct indices.
+      * A **spurious** blink lands off-cadence and collides with a neighbouring
+        slot → that slot becomes *ambiguous* for the feed and is dropped (so the
+        feed contributes no detection there) rather than shifting every later
+        index by one.
+
+    Slot ``k`` is treated as light index ``k``; the first detected blink of
+    each feed anchors slot 0 (the sweep is recorded from its start, REQ-047).
+    A light only receives coordinates from 2D points that correspond to the
+    **same** slot across feeds, so a drop/spurious in one feed can never
+    mislabel another light (REQ-048 BR 2 / BR 7).
     """
+    period = _estimate_period(feed_blinks)
+    counts = [len(b) for b in feed_blinks]
+
     by_light: dict[int, list[tuple[int, float, float]]] = {}
     for feed_idx, blinks in enumerate(feed_blinks):
-        for ordinal, cx, cy in blinks:
-            light_idx = ordinal
-            by_light.setdefault(light_idx, []).append((feed_idx, cx, cy))
+        if not blinks:
+            _log(f"  feed {feed_idx}: 0 blinks")
+            continue
+
+        slots = _assign_slots([b[0] for b in blinks], period)
+
+        # A feed must not contribute two blinks to the same slot; if it does
+        # (e.g. a spurious blink collided with a real one) the slot is ambiguous
+        # for this feed and is excluded — better one fewer view than a wrong one.
+        ambiguous = {s for s, c in Counter(slots).items() if c > 1}
+
+        for (_t, cx, cy), slot in zip(blinks, slots):
+            if slot in ambiguous:
+                continue
+            by_light.setdefault(slot, []).append((feed_idx, cx, cy))
+
+        note = f" (ambiguous slots dropped: {sorted(ambiguous)})" if ambiguous else ""
+        _log(f"  feed {feed_idx}: {len(blinks)} blink(s) → slots {slots}{note}")
+
+    if len(set(counts)) > 1:
+        _log(
+            f"  ⚠ feeds disagree on blink count {counts} "
+            f"(cadence≈{period:.3f}s); using timing-based slot alignment so a "
+            f"missed/spurious blink does not shift other light indices"
+        )
     return by_light
+
+
+def _estimate_period(
+    feed_blinks: list[list[tuple[float, float, float]]],
+) -> float:
+    """
+    Estimates the sweep cadence (seconds between consecutive dwell windows) as
+    the **median** of all consecutive blink-start intervals pooled across feeds.
+
+    The median is robust to the minority of intervals that are off-cadence: a
+    dropped blink produces a ~2× interval and a spurious blink a short one, but
+    the bulk of intervals equal one dwell+gap period.  Returns 0.0 when there is
+    not enough data (fewer than one interval anywhere), signalling callers to
+    fall back to positional ordering.
+    """
+    intervals: list[float] = []
+    for blinks in feed_blinks:
+        times = sorted(b[0] for b in blinks)
+        intervals.extend(
+            times[i + 1] - times[i] for i in range(len(times) - 1)
+        )
+    intervals = [d for d in intervals if d > 1e-6]
+    if not intervals:
+        return 0.0
+    intervals.sort()
+    mid = len(intervals) // 2
+    if len(intervals) % 2:
+        return intervals[mid]
+    return 0.5 * (intervals[mid - 1] + intervals[mid])
+
+
+def _assign_slots(times: list[float], period: float) -> list[int]:
+    """
+    Maps each blink-start *time* (chronological, seconds) to a 0-based dwell
+    slot index using the sweep *period*.
+
+    The first blink anchors slot 0.  Each subsequent blink advances the slot by
+    the number of whole cadence periods that have elapsed since the last blink
+    accepted into a *new* slot (``round(Δt / period)``):
+
+      * ``steps >= 2`` → one or more skipped slots (missed blinks); those light
+        indices are simply absent for this feed.
+      * ``steps == 0`` → the blink falls inside the current slot's window
+        (a spurious/duplicate detection); it is tagged with the current slot
+        (making the slot ambiguous) and the cadence anchor is **not** advanced,
+        so the next genuine blink is still measured from the real slot boundary.
+
+    When *period* is non-positive (insufficient timing data) this degrades to
+    plain positional indexing — identical to the legacy behaviour.
+    """
+    if not times:
+        return []
+    if period <= 0:
+        return list(range(len(times)))
+
+    slots = [0]
+    slot = 0
+    anchor = times[0]
+    for t in times[1:]:
+        steps = int(round((t - anchor) / period))
+        if steps < 1:
+            # Off-cadence extra blink within the current window: keep it in the
+            # current slot (flagged ambiguous downstream) without moving anchor.
+            slots.append(slot)
+            continue
+        slot += steps
+        slots.append(slot)
+        anchor = t
+    return slots
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -279,9 +506,11 @@ def estimate_poses(
             x_cam = R @ x_world + t
     metric_scale : float
         Multiplier applied to triangulated coordinates to convert them into
-        SI metres.  When markers are used this is exact; when using
-        scale_hint_m it is the caller-supplied baseline; otherwise 1.0
-        (output is in normalised baseline units).
+        SI metres.  When ArUco markers localise all cameras the poses are
+        already in metres (solvePnP object points are defined in metres), so
+        DLT output is already metric and this is 1.0.  When using scale_hint_m
+        it is the caller-supplied baseline; otherwise 1.0 (output is in
+        normalised baseline units).
     """
     n = len(feed_paths)
     poses: list[Optional[tuple[np.ndarray, np.ndarray]]] = [None] * n
@@ -295,7 +524,10 @@ def estimate_poses(
             n_found = sum(1 for p in aruco_poses if p is not None)
             if n_found == n:
                 _log(f"  ArUco: all {n} cameras localised")
-                return aruco_poses, float(marker_spec["edge_length_m"])
+                # solvePnP uses object points defined in metres, so the
+                # resulting poses are already metric.  DLT output is therefore
+                # already in metres; no additional scaling is needed.
+                return aruco_poses, 1.0
             else:
                 _log(f"  ArUco: only {n_found}/{n} cameras; falling back to E-matrix")
         except Exception as exc:
@@ -311,28 +543,14 @@ def estimate_poses(
         _log(f"  only {len(pts0)} common points between feed 0 and 1 — skipping pose est.")
         return poses, scale_hint_m or DEFAULT_SCALE_M
 
-    E, mask = cv2.findEssentialMat(
-        pts0, pts1, Ks[0], method=cv2.RANSAC, prob=0.999, threshold=1.0
-    )
-    if E is None:
+    em_pose = _essential_matrix_pose(pts0, pts1, Ks[0], Ks[1], by_light)
+    if em_pose is None:
         _log("  essential matrix estimation failed")
         return poses, scale_hint_m or DEFAULT_SCALE_M
 
-    # findEssentialMat may return multiple stacked 3×3 solutions (shape 9×3);
-    # recoverPose requires exactly one 3×3 matrix.
-    if E.shape != (3, 3):
-        E = E[:3, :]
-
-    inlier_mask = mask.ravel() == 1
-    if inlier_mask.sum() < 5:
-        _log(f"  too few E-matrix inliers ({inlier_mask.sum()}) — skipping pose est.")
-        return poses, scale_hint_m or DEFAULT_SCALE_M
-
-    _, R1, t1, _ = cv2.recoverPose(
-        E, pts0[inlier_mask], pts1[inlier_mask], Ks[0]
-    )
+    R1, t1, n_inliers = em_pose
     poses[1] = (R1, t1)
-    _log(f"  E-matrix: feed 1 recovered, {inlier_mask.sum()} inliers")
+    _log(f"  E-matrix: feed 1 recovered, {n_inliers} inliers")
 
     # For feeds beyond the first two, PnP against points triangulated from 0+1.
     if n > 2:
@@ -423,35 +641,155 @@ def _aruco_pose_single_feed(
     feed_idx: int,
 ) -> Optional[tuple[np.ndarray, np.ndarray]]:
     cap = cv2.VideoCapture(video_path)
-    if not cap.isOpened():
-        return None
-    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
-    max_frames = max(1, int(MARKER_SCAN_SECS * fps))
+    try:
+        if not cap.isOpened():
+            return None
+        fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+        max_frames = max(1, int(MARKER_SCAN_SECS * fps))
 
-    pose: Optional[tuple[np.ndarray, np.ndarray]] = None
-    for _ in range(max_frames):
-        ret, frame = cap.read()
-        if not ret:
-            break
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        corners, ids = detect_fn(gray)
-        if ids is not None and len(ids) > 0:
-            rvecs, tvecs, _ = _estimate_pose_single(
-                corners[:1], edge_m, K, dist
-            )
-            R = _rodrigues(rvecs[0])
-            t = tvecs[0].reshape(3, 1)
-            pose = (R, t)
-            _log(f"    feed {feed_idx}: marker found")
-            break
+        pose: Optional[tuple[np.ndarray, np.ndarray]] = None
+        for _ in range(max_frames):
+            ret, frame = cap.read()
+            if not ret:
+                break
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            corners, ids = detect_fn(gray)
+            if ids is not None and len(ids) > 0:
+                rvecs, tvecs, _ = _estimate_pose_single(
+                    corners[:1], edge_m, K, dist
+                )
+                R = _rodrigues(rvecs[0])
+                t = tvecs[0].reshape(3, 1)
+                pose = (R, t)
+                _log(f"    feed {feed_idx}: marker found")
+                break
+    finally:
+        cap.release()
 
-    cap.release()
     if pose is None:
         _log(f"    feed {feed_idx}: no marker in first {MARKER_SCAN_SECS:.0f}s")
     return pose
 
 
 # --- Essential-matrix helpers ------------------------------------------------
+
+def _normalize_image_points(
+    pts: np.ndarray,
+    K: np.ndarray,
+) -> np.ndarray:
+    """
+    Map pixel coordinates to normalized camera coordinates (K applied).
+
+    Used so findEssentialMat / recoverPose can relate two feeds with different
+    intrinsics without forcing both through one camera matrix.
+    """
+    return cv2.undistortPoints(
+        pts.reshape(-1, 1, 2).astype(np.float64),
+        K,
+        None,
+        P=np.eye(3, dtype=np.float64),
+    ).reshape(-1, 2).astype(np.float32)
+
+
+def _essential_matrix_pose(
+    pts0: np.ndarray,
+    pts1: np.ndarray,
+    K0: np.ndarray,
+    K1: np.ndarray,
+    by_light: dict[int, list[tuple[int, float, float]]],
+) -> Optional[tuple[np.ndarray, np.ndarray, int]]:
+    """
+    Recover the relative pose of camera 1 w.r.t. camera 0 from matched pixels.
+
+    Each feed's points are normalized with its own intrinsics.  OpenCV may return
+    several E-matrix hypotheses; each is decomposed and ranked by cheirality
+    (fewest missing lights) then mean reprojection error on the pair.
+    """
+    if len(pts0) < 5:
+        return None
+
+    pts0_n = _normalize_image_points(pts0, K0)
+    pts1_n = _normalize_image_points(pts1, K1)
+    I = np.eye(3, dtype=np.float64)
+    norm_thresh = 1.0 / float(max(K0[0, 0], K1[0, 0], 1.0))
+
+    candidates: list[tuple[tuple[int, float, int], int, np.ndarray, np.ndarray]] = []
+
+    for pa, pb, invert in ((pts0_n, pts1_n, False), (pts1_n, pts0_n, True)):
+        E, mask = cv2.findEssentialMat(
+            pa, pb, I, method=cv2.RANSAC, prob=0.999, threshold=norm_thresh
+        )
+        if E is None:
+            continue
+        inlier_mask = mask.ravel() == 1
+        n_inliers = int(inlier_mask.sum())
+        if n_inliers < 5:
+            continue
+        pa_inl = pa[inlier_mask]
+        pb_inl = pb[inlier_mask]
+
+        for ci in range(E.shape[0] // 3):
+            Ei = E[ci * 3:(ci + 1) * 3, :]
+            _, R, t, _ = cv2.recoverPose(Ei, pa_inl, pb_inl, I)
+            if invert:
+                R1 = R.T
+                t1 = (-R.T @ t.reshape(3, 1)).reshape(3)
+            else:
+                R1 = R
+                t1 = t.reshape(3)
+            score = _pose_pair_score(R1, t1, by_light, K0, K1)
+            candidates.append((score, n_inliers, R1, t1))
+
+    if not candidates:
+        return None
+
+    candidates.sort(key=lambda c: (c[0][0], c[0][1], -c[0][2], -c[1]))
+    _, n_inliers, R1, t1 = candidates[0]
+    return R1, t1.reshape(3, 1), n_inliers
+
+
+def _pose_pair_score(
+    R1: np.ndarray,
+    t1: np.ndarray,
+    by_light: dict[int, list[tuple[int, float, float]]],
+    K0: np.ndarray,
+    K1: np.ndarray,
+) -> tuple[int, float, int]:
+    """
+    Rank an essential-matrix pose hypothesis.
+
+    Returns (n_missing, mean_reproj_px, n_triangulated) — lower is better for
+    the first two; higher is better for the third (tie-break).
+    """
+    poses: list[Optional[tuple[np.ndarray, np.ndarray]]] = [
+        (np.eye(3, dtype=np.float64), np.zeros((3, 1), dtype=np.float64)),
+        (R1, t1.reshape(3, 1)),
+    ]
+    ref3d, ref_ids = _quick_triangulate_pair(by_light, poses, [K0, K1], 0, 1)
+    if len(ref_ids) < 3:
+        return (999, 999.0, 0)
+
+    Ps = {
+        0: K0 @ np.hstack([np.eye(3), np.zeros((3, 1))]),
+        1: K1 @ np.hstack([R1, t1.reshape(3, 1)]),
+    }
+    errs: list[float] = []
+    for i, lid in enumerate(ref_ids):
+        pt = ref3d[i]
+        for fi in (0, 1):
+            det = next((d for d in by_light.get(lid, []) if d[0] == fi), None)
+            if det is None:
+                continue
+            cx, cy = det[1], det[2]
+            proj = Ps[fi] @ np.append(pt, 1.0)
+            if abs(proj[2]) < 1e-10:
+                continue
+            errs.append(math.hypot(proj[0] / proj[2] - cx, proj[1] / proj[2] - cy))
+
+    mean_reproj = sum(errs) / len(errs) if errs else 999.0
+    lights, miss, _ = triangulate_all(by_light, poses, [K0, K1], 1.0)
+    return (len(miss), mean_reproj, len(lights))
+
 
 def _common_2d_points(
     by_light: dict[int, list[tuple[int, float, float]]],
@@ -545,7 +883,13 @@ def triangulate_all(
     Triangulates 3D coordinates for every light visible in ≥ 2 feeds.
 
     Lights visible in < 2 feeds are placed in *missing* (REQ-048 BR 7).
-    Lights with reprojection error > LOW_CONF_REPROJ_PX go to *low_confidence*.
+    Sanity guards (WI-26) also route a light to *missing* when its triangulated
+    point fails **cheirality** (not in front of every contributing camera,
+    ``Z_cam > 0``) or is **non-finite** (NaN/Inf) — bad geometry, degenerate
+    correspondences or ill-conditioned poses must never be emitted as valid
+    coordinates.  These are stronger than the reprojection-error check:
+    lights with reprojection error > LOW_CONF_REPROJ_PX still get coordinates
+    but go to *low_confidence*.
     Coordinates never fabricated for undetected lights.
 
     Returns
@@ -579,12 +923,41 @@ def triangulate_all(
             missing.append(light_id)
             continue
 
+        # Finite guard (geometry): an ill-conditioned SVD can yield NaN/Inf.
+        # Reject before any further math so depth/reprojection stay meaningful.
+        if not np.all(np.isfinite(pt3d)):
+            _log(f"  light {light_id}: non-finite triangulation → missing")
+            missing.append(light_id)
+            continue
+
+        # Cheirality: the point must lie in front of *every* contributing
+        # camera.  A negative/zero depth means bad geometry produced a point
+        # behind a camera — never emit it as a valid coordinate (WI-26).
+        bad_depth = _behind_camera_depth(pt3d, valid, Ps)
+        if bad_depth is not None:
+            fi, depth = bad_depth
+            _log(
+                f"  light {light_id}: depth {depth:.4g} ≤ 0 in feed {fi} "
+                f"(behind camera) → missing"
+            )
+            missing.append(light_id)
+            continue
+
+        x, y, z = pt3d * metric_scale
+
+        # Finite guard: reject any NaN/Inf coordinate (ill-conditioned SVD or a
+        # non-finite scale).  Routing to missing keeps the output valid JSON so
+        # the Go side never fails to parse the whole job (WI-26).
+        if not (math.isfinite(x) and math.isfinite(y) and math.isfinite(z)):
+            _log(f"  light {light_id}: non-finite coordinate → missing")
+            missing.append(light_id)
+            continue
+
         reproj = _reprojection_error(pt3d, valid, Ps)
         if reproj > LOW_CONF_REPROJ_PX:
             _log(f"  light {light_id}: reproj={reproj:.1f}px → low_confidence")
             low_conf.append(light_id)
 
-        x, y, z = pt3d * metric_scale
         lights_3d[light_id] = (float(x), float(y), float(z))
 
     return lights_3d, missing, low_conf
@@ -609,6 +982,30 @@ def _dlt_triangulate(
     if abs(X[3]) < 1e-10:
         return None
     return X[:3] / X[3]
+
+
+def _behind_camera_depth(
+    pt3d: np.ndarray,
+    valid: list[tuple[int, float, float]],
+    Ps: dict[int, np.ndarray],
+) -> Optional[tuple[int, float]]:
+    """
+    Cheirality check.  Returns ``(feed_idx, depth)`` for the first contributing
+    camera in which *pt3d* does **not** lie in front (camera-frame depth
+    ``Z_cam ≤ CHEIRALITY_MIN_DEPTH`` or non-finite), or ``None`` when the point
+    is in front of every camera.
+
+    The third row of a projection matrix ``P = K · [R | t]`` equals the third
+    row of ``[R | t]`` (since ``K``'s last row is ``[0, 0, 1]``), so for a world
+    point ``X`` the homogeneous product ``(P · [X, 1])[2]`` is exactly the
+    point's depth in that camera's frame — no separate pose math is needed.
+    """
+    pt_h = np.append(pt3d, 1.0)
+    for fi, _cx, _cy in valid:
+        depth = float((Ps[fi] @ pt_h)[2])
+        if not math.isfinite(depth) or depth <= CHEIRALITY_MIN_DEPTH:
+            return fi, depth
+    return None
 
 
 def _reprojection_error(
@@ -660,38 +1057,73 @@ def _make_error(message: str) -> dict:
     }
 
 
+def _serialise_result(result: dict) -> str:
+    """
+    Serialise *result* to RFC8259-valid JSON.
+
+    ``allow_nan=False`` guarantees the output never contains the non-standard
+    ``NaN``/``Infinity`` tokens that Python's ``json.dumps`` emits by default —
+    those tokens make the Go side's ``json.Unmarshal`` fail the *whole* job.
+    The per-light finite guard in ``triangulate_all`` should already keep
+    non-finite values out of the result; this is the final safety net.  If one
+    somehow survives we fail cleanly with ``status:"failed"`` rather than
+    emitting output Go cannot parse.
+    """
+    try:
+        return json.dumps(result, allow_nan=False)
+    except ValueError as exc:
+        return json.dumps(
+            _make_error(f"non-finite value in reconstruction result: {exc}")
+        )
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Entry point
 # ──────────────────────────────────────────────────────────────────────────────
 
+def _emit_failure(message: str) -> None:
+    """Write a failed Result JSON to stdout and exit non-zero."""
+    print(json.dumps(_make_error(message)))
+    sys.exit(1)
+
+
 def main() -> None:
     if len(sys.argv) < 2:
-        print(json.dumps(_make_error("usage: reconstruct.py <spec_file.json>")))
-        sys.exit(1)
+        _emit_failure("usage: reconstruct.py <spec_file.json>")
 
     try:
         with open(sys.argv[1]) as fh:
             spec = json.load(fh)
     except Exception as exc:
-        print(json.dumps(_make_error(f"cannot read spec: {exc}")))
-        sys.exit(1)
+        _emit_failure(f"cannot read spec: {exc}")
 
     feeds = spec.get("feeds", [])
     if len(feeds) < 2:
-        print(json.dumps(_make_error(
+        _emit_failure(
             f"at least 2 feeds are required for triangulation; got {len(feeds)}"
-        )))
-        sys.exit(1)
+        )
 
     dwell_ms      = int(spec.get("dwell_ms", 1000))
     marker_spec   = spec.get("marker")
     scale_hint_m  = spec.get("scale_hint_m")
 
+    if scale_hint_m is not None:
+        scale_err = _validate_positive_finite(scale_hint_m, "scale_hint_m")
+        if scale_err:
+            _emit_failure(scale_err)
+
+    if marker_spec is not None:
+        edge_err = _validate_positive_finite(
+            marker_spec.get("edge_length_m"), "marker.edge_length_m"
+        )
+        if edge_err:
+            _emit_failure(edge_err)
+
     try:
         _log(f"DLM reconstruct: {len(feeds)} feed(s), dwell={dwell_ms} ms")
 
         # Stage 1 — blink detection.
-        feed_blinks: list[list[tuple[int, float, float]]] = []
+        feed_blinks: list[list[tuple[float, float, float]]] = []
         Ks: list[np.ndarray] = []
         for feed in feeds:
             blinks, _fw, _fh, K = detect_blinks(feed["path"], dwell_ms)
@@ -704,8 +1136,7 @@ def main() -> None:
         _log(f"  detected light indices: {sorted(all_ids) if all_ids else '(none)'}")
 
         if not all_ids:
-            print(json.dumps(_make_error("no blink events detected in any feed")))
-            return
+            _emit_failure("no blink events detected in any feed")
 
         # Stage 3 — camera pose.
         poses, metric_scale = estimate_poses(
@@ -732,7 +1163,7 @@ def main() -> None:
             f"  done: {len(lights_3d)} triangulated, "
             f"{len(missing)} missing, {len(low_conf)} low_confidence"
         )
-        print(json.dumps(result))
+        print(_serialise_result(result))
 
     except Exception as exc:
         _log(f"ERROR: {exc}")

@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import {
+  FACTORY_RESET_CONFIRM_PHRASE,
   FACTORY_RESET_DISCLOSURE,
 } from "@/lib/factoryReset";
 
@@ -17,14 +18,17 @@ export default function OptionsPage() {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [phrase, setPhrase] = useState("");
 
   function openDialog() {
     setErr(null);
+    setPhrase("");
     dialogRef.current?.showModal();
   }
 
   function closeDialog() {
     dialogRef.current?.close();
+    setPhrase("");
   }
 
   async function confirmFactoryReset() {
@@ -34,7 +38,7 @@ export default function OptionsPage() {
       const res = await fetch("/api/v1/system/factory-reset", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: "{}",
+        body: JSON.stringify({ confirm: FACTORY_RESET_CONFIRM_PHRASE }),
       });
       const j = (await res.json().catch(() => null)) as {
         ok?: boolean;
@@ -58,6 +62,8 @@ export default function OptionsPage() {
       setBusy(false);
     }
   }
+
+  const phraseMatches = phrase === FACTORY_RESET_CONFIRM_PHRASE;
 
   return (
     <div className="mx-auto flex max-w-lg flex-col gap-6 px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
@@ -111,8 +117,35 @@ export default function OptionsPage() {
           <p className="text-amber-900 dark:text-amber-200">
             This action cannot be undone.
           </p>
+          <div>
+            <label
+              htmlFor="factory-reset-phrase"
+              className="mb-1 block font-medium"
+            >
+              Type{" "}
+              <span className="font-mono font-bold">
+                {FACTORY_RESET_CONFIRM_PHRASE}
+              </span>{" "}
+              to confirm
+            </label>
+            <input
+              id="factory-reset-phrase"
+              type="text"
+              autoComplete="off"
+              spellCheck={false}
+              value={phrase}
+              onChange={(e) => setPhrase(e.target.value)}
+              disabled={busy}
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-mono text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+              aria-describedby={err ? "factory-reset-error" : undefined}
+            />
+          </div>
           {err ? (
-            <p className="text-red-600 dark:text-red-400" role="alert">
+            <p
+              id="factory-reset-error"
+              className="text-red-600 dark:text-red-400"
+              role="alert"
+            >
               {err}
             </p>
           ) : null}
@@ -131,7 +164,7 @@ export default function OptionsPage() {
             type="button"
             icon={faTrash}
             className="min-h-11 w-full bg-red-800 hover:bg-red-700 dark:bg-red-900 sm:w-auto"
-            disabled={busy}
+            disabled={busy || !phraseMatches}
             onClick={() => void confirmFactoryReset()}
           >
             {busy ? "Working…" : "Erase everything"}

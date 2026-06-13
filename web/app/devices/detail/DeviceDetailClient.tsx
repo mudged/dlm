@@ -12,6 +12,7 @@ import {
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCapturePolling } from "@/lib/useCapturePolling";
 import { Button } from "@/components/ui/Button";
 import { ButtonLink } from "@/components/ui/ButtonLink";
 import type { CaptureStatus, Device } from "@/lib/devices";
@@ -81,43 +82,14 @@ export function DeviceDetailClient() {
 
   useEffect(() => {
     if (!rawId) return;
-    let active = true;
-    let timer: ReturnType<typeof setInterval> | null = null;
-
-    async function poll() {
-      if (!active || !rawId) return;
-      try {
-        const status = await getCaptureStatus(rawId);
-        if (!active) return;
-        setCaptureStatus(status);
-        if (status.state === "running") {
-          timer = setInterval(() => {
-            void (async () => {
-              if (!active || !rawId) return;
-              try {
-                const s = await getCaptureStatus(rawId);
-                if (!active) return;
-                setCaptureStatus(s);
-                if (s.state !== "running" && timer !== null) {
-                  clearInterval(timer);
-                  timer = null;
-                }
-              } catch {
-                // ignore poll errors silently
-              }
-            })();
-          }, 1000);
-        }
-      } catch {
-        // ignore initial poll error
-      }
-    }
-    void poll();
-    return () => {
-      active = false;
-      if (timer !== null) clearInterval(timer);
-    };
+    void getCaptureStatus(rawId)
+      .then(setCaptureStatus)
+      .catch(() => {
+        // ignore initial status fetch error; UI shows "Loading status…" until resolved
+      });
   }, [rawId]);
+
+  useCapturePolling(rawId, captureStatus?.state, setCaptureStatus, setCaptureError);
 
   const modelNameById = useMemo(() => {
     const m = new Map<string, string>();

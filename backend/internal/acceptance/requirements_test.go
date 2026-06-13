@@ -1304,8 +1304,9 @@ func TestAcceptance_REQ029_architectureDocumentsThroughputAndSSE(t *testing.T) {
 		t.Fatalf("read %s: %v", readmePath, err)
 	}
 	readme := strings.ToLower(string(readmeBytes))
-	if !strings.Contains(readme, "req-029") {
-		t.Fatal("README must document REQ-029 (high-throughput light updates)")
+	// README must describe the integrator SSE path without embedding internal REQ-* IDs (AGENTS.md).
+	if !strings.Contains(readme, "live light updates") || !strings.Contains(readme, "server-sent events") {
+		t.Fatal("README must document high-throughput light updates via Server-Sent Events for integrators")
 	}
 	if !strings.Contains(readme, "/lights/events") {
 		t.Fatal("README must mention the /lights/events SSE URLs for integrators")

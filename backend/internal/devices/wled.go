@@ -57,9 +57,22 @@ func buildWLEDState(states []store.LightStateDTO) map[string]any {
 	}
 }
 
+const deviceHTTPTimeout = 5 * time.Second
+
+// deviceHTTPClient returns a shared outbound client for WLED pushes. Redirects are
+// refused so a compromised device cannot SSRF via 3xx to an internal LAN host.
+func deviceHTTPClient() *http.Client {
+	return &http.Client{
+		Timeout: deviceHTTPTimeout,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+}
+
 func postJSONState(ctx context.Context, client *http.Client, baseURL, password string, body map[string]any) error {
 	if client == nil {
-		client = &http.Client{Timeout: 5 * time.Second}
+		client = deviceHTTPClient()
 	}
 	u := strings.TrimRight(strings.TrimSpace(baseURL), "/") + "/json/state"
 	if password != "" {

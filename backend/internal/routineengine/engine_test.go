@@ -158,6 +158,48 @@ func TestEngine_shapeInitDimsFailure_stopsRunInStore(t *testing.T) {
 	}
 }
 
+// TestEngine_Shutdown_cancelsActiveRunsAndDrains verifies that Shutdown cancels
+// every active run, waits for goroutines to exit, and that StopRoutineRun is
+// called for each — bringing the DB rows to a terminal state.
+func TestEngine_Shutdown_cancelsActiveRunsAndDrains(t *testing.T) {
+	fk := &fakeEngineStore{
+		routine: &store.RoutineDTO{
+			Type:           store.RoutineTypeShapeAnimation,
+			DefinitionJSON: validShapeDefJSON,
+		},
+	}
+	e := newTestEngine(fk, "python3")
+
+	// Start two runs so we can verify both are stopped.
+	for _, id := range []string{"run-s1", "run-s2"} {
+		if err := e.Start(context.Background(), id, "scene-s", "routine-s"); err != nil {
+			t.Fatalf("Start %s: %v", id, err)
+		}
+	}
+
+	e.Shutdown()
+
+	// After Shutdown the active map must be empty.
+	e.mu.Lock()
+	remaining := len(e.active)
+	e.mu.Unlock()
+	if remaining != 0 {
+		t.Fatalf("active map has %d entries after Shutdown, want 0", remaining)
+	}
+
+	// Both runs must have reached a terminal store state.
+	calls := fk.stopCallsSnapshot()
+	stopped := make(map[string]bool)
+	for _, c := range calls {
+		stopped[c.runID] = true
+	}
+	for _, id := range []string{"run-s1", "run-s2"} {
+		if !stopped[id] {
+			t.Errorf("StopRoutineRun not called for %s after Shutdown", id)
+		}
+	}
+}
+
 // TestEngine_shapeContextCancelled_stopsRunInStore verifies that when the shape
 // animation goroutine's context is cancelled (e.g. stop endpoint cancels it),
 // StopRoutineRun is called to reach a terminal DB state even if the stop

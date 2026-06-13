@@ -9,7 +9,7 @@ export type Device = {
 };
 
 export type CaptureStatus = {
-  state: "idle" | "running";
+  state: "idle" | "running" | "stopping";
   light_count: number;
   current_index?: number;
 };
