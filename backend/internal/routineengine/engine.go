@@ -22,9 +22,22 @@ var bootstrapScript []byte
 // ScenePatchNotifier is invoked after successful batch scene light patches (SSE + WLED).
 type ScenePatchNotifier func(ctx context.Context, sceneID string, states []store.ScenePatchedState)
 
+// engineStore is the subset of store.Store that the engine requires. Using an
+// interface allows a test double to be injected without a real SQLite database.
+type engineStore interface {
+	GetRoutine(ctx context.Context, id string) (*store.RoutineDTO, error)
+	GetSceneDimensions(ctx context.Context, sceneID string) (*store.SceneDimensions, error)
+	StopRoutineRun(ctx context.Context, sceneID, runID string) error
+	ListSceneLights(ctx context.Context, sceneID string) ([]store.SceneLightFlat, error)
+	PatchSceneLightsBatch(ctx context.Context, sceneID string, updates []store.SceneBatchLightUpdate) (*store.SceneBulkPatchResult, error)
+}
+
+// compile-time assertion: *store.Store must satisfy engineStore.
+var _ engineStore = (*store.Store)(nil)
+
 // Engine supervises active routine_runs rows.
 type Engine struct {
-	store   *store.Store
+	store   engineStore
 	notify  ScenePatchNotifier
 	log     *slog.Logger
 	apiBase string
@@ -104,12 +117,28 @@ func (e *Engine) unregister(runID string) {
 	e.mu.Unlock()
 }
 
+// stopRun marks the routine_runs row stopped using a fresh background context so that
+// cancellation of the per-run context (e.g. after cmd.Run() returns) cannot abort the write.
+func (e *Engine) stopRun(sceneID, runID string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := e.store.StopRoutineRun(ctx, sceneID, runID); err != nil {
+		e.log.Warn("routineengine stop run", "err", err, "run_id", runID, "scene_id", sceneID)
+	}
+}
+
 func (e *Engine) startPython(parent context.Context, runID, sceneID, source string) {
 	ctx, cancel := context.WithCancel(parent)
 	e.registerCancel(runID, cancel)
 
 	go func() {
 		defer e.unregister(runID)
+		// Always mark the run stopped when the goroutine exits — whether the
+		// process exited cleanly, errored, crashed, or a temp-file error
+		// prevented it from starting at all. Uses context.Background() so that
+		// cancellation of the per-run ctx cannot abort this cleanup write.
+		defer e.stopRun(sceneID, runID)
+
 		tmp, err := os.CreateTemp("", "dlm-user-*.py")
 		if err != nil {
 			e.log.Error("routineengine python temp", "err", err, "run_id", runID)
@@ -150,6 +179,7 @@ func (e *Engine) startShape(parent context.Context, runID, sceneID, definitionJS
 		e.log.Error("routineengine shape init dimensions", "err", err, "run_id", runID)
 		cancel()
 		e.unregister(runID)
+		e.stopRun(sceneID, runID)
 		return
 	}
 	dims := shapeanim.FromStore(dimsStore)
@@ -158,6 +188,7 @@ func (e *Engine) startShape(parent context.Context, runID, sceneID, definitionJS
 		e.log.Error("routineengine shape init", "err", err, "run_id", runID)
 		cancel()
 		e.unregister(runID)
+		e.stopRun(sceneID, runID)
 		return
 	}
 
@@ -168,6 +199,12 @@ func (e *Engine) startShape(parent context.Context, runID, sceneID, definitionJS
 		for {
 			select {
 			case <-ctx.Done():
+				// Context was cancelled (e.g. by the stop endpoint calling engine.Stop).
+				// The stop endpoint also calls store.StopRoutineRun, but we call it here
+				// too so that any non-endpoint cancellation (parent context, etc.) also
+				// reaches a terminal DB state. StopRoutineRun is idempotent, so a
+				// double-stop from a concurrent stop-endpoint call is safe.
+				e.stopRun(sceneID, runID)
 				return
 			case <-ticker.C:
 				dimsStore, err := e.store.GetSceneDimensions(ctx, sceneID)

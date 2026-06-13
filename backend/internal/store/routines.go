@@ -325,6 +325,9 @@ func (s *Store) StartRoutineRun(ctx context.Context, sceneID, routineID string) 
 }
 
 // StopRoutineRun marks a run stopped if it belongs to the scene.
+// It is idempotent: if the run is already stopped the call succeeds silently.
+// ErrRoutineRunNotFound is returned only when no row with the given id and
+// scene_id exists at all (never-existed or wrong scene).
 func (s *Store) StopRoutineRun(ctx context.Context, sceneID, runID string) error {
 	res, err := s.db.ExecContext(ctx, `
 		UPDATE routine_runs SET status = ?, stopped_at = ? WHERE id = ? AND scene_id = ? AND status = ?
@@ -337,7 +340,19 @@ func (s *Store) StopRoutineRun(ctx context.Context, sceneID, runID string) error
 		return err
 	}
 	if n == 0 {
-		return ErrRoutineRunNotFound
+		// Zero rows updated: either the run is already stopped (idempotent – ok)
+		// or it simply does not exist for this scene (error).
+		var exists int
+		if err := s.db.QueryRowContext(ctx,
+			`SELECT COUNT(*) FROM routine_runs WHERE id = ? AND scene_id = ?`,
+			runID, sceneID,
+		).Scan(&exists); err != nil {
+			return err
+		}
+		if exists == 0 {
+			return ErrRoutineRunNotFound
+		}
+		// Row exists but is already stopped — treat as success.
 	}
 	return nil
 }

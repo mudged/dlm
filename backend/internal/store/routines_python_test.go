@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -103,6 +104,47 @@ func TestRoutines_ShapeAnimationCreatePatch(t *testing.T) {
 	updated, err := s.PatchRoutine(ctx, r.ID, ptr("sh1b"), nil, nil, ptr(def))
 	if err != nil || updated.Name != "sh1b" {
 		t.Fatalf("patch %+v err %v", updated, err)
+	}
+}
+
+// TestStopRoutineRun_idempotent verifies that calling StopRoutineRun on an
+// already-stopped run returns nil (idempotent), whereas calling it with a
+// completely non-existent run ID returns ErrRoutineRunNotFound.
+func TestStopRoutineRun_idempotent(t *testing.T) {
+	ctx := context.Background()
+	s := testDB(t)
+
+	sum, err := s.Create(ctx, "m1", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sc, err := s.CreateScene(ctx, "s1", []string{sum.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := s.CreateRoutine(ctx, "py", "", RoutineTypePythonSceneScript, "pass", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	runID, err := s.StartRoutineRun(ctx, sc.ID, r.ID)
+	if err != nil {
+		t.Fatalf("StartRoutineRun: %v", err)
+	}
+
+	// First stop – should succeed.
+	if err := s.StopRoutineRun(ctx, sc.ID, runID); err != nil {
+		t.Fatalf("first StopRoutineRun: %v", err)
+	}
+
+	// Second stop on the same already-stopped run – must be idempotent (no error).
+	if err := s.StopRoutineRun(ctx, sc.ID, runID); err != nil {
+		t.Fatalf("second StopRoutineRun (idempotent): %v", err)
+	}
+
+	// Completely non-existent run ID must still return ErrRoutineRunNotFound.
+	if err := s.StopRoutineRun(ctx, sc.ID, "00000000-0000-0000-0000-000000000000"); !errors.Is(err, ErrRoutineRunNotFound) {
+		t.Fatalf("want ErrRoutineRunNotFound for unknown runID, got %v", err)
 	}
 }
 
