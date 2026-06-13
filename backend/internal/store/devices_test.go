@@ -2,7 +2,10 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"errors"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"example.com/dlm/backend/internal/wiremodel"
@@ -169,6 +172,130 @@ func TestStore_PatchDevice_baseURLValidation(t *testing.T) {
 		t.Fatalf("base_url normalize want %q got %q", "https://wled.local:8080", out.BaseURL)
 	}
 }
+
+func TestStore_DeviceLightCount_createGetListPatch(t *testing.T) {
+	ctx := context.Background()
+	s := testDB(t)
+
+	d, err := s.CreateDevice(ctx, DeviceCreate{Name: "strip", BaseURL: "http://wled.local", LightCount: 50})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.LightCount != 50 {
+		t.Fatalf("create LightCount = %d want 50", d.LightCount)
+	}
+
+	got, err := s.GetDevice(ctx, d.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.LightCount != 50 {
+		t.Fatalf("get LightCount = %d want 50", got.LightCount)
+	}
+
+	list, err := s.ListDevices(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 1 || list[0].LightCount != 50 {
+		t.Fatalf("list LightCount = %+v", list)
+	}
+
+	patchVal := 120
+	updated, err := s.PatchDevice(ctx, d.ID, DevicePatch{LightCount: &patchVal})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.LightCount != 120 {
+		t.Fatalf("patch LightCount = %d want 120", updated.LightCount)
+	}
+
+	unchanged, err := s.PatchDevice(ctx, d.ID, DevicePatch{Name: strPtr("renamed")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if unchanged.Name != "renamed" || unchanged.LightCount != 120 {
+		t.Fatalf("patch omit light_count: %+v", unchanged)
+	}
+}
+
+func TestStore_DeviceLightCount_outOfRangeRejected(t *testing.T) {
+	ctx := context.Background()
+	s := testDB(t)
+
+	for _, n := range []int{-1, 1001} {
+		_, err := s.CreateDevice(ctx, DeviceCreate{Name: "x", BaseURL: "http://wled.local", LightCount: n})
+		if err == nil {
+			t.Fatalf("create light_count=%d should fail", n)
+		}
+		if !strings.Contains(err.Error(), "light_count") {
+			t.Fatalf("create light_count=%d err = %v", n, err)
+		}
+	}
+
+	d, err := s.CreateDevice(ctx, DeviceCreate{Name: "ok", BaseURL: "http://wled.local", LightCount: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range []int{-1, 1001} {
+		patchN := n
+		_, err := s.PatchDevice(ctx, d.ID, DevicePatch{LightCount: &patchN})
+		if err == nil {
+			t.Fatalf("patch light_count=%d should fail", n)
+		}
+		if !strings.Contains(err.Error(), "light_count") {
+			t.Fatalf("patch light_count=%d err = %v", n, err)
+		}
+	}
+}
+
+func TestStore_DeviceLightCount_migrationFromLegacyTable(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "legacy_devices.db")
+
+	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=foreign_keys(1)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.ExecContext(ctx, `CREATE TABLE devices (
+		id TEXT PRIMARY KEY,
+		type TEXT NOT NULL,
+		name TEXT NOT NULL,
+		base_url TEXT NOT NULL,
+		wled_password TEXT,
+		model_id TEXT UNIQUE,
+		created_at TEXT NOT NULL
+	)`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.ExecContext(ctx, `
+		INSERT INTO devices (id, type, name, base_url, wled_password, model_id, created_at)
+		VALUES ('legacy-1', 'wled', 'legacy', 'http://legacy.local', NULL, NULL, '2020-01-01T00:00:00Z')
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+
+	d, err := s.GetDevice(ctx, "legacy-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.LightCount != 0 {
+		t.Fatalf("migrated LightCount = %d want 0", d.LightCount)
+	}
+}
+
+func strPtr(s string) *string { return &s }
 
 func TestStore_FactoryReset_clearsDevices(t *testing.T) {
 	ctx := context.Background()

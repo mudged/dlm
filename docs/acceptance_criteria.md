@@ -1597,6 +1597,80 @@ Feature: README operator download Pi service and updates (REQ-046)
     When the REQ-046 business rules are read
     Then README must include a systemd service example for Raspberry Pi OS or Debian-based Pi OS that starts the binary on boot
     And README must explain how to update by replacing the binary restarting the service and preserving documented data paths
+
+Feature: Device-driven capture light sequence (REQ-047)
+
+  Scenario: Device screen starts the sequential blink sweep
+    Parent requirement: REQ-047
+    Given a device with a configured light count of n is selected on the Device screen
+    And the device need not be assigned to any model
+    When the operator starts the capture light sequence
+    Then the device must light exactly one light at a time in ascending index order 0 to n minus 1
+    And each light must stay on for about one second then turn off before the next index
+    And the sweep must run server-side and continue without a connected browser
+
+  Scenario: Stopping the sequence turns all lights off promptly
+    Parent requirement: REQ-047
+    Given a capture light sequence is running on a device
+    When the operator stops the sequence or the sweep completes naturally
+    Then all swept lights must return to off within two seconds
+    And the deterministic ordering must let the k-th dwell window map to light index k for later reconstruction
+
+Feature: Camera-based 3D reconstruction from multiple feeds (REQ-048)
+
+  Scenario: Two or more feeds triangulate per-light 3D coordinates
+    Parent requirement: REQ-048
+    Given two or more uploaded video files of the same capture sweep recorded from different angles
+    When the server-side OpenCV pipeline detects the single lit light per dwell window in each feed
+    Then it must associate each detection with its light index using the blink order from REQ-047
+    And it must triangulate matching detections across feeds into x y z coordinates per light
+    And the coordinate set must conform to REQ-005 with ids 0 to n minus 1 numeric meters and at most 1000 lights
+
+  Scenario: Fiducial markers improve but do not gate capture
+    Parent requirement: REQ-048
+    Given uploaded video feeds that may or may not contain a printed fiducial marker
+    When the reconstruction pipeline runs
+    Then present markers must be usable to improve camera pose cross-feed alignment and metric scale
+    And the absence of a marker must not block reconstruction
+
+  Scenario: Reconstruction needs no separate Python install
+    Parent requirement: REQ-048
+    Given docs/requirements.md defines REQ-048 REQ-045 and REQ-004
+    When requirement REQ-048 is read
+    Then the OpenCV computer-vision functionality must not require operators to install a separate Python runtime
+    And the no-separate-Python-install goal must be independent of REQ-045 which governs only user-authored Python routines
+    And the chosen mechanism must remain consistent with single-binary packaging and cross-platform builds with the mechanism deferred to docs architecture
+
+  Scenario: Undetected lights are reported not fabricated
+    Parent requirement: REQ-048
+    Given a capture sweep where some lights are not visible in enough feeds to triangulate
+    When the pipeline finishes processing
+    Then those lights must be reported as missing or low-confidence
+    And the system must not silently fabricate coordinates for them
+
+Feature: Create a model from uploaded video files (REQ-049)
+
+  Scenario: Model area offers create-from-video alongside CSV upload
+    Parent requirement: REQ-049
+    Given the model area that already supports CSV upload per REQ-006 and REQ-007
+    When the user opens the model creation screen
+    Then a create-from-video path must be offered and clearly distinguished from the CSV path
+    And it must accept two or more video files and submit them for reconstruction per REQ-048
+
+  Scenario: User reviews and confirms before the model is saved
+    Parent requirement: REQ-049
+    Given uploaded video files have been processed by the reconstruction pipeline
+    When the result is presented to the user
+    Then the review must show at least the detected light count and any missing or low-confidence lights
+    And the user must explicitly confirm to create the model or be able to cancel without creating one
+    And on confirmation the created model must satisfy REQ-005 and REQ-007 and behave like any other model
+
+  Scenario: Optional printable fiducial marker is available but not required
+    Parent requirement: REQ-049
+    Given the create-from-video screen
+    When the user chooses to obtain a fiducial marker
+    Then the screen must provide a printable marker artifact with brief placement guidance
+    And obtaining or printing a marker must be optional and must not be required to create a model
 ```
 
 ---

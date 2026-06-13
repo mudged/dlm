@@ -1974,3 +1974,131 @@ As an operator deploying on a Raspberry Pi, I want **README.md** to tell me how 
 
 ---
 
+## REQ-047 — Device-driven capture light sequence (start/stop from the Device screen)
+
+| Field | Value |
+|-------|-------|
+| **ID** | REQ-047 |
+| **Title** | Device-driven capture light sequence (start/stop from the Device screen) |
+| **Priority** | Must |
+| **Actor(s)** | End user; operator |
+
+**User story**
+
+As an operator, I want to **start** and **stop** a **capture light sequence** from the **Device** screen that turns **each** of the device's lights **on for about one second** in **sequential index order** (then off), so that I can **record the lights blinking one at a time** on camera and later build a model from that video (**REQ-048**, **REQ-049**).
+
+**Scope**
+
+- In scope: A **built-in capture sweep** controllable from the **Devices** area (**REQ-037**) for a **selected** device: **start** and **stop**. While running, the device's physical lights are driven so that **exactly one** light is **on at a time**, advancing in **ascending logical index order** (**0, 1, …, n − 1**), each lit for a **fixed dwell** of **approximately one second** then turned **off**, before the next index. The number of lights swept comes from the **device's own configured light count** (**the device need not be assigned to a model** — **REQ-036**). On **stop** or natural **completion**, all swept lights MUST return to **off**. The sweep runs **server-side** (consistent with **REQ-038** server-side execution) so progress does **not** depend on a browser tab; the Device screen is a **control / observability** surface.
+- Out of scope: **Recording** or **processing** the video (**REQ-048**); requiring an **assigned model** (**REQ-036**) to run the sweep; treating the sweep as a user-authored routine **kind** (**REQ-021**/**REQ-023**) — it is a **built-in calibration sweep**, not a scene routine; per-light colour during the sweep beyond simple on/off (architecture may pick a default on appearance).
+
+**Business rules**
+
+1. The **Device** screen MUST provide **start** and **stop** controls for the **capture sweep** of a **selected** device.
+2. The sweep MUST illuminate **exactly one** light at a time, advancing in **ascending logical index order** **0 … n − 1**, each **on** for a **fixed dwell** (**≈ 1 second**) then **off**, where **n** is the device's **configured light count**.
+3. The sweep MUST run **server-side** and continue **without** a connected browser, consistent with **REQ-038**; the screen reflects **status**.
+4. **Stopping** (and natural **completion**) MUST turn **all** swept lights **off** within the responsiveness bound of **REQ-040** (**within two seconds**).
+5. The **dwell** duration and **ordering** MUST be **deterministic** and **documented** so the recorded **blink order** maps **unambiguously** to **light index** for downstream reconstruction (**REQ-048**): the **k-th** dwell window corresponds to **light index k**.
+6. The device MUST expose a **configured light count** usable by the sweep **even when unassigned**; **`docs/architecture.md`** MUST ensure the device registry (**REQ-035**) carries that count (or a documented derivation).
+7. At most **one** capture sweep MAY be **active per device** at a time; interaction with other device automation MUST be **deterministic** (consistent with **REQ-038** concurrency semantics).
+
+**Responsive / UX notes** *(when UI is involved)*
+
+- Mobile: Start/stop controls and run status full-width and usable without hover-only steps (**REQ-002**).
+- Tablet / Desktop: Same controls; status (running / idle, current index if shown) clearly visible.
+
+**Dependencies**
+
+- REQ-002, REQ-035, REQ-037, REQ-038, REQ-040
+
+**Open questions**
+
+- Exact dwell tolerance and inter-light gap (architecture may tune for typical camera frame rates and shutter behavior).
+
+---
+
+## REQ-048 — Camera-based 3D model reconstruction from multiple video feeds (bundled OpenCV, no separate Python install)
+
+| Field | Value |
+|-------|-------|
+| **ID** | REQ-048 |
+| **Title** | Camera-based 3D model reconstruction from multiple video feeds (bundled OpenCV, no separate Python install) |
+| **Priority** | Must |
+| **Actor(s)** | End user; operator; maintainer |
+
+**User story**
+
+As a user, I want to **reconstruct** a model's **3D light coordinates** by recording the **capture sweep** (**REQ-047**) on camera from **two or more angles** and letting the application **detect each light's 2D position** per feed with **OpenCV** and **triangulate** them into **3D coordinates**, with **optional fiducial markers** to improve alignment and scale, so that I can build an accurate model **without measuring each light by hand**.
+
+**Scope**
+
+- In scope: A **server-side computer-vision pipeline** that ingests **two or more** video files of the **same** capture sweep recorded from **different camera angles**; **detects**, per feed, the on-screen **2D position** of the **single lit light** during each **≈ 1 s** dwell window (**REQ-047**), associating each detection with its **light index** via **blink order / timing**; and **triangulates** corresponding 2D detections across feeds into **3D positions** for each light. Output is a set of **per-light x, y, z** coordinates suitable for a model per **REQ-005** (**0-based sequential ids 0 … n − 1**, **SI meters**, **≤ 1000 lights**). **Optional** **fiducial markers** (**REQ-049**) present in the recordings MAY be detected to improve **camera pose** estimation, **cross-feed alignment**, and **metric scale**. The OpenCV-based processing MUST run as part of the application **without requiring a separate Python interpreter to be installed** on the host.
+- Out of scope: **Real-time / live** reconstruction from camera streams (uploads are processed **offline** — **REQ-049**); guaranteeing full 3D from a **single** feed (a single feed yields only **2D**; full **3D** requires **≥ 2** feeds per the chosen MVP); auto-calibration of arbitrary camera hardware beyond documented assumptions; per-light **manual** coordinate editing (**REQ-049** review is accept/reject).
+
+**Business rules**
+
+1. Reconstruction MUST accept **two or more** uploaded video files of **one** capture sweep from **different angles** and produce a **3D coordinate** per detected light.
+2. Each light's coordinate MUST be associated with the **correct light index** using the **deterministic** blink order / timing of **REQ-047** (the **k-th** dwell window → light index **k**).
+3. The resulting coordinate set MUST conform to **REQ-005** (ids **0 … n − 1** sequential, **x/y/z** numeric in **SI meters**, **≤ 1000** lights) so the output is a **valid model** consumable by **REQ-006**/**REQ-007**.
+4. **Fiducial markers**, when present, MUST be usable to improve **camera pose**, **cross-feed alignment**, and **metric scale**; their **absence** MUST NOT **block** reconstruction (markers **improve**, not **gate**, capture).
+5. The OpenCV computer-vision functionality MUST NOT require operators to **install a separate Python runtime**. This **no-separate-Python-install** goal is **independent** of **REQ-045** (which governs only **user-authored** Python **routines**). The **mechanism** (native bindings, embedded/bundled runtime, or other) is **deferred** to **`docs/architecture.md`**, and MUST stay consistent with **single-binary** packaging (**REQ-004**) and **cross-platform** builds (**REQ-043**).
+6. Processing MUST be **feasible** on the **Raspberry Pi 4** target (**REQ-003**) as an **offline / asynchronous** operation; long-running processing MUST report **progress** or **completion** to the initiating UI (**REQ-049**) **without** requiring the browser to remain open for processing to **finish** (server-side, **REQ-038** style). The **job model** is deferred to architecture.
+7. Lights **not** confidently detected in enough feeds to **triangulate** MUST be **reported** (e.g. missing / low-confidence) rather than **silently fabricated**; the user **review** step (**REQ-049**) surfaces this.
+
+**Responsive / UX notes** *(when UI is involved)*
+
+- Mobile / Tablet / Desktop: Progress and results, where surfaced, MUST remain usable per **REQ-002**; the headless processing core itself is **N/A** for UI.
+
+**Dependencies**
+
+- REQ-003, REQ-004, REQ-005, REQ-006, REQ-043, REQ-047, REQ-049
+
+**Open questions**
+
+- Minimum number of feeds **beyond two** for acceptable accuracy; whether **camera intrinsics** must be supplied or estimated; the **reconstruction accuracy target** (to be set in architecture / verification).
+
+---
+
+## REQ-049 — Model screen: create a model from uploaded video files; optional printable fiducial marker
+
+| Field | Value |
+|-------|-------|
+| **ID** | REQ-049 |
+| **Title** | Model screen: create a model from uploaded video files; optional printable fiducial marker |
+| **Priority** | Must |
+| **Actor(s)** | End user |
+
+**User story**
+
+As a user, on the **model creation** screen I want to **create a new model** by **uploading the video files** of a capture sweep (**REQ-047**), **review** the detected result, and then **save** it as a model — and **optionally** obtain a **printable fiducial marker** to place in shot to improve capture — so that I can build models **from video** alongside the existing **CSV upload** path (**REQ-006**).
+
+**Scope**
+
+- In scope: On the **model** area (**REQ-006**), a **new "create from video"** path that **accepts multiple uploaded video files**, triggers the **reconstruction pipeline** (**REQ-048**), shows the user a **review / preview** of the outcome (at least the **detected light count** and any **missing / low-confidence** lights, and optionally a **3D preview** per **REQ-010**) **before** the model is saved, and on **confirmation** creates a **new model** whose lights satisfy **REQ-005**/**REQ-007**. Optionally, the screen provides a **printable fiducial marker** (a **downloadable / printable** pattern with brief usage guidance) the user can print and place in the scene **before recording** to improve capture (**REQ-048**).
+- Out of scope: **Per-light** editing of detected coordinates in this requirement (review is **accept / reject** of the reconstructed result; per-light editing is a future extension); **in-app camera capture** (videos are recorded externally and **uploaded**).
+
+**Business rules**
+
+1. The **model** area (**REQ-006**) MUST offer **creating a model from uploaded video files** in addition to **CSV** upload (**REQ-006**/**REQ-007**), **clearly distinguished** from the CSV path.
+2. The flow MUST accept **two or more** video files and submit them for **reconstruction** (**REQ-048**).
+3. **Before saving**, the user MUST be shown a **review** of the reconstruction outcome (at least the **detected light count** and any **missing / low-confidence** lights) and MUST **explicitly confirm** to create the model; the user MUST be able to **cancel** without creating a model.
+4. On **confirmation**, the created model MUST satisfy **REQ-005** and **REQ-007** (ids **0 … n − 1**, numeric **x/y/z** in **SI meters**, **≤ 1000** lights) and then behave like any **other** model (**list / view / delete** per **REQ-006**; **visualization** per **REQ-010**).
+5. The screen MUST **optionally** provide a **printable fiducial marker** (downloadable / printable artifact) with **brief guidance** on placing it in shot; obtaining or printing a marker MUST be **optional** and MUST NOT be **required** to create a model (consistent with **REQ-048**: markers **improve**, not **gate**, capture).
+6. Long-running processing MUST give the user clear **progress / pending** feedback and a way to **see the result** when ready, consistent with **REQ-048** server-side processing (no requirement to keep the tab open for processing to **finish**, though the **result is reviewed** in-app before saving).
+
+**Responsive / UX notes** *(when UI is involved)*
+
+- Mobile: Stacked upload + review, full-width controls; printable marker accessible without hover-only steps (**REQ-002**).
+- Tablet: Upload / review split where space allows.
+- Desktop: Same information hierarchy; efficient review and confirm.
+
+**Dependencies**
+
+- REQ-002, REQ-005, REQ-006, REQ-007, REQ-010, REQ-047, REQ-048
+
+**Open questions**
+
+- Accepted video **container / codec** list (architecture); whether **multiple** marker sizes or types are offered.
+
+---
+

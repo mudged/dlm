@@ -1,4 +1,13 @@
 # Release: tag push (v*) builds embedded UI + cross-compiled binaries and uploads to GitHub Releases.
+#
+# Each Linux release asset is a tar.gz archive containing the dlm binary AND the
+# bundled CV runtime (mechanism B, see docs/advanced-setup.md §"CV runtime bundle"):
+#
+#   dlm_linux_arm64.tar.gz
+#     dlm_linux_arm64          — Go binary
+#     runtime/cv/              — self-contained Python+OpenCV bundle
+#
+# The Windows asset ships as a bare .exe (CV runtime bundle for Windows is pending).
 name: Release
 
 on:
@@ -33,6 +42,11 @@ jobs:
           npm ci
           npm run release:sync
 
+      - name: Build CV runtime bundles (linux/arm64 and linux/amd64)
+        run: |
+          GOOS=linux GOARCH=arm64 scripts/build-cvruntime.sh
+          GOOS=linux GOARCH=amd64 scripts/build-cvruntime.sh
+
       - name: Create dist directory
         run: mkdir -p dist
 
@@ -42,14 +56,35 @@ jobs:
           CGO_ENABLED: "0"
         run: |
           go build -trimpath -ldflags="-s -w" -o ../dist/dlm_linux_arm64 ./cmd/server
-          GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o ../dist/dlm_linux_amd64 ./cmd/server
+          GOOS=linux  GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o ../dist/dlm_linux_amd64 ./cmd/server
           GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o ../dist/dlm_windows_amd64.exe ./cmd/server
+
+      - name: Package release archives (binary + CV runtime bundle per Linux target)
+        run: |
+          # linux/arm64 — binary + runtime/cv/ sibling
+          STAGE="$(mktemp -d)"
+          cp dist/dlm_linux_arm64 "${STAGE}/dlm_linux_arm64"
+          mkdir -p "${STAGE}/runtime"
+          cp -r dist/cvruntime/linux_arm64 "${STAGE}/runtime/cv"
+          tar -czf dist/dlm_linux_arm64.tar.gz -C "${STAGE}" .
+          rm -rf "${STAGE}"
+
+          # linux/amd64 — binary + runtime/cv/ sibling
+          STAGE="$(mktemp -d)"
+          cp dist/dlm_linux_amd64 "${STAGE}/dlm_linux_amd64"
+          mkdir -p "${STAGE}/runtime"
+          cp -r dist/cvruntime/linux_amd64 "${STAGE}/runtime/cv"
+          tar -czf dist/dlm_linux_amd64.tar.gz -C "${STAGE}" .
+          rm -rf "${STAGE}"
+
+          # windows/amd64 — bare binary; CV runtime bundle support pending
+          cp dist/dlm_windows_amd64.exe dist/dlm_windows_amd64.exe
 
       - name: Upload GitHub Release assets
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/dlm_linux_arm64
-            dist/dlm_linux_amd64
+            dist/dlm_linux_arm64.tar.gz
+            dist/dlm_linux_amd64.tar.gz
             dist/dlm_windows_amd64.exe
           generate_release_notes: true

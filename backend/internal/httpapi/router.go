@@ -2,25 +2,46 @@ package httpapi
 
 import (
 	"context"
+	"io"
 	"io/fs"
 	"log/slog"
 	"net/http"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 
+	"example.com/dlm/backend/internal/capture"
 	"example.com/dlm/backend/internal/config"
 	"example.com/dlm/backend/internal/devices"
+	"example.com/dlm/backend/internal/reconstruct"
 	"example.com/dlm/backend/internal/routineengine"
 	"example.com/dlm/backend/internal/store"
 )
 
+// captureCtrl is the interface the HTTP layer uses to drive capture sweeps.
+type captureCtrl interface {
+	Start(ctx context.Context, deviceID string) (capture.Status, error)
+	Stop(deviceID string)
+	GetStatus(deviceID string) capture.Status
+}
+
+// reconstructCtrl is the interface the HTTP layer uses to manage reconstruction jobs.
+type reconstructCtrl interface {
+	Create(ctx context.Context, files []io.Reader, names []string, params reconstruct.CreateParams) (string, error)
+	Get(id string) (*reconstruct.Job, bool)
+	Confirm(ctx context.Context, jobID, name string) (store.Summary, error)
+	Discard(jobID string) error
+}
+
 // apiDeps holds API handlers' shared dependencies.
 type apiDeps struct {
-	store  *store.Store
-	rev    *RevisionHub
-	pusher devicePusher
-	engine *routineengine.Engine
+	store       *store.Store
+	rev         *RevisionHub
+	pusher      devicePusher
+	engine      *routineengine.Engine
+	capture     captureCtrl
+	reconstruct reconstructCtrl
 }
 
 // NewSiteHandler wires /health, /api/v1/, and optional static UI from content (Next export).
@@ -37,14 +58,37 @@ func NewSiteHandler(cfg *config.Config, content fs.FS, st *store.Store, rev *Rev
 		rev = NewRevisionHubWithLogger(log)
 	}
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /health", healthHandler)
-
-	api := http.NewServeMux()
 	deps := &apiDeps{store: st, rev: rev, pusher: pusher}
 	deps.engine = routineengine.New(st, cfg.HTTPListen, func(ctx context.Context, sceneID string, states []store.ScenePatchedState) {
 		deps.notifyAfterSceneLightPatch(ctx, sceneID, states)
 	}, log)
+	// When a real pusher is available, wire up a capture controller so the
+	// sweep endpoints have a live driver.  When pusher is nil (API-only
+	// construction, e.g. tests that pass nil) deps.capture stays nil and the
+	// start handler returns 503 — see capture.go comment.
+	if pusher != nil {
+		deps.capture = capture.New(st, pusher, st, nil)
+	}
+
+	// Wire the reconstruction manager. The work-dir base lives under DataDir so
+	// it survives across restarts alongside the database.
+	captureWorkDir := filepath.Join(cfg.DataDir, "runtime", "capture")
+	deps.reconstruct = reconstruct.New(reconstruct.RealRunner{}, st, captureWorkDir)
+
+	return buildSiteHandler(cfg, content, deps, log)
+}
+
+// buildSiteHandler wires all routes and middleware from a pre-built apiDeps.
+// It is also used by tests that need to inject a custom captureCtrl without a
+// real WLED pusher.
+func buildSiteHandler(cfg *config.Config, content fs.FS, deps *apiDeps, log *slog.Logger) http.Handler {
+	if log == nil {
+		log = slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{}))
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /health", healthHandler)
+
+	api := http.NewServeMux()
 	// Register every method on this path to the same handler so the
 	// internal POST check can return the §3.2 JSON envelope on 405,
 	// rather than falling through to the `GET /{path...}` 404 catch-all.
@@ -63,6 +107,9 @@ func NewSiteHandler(cfg *config.Config, content fs.FS, st *store.Store, rev *Rev
 	api.HandleFunc("DELETE /devices/{id}", deps.deleteDevice)
 	api.HandleFunc("POST /devices/{id}/assign", deps.postDeviceAssign)
 	api.HandleFunc("POST /devices/{id}/unassign", deps.postDeviceUnassign)
+	api.HandleFunc("POST /devices/{id}/capture/start", deps.postCaptureStart)
+	api.HandleFunc("POST /devices/{id}/capture/stop", deps.postCaptureStop)
+	api.HandleFunc("GET /devices/{id}/capture", deps.getCaptureStatus)
 	api.HandleFunc("GET /status", statusHandler)
 	api.HandleFunc("GET /routines", deps.listRoutines)
 	api.HandleFunc("POST /routines", deps.createRoutine)
@@ -71,6 +118,13 @@ func NewSiteHandler(cfg *config.Config, content fs.FS, st *store.Store, rev *Rev
 	api.HandleFunc("DELETE /routines/{id}", deps.deleteRoutine)
 	api.HandleFunc("GET /models", deps.listModels)
 	api.HandleFunc("POST /models", deps.createModel)
+	// Capture/reconstruction routes must be registered before /models/{id} so
+	// that "capture" is not mis-parsed as a model id (REQ-048, REQ-049).
+	api.HandleFunc("GET /capture/marker", deps.getCaptureMarker)
+	api.HandleFunc("POST /models/capture", deps.postModelsCapture)
+	api.HandleFunc("GET /models/capture/{jobId}", deps.getModelsCaptureJob)
+	api.HandleFunc("POST /models/capture/{jobId}/confirm", deps.postModelsCaptureConfirm)
+	api.HandleFunc("DELETE /models/capture/{jobId}", deps.deleteModelsCapture)
 	api.HandleFunc("DELETE /scenes/{id}/models/{modelId}", deps.deleteSceneModel)
 	api.HandleFunc("PATCH /scenes/{id}/models/{modelId}", deps.patchSceneModel)
 	api.HandleFunc("POST /scenes/{id}/models", deps.postSceneModel)

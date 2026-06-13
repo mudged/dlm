@@ -1,8 +1,10 @@
 # Architecture
 
-This document defines technical structure and deployment for the product described in `docs/requirements.md` (**REQ-001–REQ-046**).
+This document defines technical structure and deployment for the product described in `docs/requirements.md` (**REQ-001–REQ-049**).
 
 **REQ-034–REQ-042:** **REQ-034** (faint boundary cuboid + **`margin_m`**, **same** **line** **style** **as** **inter-light** **wire** **§4.7**) **is** **covered** **in** **§3.12–§3.13**, **§4.7**, **§4.9**. **REQ-035–REQ-039** add **WLED devices**, **1:1 assignment**, **Devices UI** (**§4.15**), **routine** **automation** **on** **the** **Go** **service** **(**`internal/routineengine`** **—** **§3.16–§3.17.2**)** **,** **in-memory light state** (**§3.3**, **§3.9**, **§3.21**), **and** **WLED push** (**§3.19–§3.20**). **REQ-040** (**routine** **stop** **≤** **2** **s**)** **is** **§3.17**/**§3.17.2**. **REQ-041** (**SSE**/**WebSocket-class** **push** **+** **delta** **apply** **for** **shipped** **three.js** **viewports**)** **is** **§3.18**, **§4.3**, **§4.7**, **§4.9**, **§4.13**, **§4.14**. **REQ-042** (**detect** **active** **routine** **per** **scene** **;** **resync** **run** **chrome** **+** **three.js** **after** **navigation** **return**)** **is** **§4.16**, **§4.9**/**§4.13**/**§4.14** **(mount** **effects**)** **,** **§3.2** **(**`GET …/routines/runs`**, **`POST …/start` **409** **details**)** **,** **§8.23**. **REQ-043–REQ-046** **(**multi-platform** **release** **binaries**, **GitHub** **Actions** **CI** **+** **release**, **deployment** **runtime** **prerequisites**, **README** **operator** **instructions**)** **are** **§3.4**, **§6.6–§6.12**.
+
+**REQ-047–REQ-049 (camera capture):** **REQ-047** adds a **built-in device capture light sequence** (**sequential** **one-light-on-≈ 1 s** **sweep**, **start**/**stop** from the **Devices** screen, **server-side**, **all-off** on **stop**/**completion** within the **REQ-040** **2 s** bound) — **§3.22**, **§4.15**, **§8.24**. **REQ-048** adds **camera-based 3D reconstruction** from **≥ 2** uploaded video feeds using a **bundled OpenCV runtime that needs no separate Python install** (**distinct** from **REQ-045** user routines), invoked as a **supervised child** by **`internal/reconstruct`** — **§3.23**, **§3.23.1**, **§6.9**, **§8.25**. **REQ-049** adds the **create-model-from-video** flow (**upload** → **async reconstruct job** → **review** detected lights → **confirm** to persist a **normal** model per **REQ-005**/**REQ-007**) plus an **optional printable fiducial marker** — **§3.23.2**, **§4.17**, **§8.25**.
 
 **REQ-001–REQ-033** **(summary):** **Go** **+** **embedded** **Next** **static** **export** **;** **models**/**scenes**/**routines** **in** **SQLite** **;** **per-light** **output** **state** **in** **`LightStateStore`** **(**not** **SQLite** **—** **REQ-039**)** **;** **three.js** **views** **§4.7**/**§4.9** **with** **server-push** **observer** **path** **per** **REQ-041** **;** **scene** **spatial** **API** **§3.15** **;** **routine** **automation** **(**Python** **+** **shape** **animation**)** **runs** **inside** **`internal/routineengine`** **:** **supervised** **`python3`** **with** **loopback** **HTTP** **to** **§3.15** **(**§3.17**)** **and** **Go** **`time.Ticker`** **shape** **simulation** **(**§3.17.2**)** **;** **runs** **progress** **headless** **without** **any** **browser** **(**REQ-038**)** **;** **Next.js** **MAY** **use** **Pyodide** **or** **similar** **only** **for** **REQ-022** **editor** **lint**/**format** **—** **not** **for** **applying** **routine** **effects** **;** **stop** **latency** **REQ-040** **§3.17**/**§3.17.2** **.
 
@@ -70,6 +72,9 @@ This meets REQ-004 rule 1 (**no separate Node.js runtime** in the distribution) 
 | REQ-044 | **§6.7**, **§6.8**, **§6.11**, **§7** **(**CI** **diagram**)** **:** **GitHub** **Actions** **CI** **(**build** **+** **lint/test**)** **on** **PRs** **;** **branch** **protection** **requires** **green** **checks** **before** **merge** **;** **release** **workflow** **tags** **and** **uploads** **assets** **to** **GitHub** **Releases**. |
 | REQ-045 | **§6.9**: **deployment** **host** **needs** **only** **the** **product** **binary** **for** **baseline** **(**API** **+** **embedded** **UI** **+** **SQLite** **+** **shape** **animation**)** **;** **`python3`** **on** **`PATH`** **(**≥** **documented** **minimum** **—** **implementor** **picks** **e.g.** **3.11+**)** **required** **only** **when** **running** **user** **Python** **scene** **routines** **(**§3.17**)** **. |
 | REQ-046 | **§6.10**, **§3.7**: **`README.md`** **(**operator** **audience**)** **—** **download** **from** **GitHub** **Releases**, **Pi** **(**linux/arm64**)** **artifact** **choice**, **`systemd`** **unit** **example**, **update** **(**replace** **binary**, **restart** **service**, **preserve** **`DLM_DATA_DIR`**/**DB**)** **;** **no** **`REQ-*`** **identifiers** **in** **README** **body** **;** **developer** **`./scripts/run.sh`** **remains** **secondary** **(**REQ-008**)** **per** **`docs/advanced-setup.md`** **cross-links** **as** **needed**. |
+| REQ-047 | **§3.22**, **§3.2** (**`/devices/{id}/capture/*`**), **§3.3** (**`devices.light_count`**), **§4.15**, **§8.24**: **`internal/capture`** **server-side** **sweep** **drives** **one** **WLED** **LED** **`on`** **for** **≈ 1 s** **in** **`idx`** **order** **`0 … n−1`** **using** **the** **device's** **configured** **`light_count`** **(**device** **need** **not** **be** **assigned** **—** **REQ-036**)** **;** **all-off** **on** **stop**/**completion** **within** **REQ-040's** **2 s** **bound** **;** **at** **most** **one** **active** **sweep** **per** **device** **;** **deterministic** **ordinal→index** **mapping** **for** **REQ-048**. |
+| REQ-048 | **§3.23** (**`internal/reconstruct`** **pipeline**)**, **§3.23.1** (**bundled** **OpenCV** **runtime**, **no** **separate** **Python** **install** **—** **distinct** **from** **REQ-045**)**, **§6.9**, **§8.25**: **≥ 2** **video** **feeds** **→** **per-feed** **2D** **blink** **detection** **keyed** **to** **the** **sweep** **ordinal** **(**REQ-047**)** **→** **multi-view** **triangulation** **→** **per-light** **`x,y,z`** **(**SI** **m**, **REQ-005**)** **;** **optional** **fiducial** **markers** **improve** **pose**/**scale**/**alignment** **(**absence** **does** **not** **gate**)** **;** **undetected** **lights** **reported**, **never** **fabricated** **;** **async** **server-side** **job** **(**Pi-feasible**, **REQ-003**)**, **no** **browser** **needed** **to** **finish**. |
+| REQ-049 | **§3.23.2**, **§3.2** (**`/models/capture*`**), **§4.17**, **§8.25**: **Models** **“create** **from** **video”** **path** **uploads** **≥ 2** **files**, **runs** **the** **REQ-048** **job**, **shows** **a** **review** **(**detected** **count** **+** **missing**/**low-confidence**)** **then** **on** **explicit** **confirm** **persists** **a** **normal** **model** **via** **REQ-005**/**REQ-007** **validation** **(**§3.3** **transaction**)** **;** **cancel** **discards** **;** **optional** **printable** **fiducial** **marker** **artifact** **(**not** **required** **to** **create**)**. |
 
 **Assumed Pi context:** Raspberry Pi 4 Model B, **64-bit OS**, **ARM64** userspace. **2–8 GB RAM** — with **no Node** at runtime, **4 GB** is practical for modest traffic; **off-device** `next export` builds recommended.
 
@@ -98,6 +103,9 @@ dlm/
       store/                  # persistence for models, scenes, routines (SQLite, REQ-006); not per-light output state (REQ-039)
       lightstate/             # in-memory authoritative per-light state + load/save hooks (REQ-039, REQ-011)
       devices/                # device registry, WLED client, discovery adapter (REQ-035–REQ-038)
+      capture/                # REQ-047: server-side device light-sweep controller (drives WLED by idx; independent of model assignment)
+      reconstruct/            # REQ-048/049: camera-capture job orchestration + supervised bundled OpenCV child; produces candidate light coordinates
+      cvruntime/              # REQ-048: embedded (and first-run-extracted) self-contained OpenCV+Python runtime — no operator Python install (§3.23.1)
       routineengine/          # REQ-021/038: supervised python3 + Go time.Ticker shape sim; internal §3.15/lightstate calls
       webdist/                # holds embedded payload (see §3.5); populated by build, not hand-edited
         placeholder.txt       # optional tiny file so empty embed works in dev before first UI build
@@ -126,6 +134,9 @@ dlm/
 - **`internal/httpapi`:** Middleware (**request ID**, **slog**, **recover**, optional **CORS**); **JSON** handlers and error envelope `{ "error": { "code", "message", "details"? } }`; **models**, **light-state** (**via** **`internal/lightstate`**), **scenes**, **scene-region** routes (**§3.15**), **devices** (**§3.20**), **routines**/**routine-runs** (**§3.16**) delegate to **`internal/store`**, **`internal/lightstate`**, **`internal/devices`**, **`internal/wiremodel`**, **and** **`internal/routineengine`** **for** **start**/**stop** **supervision** **. **Routine** **ticks** **run** **in** **`routineengine`** **;** **HTTP** **handlers** **for** **§3.15** **remain** **the** **single** **validation** **surface** **whether** **called** **from** **loopback** **or** **external** **clients** **(**REQ-038**/**REQ-039**)** **. **SSE** **`…/lights/events`** **emit** **REQ-041** **`deltas[]`**. **§3.18** (**REQ-029**, **REQ-041**).
 - **`internal/lightstate`:** **Authoritative** **in-memory** **per-model** **maps** **`light idx → { on, color, brightness_pct }`** (**REQ-039**, **§3.9**, **§3.21**); **all** **§3.9**/**§3.10**/**§3.11**/**§3.15** **writes** **mutate** **here** **first**, **then** **optional** **WLED** **push** **(**§3.20**)** **;** **emits** **SSE** **`data:`** **lines** **with** **monotonic** **`seq`** **and** **per-commit** **`deltas[]`** **(**only** **changed** **lights** **—** **REQ-041**, **§3.18**)** **on** **real** **change**.
 - **`internal/devices`:** **CRUD** **for** **`devices`** **table** **(**§3.20**)** **;** **WLED** **HTTP** **JSON** **API** **client** **;** **optional** **discovery** **adapter** **(**mDNS** **/** **subnet** **probe** **—** **not** **required** **for** **MVP**)** **;** **startup** **/** **post-assign** **sync** **with** **`LightStateStore`** **(**§3.21**)**.
+- **`internal/capture`:** **REQ-047** **capture-sweep** **controller** **(**§3.22**)** **:** **one** **`time.Ticker`-driven** **server-side** **sweep** **per** **device** **that** **drives** **the** **`internal/devices`** **WLED** **client** **to** **light** **exactly** **one** **LED** **(**`idx` **`0 … light_count−1`**)** **for** **a** **fixed** **≈ 1 s** **dwell** **then** **off** **;** **does** **not** **route** **through** **`LightStateStore`** **(**the** **device** **may** **be** **unassigned**)** **;** **start**/**stop** **status** **exposed** **via** **§3.2** **;** **stop**/**completion** **turns** **all** **swept** **LEDs** **off** **within** **REQ-040's** **2 s**.
+- **`internal/reconstruct`:** **REQ-048**/**REQ-049** **camera-capture** **orchestration** **(**§3.23**)** **:** **accepts** **uploaded** **video** **files** **into** **a** **work** **dir** **under** **`DLM_DATA_DIR`**, **runs** **an** **async** **job** **that** **invokes** **the** **bundled** **OpenCV** **child** **(**`internal/cvruntime`** **—** **§3.23.1**)** **,** **parses** **its** **JSON** **result** **(**per-light** **`x,y,z`** **+** **missing**/**low-confidence**)** **,** **holds** **the** **candidate** **set** **in** **memory** **for** **review**, **and** **on** **confirm** **hands** **a** **validated** **`[]wiremodel.Light`** **to** **`internal/store`** **for** **the** **normal** **create** **transaction** **(**§3.3**, **REQ-005**/**REQ-007**)**. **Never** **persists** **a** **model** **before** **explicit** **confirm** **(**REQ-049**)**.
+- **`internal/cvruntime`:** **REQ-048** **self-contained** **OpenCV** **+** **Python** **runtime** **bundle** **(**`//go:embed`** **compressed**, **extracted** **on** **first** **use** **to** **`DLM_DATA_DIR/runtime/cv/<version>/`**, **or** **shipped** **as** **a** **sibling** **asset** **in** **the** **release** **archive** **—** **§3.23.1**)** **+** **the** **frozen** **`reconstruct` **CV** **script** **;** **resolves**/**extracts** **the** **interpreter** **and** **exposes** **a** **`Run(ctx, args) (result, error)`** **child-process** **wrapper**. **No** **operator** **`python3`** **install** **required** **(**contrast** **§3.17**/**REQ-045**)**.
 - **`internal/routineengine`:** **One** **supervisor** **per** **active** **`routine_runs`** **row** **(**§3.16**)** **:** **`python3`** **child** **for** **`python_scene_script`** **(**§3.17**)** **;** **Go** **`time.Ticker`** **for** **`shape_animation`** **(**§3.17.2**)** **. **Mutates** **lights** **via** **internal** **calls** **equivalent** **to** **§3.15** **(**or** **loopback** **`127.0.0.1`** **—** **implementor** **choice**)** **so** **REQ-021**/**REQ-039** **semantics** **hold** **. **`cmd/server`** **starts** **the** **scheduler** **on** **process** **boot** **(**resume** **`running`** **rows** **or** **mark** **orphaned** **runs** **stopped** **—** **document** **chosen** **policy**)** **.
 - **`internal/wiremodel`:** Parses and validates uploaded **CSV** per **§3.6**; returns structured errors for HTTP **400** responses (**REQ-007**).
 - **`internal/store`:** **SQLite** repository (see **§3.3**, **§3.12**, **§3.16**); **persists** **models** **(geometry** **only** **for** **lights** **rows** **—** **§3.3**)** **,** **scenes**, **scene_models**, **routines**, **routine_runs**, **devices** **metadata** **;** **does** **not** **store** **per-light** **`on`/`color`/`brightness`** **(**REQ-039**)**. **Idempotent** **seed** **(**§3.8**, **§3.8.1**)** **and** **factory** **reset** **(**§3.14**)** **:** **factory** **reset** **MUST** **`DELETE`** **all** **`devices`** **rows** **(**REQ-017**/**REQ-035**)** **before** **re-seed**.
@@ -180,10 +191,18 @@ dlm/
 | API | `DELETE /api/v1/devices/{id}` | **Remove** **device** **;** **MUST** **clear** **`model_id`** **assignment** **in** **same** **transaction** **(**REQ-037**)** **then** **delete** **row** **(**§3.20**)**. |
 | API | `POST /api/v1/devices/{id}/assign` | **Body** **`{ "model_id" }`** **;** **REQ-036** **enforcement** **;** **post-commit** **§3.21** **sync** **(**§3.20**)**. |
 | API | `POST /api/v1/devices/{id}/unassign` | **Clears** **`model_id`** **;** **physical** **output** **policy** **§3.21**. |
+| API | `POST /api/v1/devices/{id}/capture/start` | **REQ-047:** **Start** the **capture light sequence** for the device (**§3.22**). **202**/**200** **`{ "device_id", "state":"running", "light_count", "current_index":0 }`**. **404** unknown device; **409** **`capture_conflict`** if a sweep is **already running** for this device **or** the device's **assigned** model is in an **active routine run** (**§3.22**); **422** **`capture_no_lights`** if **`light_count = 0`**. |
+| API | `POST /api/v1/devices/{id}/capture/stop` | **REQ-047:** **Stop** the running sweep; **all** swept LEDs **off** within **REQ-040's** **2 s**. **200** **`{ "device_id", "state":"idle" }`** / **204**. **404** unknown device. |
+| API | `GET /api/v1/devices/{id}/capture` | **REQ-047:** Sweep **status** **`{ "state":"idle"|"running", "light_count", "current_index"? }`** (poll while recording). **404** unknown device. |
+| API | `POST /api/v1/models/capture` | **REQ-048**/**REQ-049:** Create a **reconstruction job** from **`multipart/form-data`** with **two or more** **`files`** (video) + optional **`marker`** (fiducial dictionary/board id) and optional **scale hints**. **202** **`{ "job_id", "status":"pending" }`**. **400** if **< 2** files or unsupported container (**§3.23**). |
+| API | `GET /api/v1/models/capture/{jobId}` | **REQ-048**/**REQ-049:** Job **progress**/**result**: **`{ "status":"pending"|"running"|"succeeded"|"failed", "progress":0..1, "result"?: { "light_count", "lights":[{"id","x","y","z"}], "missing":[<id>], "low_confidence":[<id>] }, "error"? }`** (**§3.23**). **404** unknown job. |
+| API | `POST /api/v1/models/capture/{jobId}/confirm` | **REQ-049:** Persist the reviewed result as a **new model**. Body **`{ "name" }`** (required, trimmed). Server **re-validates** the candidate lights with the **same** **REQ-005**/**REQ-007** rules and creates the model **transactionally** (**§3.3**). **201** model summary; **400** invalid name / validation failure; **404** unknown or non-`succeeded` job; **409** duplicate **`name`** (**§3.3**). |
+| API | `DELETE /api/v1/models/capture/{jobId}` | **REQ-049:** **Cancel**/**discard** the job and delete its uploaded work files. **204** / **404**. |
+| API | `GET /api/v1/capture/marker` | **REQ-049:** Return an **optional printable fiducial marker** artifact (**PDF** or **PNG**) with brief placement guidance; query selects **`type`**/**`size`** where offered (**§3.23.2**). **Optional**: never required to create a model. |
 | API | `/api/v1/*` | Other versioned **JSON** endpoints as the product grows. |
 | Static | `/`, `/*.html`, **`/_next/**`**, other export assets | **Next static export** tree from embed; **SPA / HTML5** fallback policy: serve **`index.html`** for unmatched **non-API** GET if needed (implementor defines exact fallback rules). |
 
-**Ordering:** Register **API** routes **before** static/`NotFound` handling so `/api/v1` is never swallowed by UI fallback. Register **literal** **path** **segments** **`routines`**, **`start`**, **`stop`**, **`factory-reset`**, **`reset`**, **`state`**, **`events`**, **`batch`**, **`system`**, **`devices`**, **`discover`**, **`assign`**, **`unassign`** **before** **any** **`{id}`** **pattern** **that** **could** **swallow** **them** (**`lights/events`** **before** **`lights/{lightId}`**; **`POST …/devices/discover`** **before** **`GET …/devices/{id}`**). Register **`PATCH /api/v1/routines/{id}`** **so** **`routines`** **is** **not** **matched** **as** **an** **id** **elsewhere**.
+**Ordering:** Register **API** routes **before** static/`NotFound` handling so `/api/v1` is never swallowed by UI fallback. Register **literal** **path** **segments** **`routines`**, **`start`**, **`stop`**, **`factory-reset`**, **`reset`**, **`state`**, **`events`**, **`batch`**, **`system`**, **`devices`**, **`discover`**, **`assign`**, **`unassign`** **before** **any** **`{id}`** **pattern** **that** **could** **swallow** **them** (**`lights/events`** **before** **`lights/{lightId}`**; **`POST …/devices/discover`** **before** **`GET …/devices/{id}`**). Register **`PATCH /api/v1/routines/{id}`** **so** **`routines`** **is** **not** **matched** **as** **an** **id** **elsewhere**. Register literal **`capture`**, **`start`**, **`stop`**, **`confirm`**, **`marker`** segments so **`/devices/{id}/capture/*`** and **`/models/capture`**, **`/models/capture/{jobId}/confirm`** are **not** swallowed by the **`/models/{id}`** or **`/devices/{id}`** patterns (**`/models/capture`** **before** **`/models/{id}`**; **`/capture/marker`** **before** any **`/capture/{jobId}`**).
 
 ### 3.3 Persistence (**REQ-006**)
 
@@ -192,7 +211,7 @@ dlm/
 - **Schema (logical):**
   - **`models`:** `id` (TEXT UUID primary key), `name` (TEXT **NOT NULL**, **UNIQUE**), `created_at` (TEXT **RFC3339 UTC**).
   - **`lights`:** `model_id` (TEXT FK → `models.id`), `idx` (INTEGER light index), `x`, `y`, `z` (REAL) **only** — **no** **`on`**, **`color`**, or **`brightness_pct`** **columns** **(**REQ-039**)**. **Per-light** **output** **state** **lives** **only** **in** **`LightStateStore`** **(**§3.21**)** **for** **the** **running** **process**.
-  - **`devices`:** `id` (TEXT UUID PK), `type` (TEXT **NOT NULL**, **first** **value** **`wled`**), `name` (TEXT **NOT NULL**), `base_url` (TEXT **NOT NULL** — **e.g.** **`http://192.168.1.50`**), optional **`bearer`**/**`password`** **storage** **per** **§3.20**, `model_id` (TEXT **NULL** **UNIQUE** FK → **`models.id`** **ON DELETE SET NULL** **or** **RESTRICT** **—** **implementor** **documents** **unassign** **semantics** **(**REQ-036**)**), `created_at` (TEXT **RFC3339**). **At** **most** **one** **non-null** **`model_id`** **across** **rows** **for** **a** **given** **model** **(**UNIQUE** **on** **`model_id`** **where** **not** **null**)**.
+  - **`devices`:** `id` (TEXT UUID PK), `type` (TEXT **NOT NULL**, **first** **value** **`wled`**), `name` (TEXT **NOT NULL**), `base_url` (TEXT **NOT NULL** — **e.g.** **`http://192.168.1.50`**), optional **`bearer`**/**`password`** **storage** **per** **§3.20**, **`light_count`** (**INTEGER** **NOT NULL** **DEFAULT** **0** — **REQ-047**: **number** **of** **addressable** **lights** **the** **device** **drives**, **used** **as** **the** **sweep** **length** **even** **when** **unassigned** **;** **`0 ≤ light_count ≤ 1000`** **consistent** **with** **REQ-005** **;** **idempotent** **`ALTER TABLE devices ADD COLUMN light_count INTEGER NOT NULL DEFAULT 0`** **on** **startup** **if** **missing**)**, `model_id` (TEXT **NULL** **UNIQUE** FK → **`models.id`** **ON DELETE SET NULL** **or** **RESTRICT** **—** **implementor** **documents** **unassign** **semantics** **(**REQ-036**)**), `created_at` (TEXT **RFC3339**). **At** **most** **one** **non-null** **`model_id`** **across** **rows** **for** **a** **given** **model** **(**UNIQUE** **on** **`model_id`** **where** **not** **null**)**. **`light_count`** **is** **exposed** **in** **`GET`**/**`POST`**/**`PATCH /api/v1/devices…`** **and** **editable** **in** **§4.15**.
   - **`scenes`:** **`id`** **TEXT** **PRIMARY** **KEY**, **`name`** **TEXT** **NOT** **NULL** **UNIQUE**, **`created_at`** **TEXT** **NOT** **NULL** **(RFC3339)**, **`margin_m`** **REAL** **NOT** **NULL** **DEFAULT** **0.3** **(**REQ-015** **BR** **12** **/** **REQ-034** **rule** **3** — **SI** **metres**, **symmetric** **padding** **applied** **on** **all** **six** **faces** **of** **the** **scene-space** **light** **AABB** **when** **drawing** **the** **faint** **boundary** **cuboid**)**. **Idempotent** **migration:** **`ALTER TABLE scenes ADD COLUMN margin_m REAL NOT NULL DEFAULT 0.3`** **on** **startup** **if** **the** **column** **is** **missing**, **so** **legacy** **rows** **inherit** **the** **same** **`0.3`** **default** **(REQ-015 BR 12** **migration** **fallback)**.
 - **Transactions:** **`POST /api/v1/models`** MUST parse+validate CSV, then insert **`models`** + **geometry** **`lights`** **rows** **in** **one** **transaction**; **on** **commit**, **`LightStateStore`** **MUST** **allocate** **default** **triples** **for** **every** **`idx`** **(**REQ-014**/**REQ-039**)** **in** **memory** **(**all** **off**, **`#ffffff`**, **`brightness_pct=100`**)**. **Rollback** **on** **failure** **clears** **any** **in-memory** **entries** **created** **for** **that** **attempt** **(**REQ-007**)**.
 - **Migration** **from** **legacy** **schemas** **that** **stored** **`on`/`color`/`brightness_pct`** **on** **`lights`:** **One-time** **migration** **drops** **those** **columns** **(**or** **ignores** **them**)** **and** **initializes** **`LightStateStore`** **at** **process** **start** **from** **defaults** **+** **§3.21** **sync** **rules** **(**do** **not** **reload** **dropped** **values** **as** **authoritative** **—** **REQ-039**)**.
@@ -872,6 +891,61 @@ flowchart LR
 
 ---
 
+### 3.22 Device capture light sequence (**REQ-047**)
+
+**Purpose:** A **built-in** server-side **capture sweep** that turns **one** light **on** at a time, in **ascending** **`idx`** order, each for **≈ 1 s**, so an operator can **record** the lights blinking individually and later reconstruct a model from the video (**§3.23**, **REQ-048**/**REQ-049**). This is **not** a scene **routine** (**REQ-021**/**REQ-023**) and does **not** use `python3` or the shape ticker; it is a distinct controller in **`internal/capture`**.
+
+**Independence from models (REQ-047):** The sweep operates on a **device** and uses **`devices.light_count`** (**§3.3**) as **`n`**. The device **need not be assigned** to any model (**REQ-036**), so the sweep **bypasses** **`LightStateStore`** (which is **per-model** — §3.21) and drives the **`internal/devices`** WLED client **directly** by LED index. No durable per-light state is written (**REQ-039** unaffected).
+
+**Controller behaviour:**
+
+1. **Start** (**`POST …/capture/start`**): allocate a **single** active sweep for the device. Reject **409 `capture_conflict`** if a sweep is already running for that device **or** the device is **assigned** to a model that currently has a **`status=running`** routine run (**§3.16**) — the sweep and a routine must not fight over the same strip. Reject **422 `capture_no_lights`** when **`light_count = 0`**.
+2. **Loop:** a Go **`time.Ticker`** (period = **dwell**, default **≈ 1000 ms** — implementor-tunable per **REQ-047** open question) advances **`current_index`** **`0 → n−1`**. Each tick sets the WLED so that **only** light **`current_index`** is **on** (a documented default on appearance, e.g. white at full brightness) and **all others off** — a single per-tick device write (one frame), not `n` writes.
+3. **Completion:** after the dwell for **`n−1`**, write **all off** and transition to **`idle`**.
+4. **Stop** (**`POST …/capture/stop`**): cancel the ticker **before** the next tick and write **all off**; from an accepted stop, **no** further sweep-originated device writes and the strip is dark within **≤ 2 s** (**REQ-040** bound reused).
+5. **Status** (**`GET …/capture`**): **`state`** plus **`light_count`** and **`current_index`** while running, for the Device screen to poll during recording.
+
+**Determinism for reconstruction (REQ-047 BR 5):** The **k-th** dwell window corresponds **exactly** to light index **k**. Because the order is fixed and one light is lit at a time, **§3.23** can assign each detected blink to an index by its **ordinal** in the recording without clock sync between camera and server. An **optional sync cue** (e.g. an all-on frame bookending the sweep, or a documented start gesture) MAY be added later to make trimming the recording easier; it is **not** required for MVP.
+
+**Headless (REQ-038 alignment):** The sweep runs in the Go process and continues regardless of any open browser; the Device screen is a control/observability surface only.
+
+### 3.23 Camera capture reconstruction engine (**REQ-048**, **REQ-049**)
+
+**Goal:** Turn **≥ 2** uploaded videos of one capture sweep (**§3.22**), recorded from **different angles**, into a set of per-light **`x, y, z`** coordinates in **SI metres** suitable for a model (**REQ-005**). Orchestration is Go (**`internal/reconstruct`**); the computer-vision work runs in a **bundled OpenCV runtime** with **no operator Python install** (**§3.23.1**).
+
+**Job model (async, Pi-feasible — REQ-003, REQ-048 BR 6):**
+
+1. **`POST /api/v1/models/capture`** accepts **`multipart/form-data`** with **two or more** **`files`** (video), optional **`marker`** (fiducial dictionary/board identifier) and optional **scale hints** (e.g. known marker edge length in metres). Handler streams uploads to a **work directory** under **`DLM_DATA_DIR`** (e.g. `runtime/capture/<job_id>/`), enforces an upload **size limit** and an **allowed container list** (**§9** notes), and returns **`202 { job_id, status:"pending" }`**.
+2. A bounded **worker** (one job at a time on a Pi by default; implementor MAY add a small queue) runs the pipeline below, updating **`progress`** as feeds are processed. State is held **in memory** keyed by **`job_id`**; no `capture_jobs` SQLite table is required because nothing is persisted until **confirm**. A job lost to a process restart is acceptable (operator re-uploads); the work dir is cleaned on terminal states and on startup sweep of stale dirs.
+3. **`GET /api/v1/models/capture/{jobId}`** returns **`status`**, **`progress`**, and on **`succeeded`** the **`result`** (candidate **`lights`** + **`missing`**/**`low_confidence`** id lists).
+4. **`POST …/{jobId}/confirm`** with **`{ name }`** re-validates the candidate lights against **REQ-005**/**REQ-007** (ids **`0 … n−1`**, finite numeric coordinates, **`≤ 1000`**) and persists a **normal** model in the **same transaction** as **§3.3** (then `LightStateStore` allocates REQ-014 defaults). **`DELETE …/{jobId}`** discards and removes the work dir.
+
+**Pipeline (inside the CV child — §3.23.1):**
+
+- **Per-feed 2D blink detection:** For each video, detect the **single bright blob** that appears during each dwell and record its 2D image coordinate and the **ordinal** of the blink. Because **§3.22** lights one index at a time, the sequence of detected blinks yields an **ordered** list mapping **ordinal → light index** (**REQ-047** / **REQ-048** BR 2). Frames are **downscaled** as needed for Pi performance.
+- **Camera pose / calibration:** Estimate each camera's pose. When **fiducial markers** (**§3.23.2**) are visible, use them (e.g. ArUco/ChArUco detection) to recover **pose**, improve **cross-feed alignment**, and fix **metric scale** from the known marker size (**REQ-048** BR 4). Markers are **optional**: without them the pipeline still attempts reconstruction (e.g. relative pose up to scale), and scale falls back to a documented default or a user-supplied hint.
+- **Triangulation:** For each light index present in **≥ 2** feeds, **triangulate** the corresponding 2D detections into a 3D point; optionally refine with a small bundle adjustment. Output coordinates in **metres**.
+- **Reporting (REQ-048 BR 7):** Indices **not** seen in enough feeds to triangulate are returned in **`missing`**; weakly-supported points in **`low_confidence`**. The pipeline **never fabricates** coordinates for undetected lights; the review step (**§4.17**) surfaces these so the user can re-record before confirming.
+
+**Result contract (Go ↔ CV child):** The child reads a small **JSON job spec** (input file paths, marker config, hints) and writes a **JSON result** (`{ "light_count", "lights":[{"id","x","y","z"}], "missing":[…], "low_confidence":[…] }`) to stdout or a result file; `internal/reconstruct` parses it. Failures surface as **`status:"failed"`** with a human-readable **`error`**.
+
+#### 3.23.1 Bundled OpenCV runtime — no separate Python install (**REQ-048** BR 5)
+
+**Decision:** The CV pipeline runs in a **self-contained runtime bundle** that ships **with** the product, so operators do **not** install Python or OpenCV. This is **independent of REQ-045**, which governs only **user-authored** Python **scene routines** (those still use the operator's system `python3` — **§3.17**). The two Python surfaces are deliberately separate: **user routines** = operator-provided interpreter (REQ-045); **capture CV** = bundled interpreter the product controls (REQ-048).
+
+- **Bundle contents:** a frozen runtime built from **`opencv-python-headless`** (no GUI/X deps — important on a headless Pi) plus a small `reconstruct` driver script, produced with **PyInstaller**/**Nuitka** (single-folder) or a **`python-build-standalone`** interpreter + pinned wheels. The bundle is **platform-specific** and built **per release target** (**REQ-043**: `linux/arm64`, `linux/amd64`, `windows/amd64`); `aarch64` OpenCV wheels exist for the Pi.
+- **Packaging vs REQ-004 (single executable):** Default is **`//go:embed`** of the **compressed** platform-matched bundle into **`internal/cvruntime`**, **extracted on first use** to **`DLM_DATA_DIR/runtime/cv/<version>/`** (checksum-gated; re-extract on version change). This keeps the **single-file** deliverable at the cost of a larger binary and first-run extraction. **Alternative** (when binary size matters): ship the bundle as a **sibling directory inside the same release archive** and resolve it relative to the executable. Implementor picks one and documents it in `docs/advanced-setup.md`; **either way the operator installs no Python** (**REQ-048** BR 5).
+- **Invocation:** `internal/cvruntime` exposes `Run(ctx, jobSpec)`; it launches the bundled interpreter as a **supervised child** (timeout, cancellation on `ctx`, captured stderr) — the same supervision discipline as **§3.17** but with a **product-shipped** interpreter rather than `PATH` `python3`.
+- **Rejected alternative — `gocv` (cgo bindings):** Reintroduces **cgo** (conflicts with the pure-Go cross-compile posture of **§3.4**) and still requires native OpenCV shared libraries present on the host at runtime — i.e. an operator install — which violates **REQ-048** BR 5. Not used.
+
+#### 3.23.2 Printable fiducial marker (**REQ-049** BR 5)
+
+- **`GET /api/v1/capture/marker`** returns a **printable** marker artifact (**PDF** preferred for print fidelity, or **PNG**) with brief on-page guidance (place flat and fully visible in all feeds; keep it stationary during the sweep). Query params MAY select **`type`** (e.g. ArUco single marker vs ChArUco board) and **`size`**; a sensible default is served when omitted.
+- **Generation:** Markers MAY be **static embedded assets** (simplest) or generated on demand by the CV bundle's marker module so the **dictionary/size** matches what **§3.23** detects. The marker's printed **edge length** is documented so it can supply **metric scale** to reconstruction.
+- **Optional, never gating:** Obtaining or printing a marker is **optional**; reconstruction proceeds without it (**REQ-048** BR 4 / **REQ-049** BR 5).
+
+---
+
 ## 4. Next.js + Tailwind (build-time / authoring)
 
 ### 4.1 Stack
@@ -1171,6 +1245,8 @@ flowchart TB
 - **Manual-first** **(**REQ-035** **BR** **5**)** **:** **“Add** **device”** **MUST** **work** **without** **discovery** **;** **do** **not** **gate** **MVP** **on** **`POST …/discover`**. **Discovery** **button** **MAY** **call** **`POST /api/v1/devices/discover`** **when** **the** **backend** **implements** **it** **;** **until** **then** **,** **hide** **the** **button** **or** **show** **disabled** **state** **with** **copy** **that** **manual** **entry** **is** **supported**.
 - **Model** **detail** **(**REQ-036** **BR** **5**)** **:** **SHOULD** **show** **linked** **device** **name**/**id** **(**read-only** **or** **link** **to** **`/devices/[id]`**)** **;** **MAY** **duplicate** **assign**/**unassign** **if** **the** **same** **API** **is** **used**.
 - **Nav** **:** **“Devices”** **in** **`AppShell`** **aside** **with** **Font** **Awesome** **icon** **(**REQ-018**)** **,** **peer** **to** **Models**/**Scenes**/**Routines** **.**
+- **Light count (REQ-047):** The **add**/**edit** device form includes an integer **`light_count`** field (**`0 … 1000`**, **§3.3**) — the number of lights the device drives — so the capture sweep knows its length even when the device is unassigned.
+- **Capture sweep controls (REQ-047):** Device **detail** (**`/devices/[id]`**) exposes **Start capture** / **Stop capture** buttons (visible Font Awesome icon + label, **no** hover-only path — **REQ-002**) calling **`POST …/capture/start`** / **`POST …/capture/stop`**, and **polls** **`GET …/capture`** to show **`running`** + **`current_index`** progress. **Start** is **disabled** with explanatory copy when **`light_count = 0`** or a **`capture_conflict`** is returned (sweep already running, or the assigned model has an active routine run — **§3.22**). Copy reminds the operator to begin recording from each camera angle before/while the sweep runs (feeds are uploaded later in **§4.17**).
 
 ### 4.16 Routine run visibility and visualization resync on return (**REQ-042**)
 
@@ -1178,6 +1254,15 @@ flowchart TB
 - **Visualization alignment:** **`GET /api/v1/scenes/{id}`** **loads** **initial** **positions** **+** **authoritative** **per-light** **triples** **(**REQ-039**)** **;** **`EventSource`** **`GET …/scenes/{id}/lights/events`** **(**§3.18**, **REQ-041**)** **merges** **`deltas[]`** **into** **`SceneLightsCanvas`** **props** **via** **`web/lib/useSceneLightsSSE.ts`**. **Production** **(**embedded** **UI** **+** **Go** **same** **origin**)** **uses** **relative** **SSE** **URLs** **;** **`next dev`** **(**`:3000`** **+** **rewrite** **to** **Go** **)** **MUST** **bypass** **the** **rewrite** **for** **SSE** **(**rewrites** **buffer** **`text/event-stream`** **)** **—** **`web/lib/sseUrl.ts`** **defaults** **`http://127.0.0.1:8080`** **in** **development** **and** **requires** **`CORS_ALLOWED_ORIGINS`** **on** **the** **Go** **process** **for** **the** **dev** **page** **origin**.
 - **Navigate away and back:** **On** **mount** **(**or** **when** **`sceneId`** **/ **target** **scene** **selection** **changes**)** **,** **re-fetch** **`GET …/scenes/{id}`** **and** **`GET …/routines/runs`** **(**order** **MAY** **be** **parallel** **)** **;** **open** **a** **fresh** **`EventSource`** **(**effect** **cleanup** **closes** **the** **previous** **subscription**)** **. **That** **restores** **both** **run** **awareness** **and** **light** **colours** **if** **automation** **continued** **headless** **(**REQ-038**)** **. **While** **a** **run** **is** **active** **and** **SSE** **is** **unhealthy**, **a** **slow** **timer** **MAY** **poll** **`GET …/scenes/{id}`** **(**REQ-041** **degradation** **notes**)** **—** **see** **§8.23**.
 - **Start when already running:** **`POST …/start`** **returns** **409** **`scene_routine_conflict`** **with** **`error.details.run_id`** **and** **`routine_id`** **(**§3.2**)** **. **The** **client** **MUST** **reconcile** **(**e.g.** **throw** **`SceneRoutineConflictError`** **in** **`web/lib/routines.ts`**, **set** **`activeRun`** **/** **refresh** **`routineRuns`**, **clear** **error** **when** **the** **requested** **routine** **already** **owns** **the** **run**)** **so** **the** **user** **can** **`POST …/stop`** **without** **stuck** **UI** **(**REQ-042** **BR** **4**)** **.**
+
+### 4.17 Models “create from video” flow (**REQ-049**, **REQ-048**, **REQ-002**, **REQ-010**)
+
+- **Entry:** On **`/models/new`** (or a sibling **`/models/new/video`**), present **two** clearly-distinguished creation paths: **CSV upload** (existing **REQ-006**/**REQ-007**, **§4.6**) and **Create from video** (**REQ-049**). The video path is a **multi-file** uploader requiring **≥ 2** videos (client hint; server enforces — **§3.23**), with optional inputs for a **fiducial marker** selection and **scale hint**.
+- **Marker (optional):** A **“Download printable marker”** action links to **`GET /api/v1/capture/marker`** (**§3.23.2**) with brief guidance; it is **optional** and never blocks submission (**REQ-049** BR 5).
+- **Submit + progress:** Submitting calls **`POST /api/v1/models/capture`** (**`multipart`**) → **`job_id`**; the page **polls** **`GET /api/v1/models/capture/{jobId}`** showing **`progress`** and a **pending** state. Processing is **server-side** (**§3.23**), so navigating away/closing the tab does **not** abort it; returning to the job (e.g. via a job link) resumes the review (**REQ-049** BR 6).
+- **Review before save (REQ-049 BR 3):** On **`succeeded`**, show the **detected light count** and any **`missing`**/**`low_confidence`** ids, plus (optionally) a **read-only three.js preview** reusing **`ModelLightsCanvas`** (**§4.7**, **REQ-010**) on the candidate coordinates. The user must **explicitly Confirm** (with a **name** field) to create, or **Cancel** to discard.
+- **Confirm/cancel:** **Confirm** → **`POST …/{jobId}/confirm`** with **`{ name }`**; on **201** route to the new **`/models/[id]`**. Surface **400** validation (REQ-005/REQ-007) and **409** duplicate-name messages inline (**§3.6**). **Cancel** → **`DELETE …/{jobId}`**.
+- **Responsive (REQ-002):** Mobile stacks uploader → progress → review with full-width controls and a non-hover-only Confirm; tablet/desktop MAY split upload and review side-by-side.
 
 ---
 
@@ -1253,6 +1338,7 @@ flowchart TB
 - **Always:** **No** **Node.js**, **no** **npm**, **no** **Go** **toolchain** **on** **the** **Pi** **/** **production** **host** **for** **running** **the** **shipped** **product** **—** **only** **the** **downloaded** **executable** **(**plus** **OS** **facilities** **like** **`systemd`** **)** **.
 - **`python3`:** Required on the server only when the operator runs user-authored Python scene routines (**§3.17**). The routine engine resolves the interpreter via **`PATH`**, overridden by **`DLM_PYTHON3`** when set (**existing** **`internal/routineengine`** **convention**). **Minimum** **CPython** **version** **(**e.g.** **3.11+**)** **must** **be** **stated** **in** **`README`** **(**operator** **)** **and** **this** **section** **after** **implementor** **verification** **.
 - **Shape** **animation** **only** **(**no** **Python** **routines** **started**)** **:** **May** **run** **without** **`python3`** **installed** **(**lazy** **failure** **with** **clear** **error** **when** **starting** **a** **Python** **routine** **—** **REQ-045** **open** **question** **resolved** **here**)** **.
+- **Camera capture / OpenCV (REQ-048):** Requires **no** separate Python install. The CV pipeline runs from a **product-shipped, self-contained OpenCV runtime** (**§3.23.1**) that is embedded in (and extracted by) the binary or shipped alongside it in the release archive. This is **distinct** from the user-routine `python3` above: an operator who never authors Python routines but **does** use camera capture still needs **no** system Python. README/`docs/advanced-setup.md` MUST state the CV runtime is bundled and note its on-disk footprint (extraction under `DLM_DATA_DIR/runtime/cv/`).
 
 ### 6.10 README operator documentation (REQ-046)
 
@@ -2050,6 +2136,104 @@ sequenceDiagram
 
 **Boundary:** **No** **reliance** **on** **stale** **React** **state** **from** **the** **previous** **visit** **;** **first** **paint** **after** **navigation** **uses** **fresh** **`GET …/scenes/{id}`** **and** **`GET …/routines/runs`** **(**§4.16**)** **.
 
+### 8.24 Device capture light sequence start/stop (**REQ-047**, **§3.22**)
+
+```mermaid
+sequenceDiagram
+  actor User as Operator
+  participant Page as Next.js device detail
+  participant P as Reverse proxy (optional)
+  participant G as Go binary
+  participant CAP as internal/capture sweep
+  participant W as WLED device
+
+  Note over User: Cameras recording from ≥ 2 angles before start (uploaded later §8.25)
+
+  User->>Page: Start capture
+  Page->>P: POST /api/v1/devices/{id}/capture/start
+  P->>G: POST
+  alt light_count = 0
+    G-->>Page: 422 capture_no_lights
+  else assigned model has running routine or sweep already active
+    G-->>Page: 409 capture_conflict
+  else ok
+    G->>CAP: begin sweep (n = devices.light_count)
+    G-->>Page: 200 { state: running, light_count: n, current_index: 0 }
+    loop k = 0 … n-1, dwell ≈ 1 s
+      CAP->>W: set only LED k on, others off (one frame)
+      CAP->>CAP: time.Ticker advance current_index
+    end
+    CAP->>W: all off (completion)
+  end
+
+  Page->>P: GET /api/v1/devices/{id}/capture (poll)
+  P->>G: GET
+  G-->>Page: { state, current_index }
+
+  User->>Page: Stop capture
+  Page->>P: POST /api/v1/devices/{id}/capture/stop
+  P->>G: POST
+  G->>CAP: cancel ticker (REQ-040 ≤ 2 s)
+  CAP->>W: all off
+  G-->>Page: 200 { state: idle }
+```
+
+**Boundary:** The sweep drives the **device directly by index** and never touches `LightStateStore` (device may be unassigned — **§3.22**); the browser only **starts/stops/observes** (server-side per **REQ-038**).
+
+### 8.25 Create a model from uploaded videos: reconstruct, review, confirm (**REQ-048**, **REQ-049**, **§3.23**)
+
+```mermaid
+sequenceDiagram
+  actor User as User
+  participant Page as Next.js /models/new (video)
+  participant P as Reverse proxy (optional)
+  participant G as Go binary
+  participant RC as internal/reconstruct worker
+  participant CV as bundled OpenCV child §3.23.1
+  participant S as SQLite store
+  participant L as LightStateStore
+
+  opt Optional marker
+    Page->>G: GET /api/v1/capture/marker
+    G-->>Page: printable PDF/PNG (§3.23.2)
+  end
+
+  User->>Page: Upload ≥ 2 videos (+ optional marker/scale)
+  Page->>P: POST /api/v1/models/capture (multipart files[])
+  P->>G: POST
+  alt < 2 files or unsupported container
+    G-->>Page: 400
+  else accepted
+    G->>RC: enqueue job; stream files to work dir
+    G-->>Page: 202 { job_id, status: pending }
+    RC->>CV: Run(jobSpec) — per-feed 2D blink detect, pose, triangulate
+    CV-->>RC: JSON { light_count, lights[], missing[], low_confidence[] }
+  end
+
+  loop poll until terminal
+    Page->>G: GET /api/v1/models/capture/{jobId}
+    G-->>Page: { status, progress, result? }
+  end
+
+  Note over Page: Review: detected count + missing/low-confidence + optional three.js preview (§4.7)
+
+  alt User confirms
+    User->>Page: Confirm with name
+    Page->>P: POST /api/v1/models/capture/{jobId}/confirm { name }
+    P->>G: POST
+    G->>G: Re-validate candidate lights (REQ-005/REQ-007)
+    G->>S: INSERT model + geometry lights (one tx §3.3)
+    S-->>G: OK
+    G->>L: allocate REQ-014 defaults for n lights
+    G-->>Page: 201 model → route to /models/{id}
+  else User cancels
+    Page->>G: DELETE /api/v1/models/capture/{jobId}
+    G-->>Page: 204 (work dir removed)
+  end
+```
+
+**Boundary:** Reconstruction is **server-side** and needs **no operator Python** (bundled CV runtime, **§3.23.1**); the model is **persisted only on explicit confirm** after the user reviews detected vs missing lights (**REQ-049**).
+
 
 ## 9. Security notes (baseline)
 
@@ -2060,6 +2244,8 @@ sequenceDiagram
 - **Scene batch updates:** **`PATCH /api/v1/scenes/{id}/lights/state/batch`** **can** **carry** **one** **JSON** **object** **per** **light** **(up** **to** **~1000** **per** **scene** **in** **worst** **case**)**; **enforce** **a** **reasonable** **max** **body** **size** **(e.g.** **several** **MB** **below** **Pi** **RAM** **headroom**)** **and** **reject** **oversize** **with** **`413`** **or** **`400`** **before** **full** **parse** **if** **needed**.
 - **SQLite file:** Treat **`DLM_DB_PATH`** as **persistent** storage on the Pi (e.g. SD card or USB); operators should **back up** the DB file with normal file backup practices.
 - **Factory reset:** **`POST /api/v1/system/factory-reset`** **is** **destructive** **and** **unauthenticated** **in** **MVP**; **treat** **network** **exposure** **accordingly** **(see** **§3.14**)**.**
+- **Video uploads (REQ-048/REQ-049):** **`POST /api/v1/models/capture`** accepts **large** multi-file uploads. Enforce a **per-request** and **per-file** **max size** (well below Pi RAM/disk headroom), an **allowed container/codec list**, stream to a **work dir** under `DLM_DATA_DIR` (not memory), reject oversize early (**413**/**400**), and **clean up** work dirs on terminal job states and on startup (stale-dir sweep). Treat uploaded videos as untrusted input to the CV child (timeouts, bounded concurrency).
+- **Bundled CV runtime (REQ-048):** The shipped OpenCV runtime (**§3.23.1**) is **product-controlled** code, not operator-authored — but still run it as a **supervised child** with **`ctx`** timeout/cancellation and captured stderr. It is **not** a path for executing user-supplied code (unlike **§3.17**).
 - **User-authored Python (REQ-022):** **Production** **execution** **is** **in** **a** **supervised** **`python3`** **child** **process** **(**§3.17**)** **whose** **`scene`** **shim** **calls** **loopback** **§3.15** **(**or** **in-process** **equivalent**)** **—** **treat** **untrusted** **code** **as** **able** **to** **reach** **the** **local** **API** **and** **filesystem** **within** **that** **process** **;** **harden** **with** **timeouts**, **resource** **limits**, **and** **rate** **/** **body** **limits** **§9**. **Optional** **browser** **Pyodide** **(**editor** **lint**/**format** **only** **—** **§3.17**)** **must** **not** **run** **production** **routines** **(**REQ-038**)**. **Do** **not** **expose** **admin** **tokens** **or** **third-party** **API** **keys** **into** **routine** **sources** **or** **bundles**.
 
 ---
@@ -2104,7 +2290,7 @@ sequenceDiagram
 | REQ-034 | §3.12–§3.13, §4.7 (shared faint wire material + boundary edges), §4.9, §4.14 |
 | REQ-035 | §3.19–§3.20, §4.15, §7 |
 | REQ-036 | §3.20, §4.15 |
-| REQ-037 | §4.11, §4.15 |
+| REQ-037 | §4.11, §4.15 (incl. `light_count` + capture controls for REQ-047) |
 | REQ-038 | §3.16–§3.17.2, §4.9, §4.13–§4.14, §6.2, §8.16–§8.22 |
 | REQ-039 | §3.3, §3.9, §3.19, §3.21 (startup push-after-defaults; unassign stops push, hardware unchanged), §8.7–§8.9, §8.11, §8.15, §8.19–§8.20 |
 | REQ-040 | §3.17 (Python `T_force`, stop latency), §3.17.2 (ticker halt) |
@@ -2112,8 +2298,11 @@ sequenceDiagram
 | REQ-042 | §3.2 (`GET …/routines/runs`, `POST …/start` 409 + `error.details`), §4.9, §4.13, §4.14, §4.16, §8.23; `web/lib/useSceneLightsSSE.ts`, `web/lib/sseUrl.ts`, `SceneRoutineConflictError` in `web/lib/routines.ts` |
 | REQ-043 | §1, §3.4, §6.6 |
 | REQ-044 | §1, §6.7–§6.8, §6.11–§6.12 |
-| REQ-045 | §1, §6.9, §3.17 (Python child), §9 |
+| REQ-045 | §1, §6.9 (user-routine `python3` vs bundled CV runtime), §3.17 (Python child), §9 |
 | REQ-046 | §1, §6.10, §3.7 |
+| REQ-047 | §1, §2 (`internal/capture`), §3.1, §3.2 (`/devices/{id}/capture/*`), §3.3 (`devices.light_count`), §3.22, §4.15, §8.24 |
+| REQ-048 | §1, §2 (`internal/reconstruct`, `internal/cvruntime`), §3.1, §3.2 (`/models/capture*`), §3.23, §3.23.1 (bundled OpenCV, no separate Python — distinct from REQ-045), §3.23.2, §6.9, §8.25, §9 (upload + child limits) |
+| REQ-049 | §1, §3.2 (`/models/capture`, `…/confirm`, `…/marker`), §3.3 (confirm transaction), §3.23, §3.23.2, §4.6, §4.7 (review preview), §4.17, §8.25 |
 
 ---
 

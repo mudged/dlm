@@ -3,9 +3,25 @@ export type Device = {
   type: string;
   name: string;
   base_url: string;
+  light_count: number;
   model_id?: string;
   created_at: string;
 };
+
+export type CaptureStatus = {
+  state: "idle" | "running";
+  light_count: number;
+  current_index?: number;
+};
+
+export class CaptureError extends Error {
+  code: string;
+  constructor(message: string, code: string) {
+    super(message);
+    this.name = "CaptureError";
+    this.code = code;
+  }
+}
 
 export type DeviceListResponse = {
   devices: Device[];
@@ -46,13 +62,17 @@ export async function fetchDevice(id: string): Promise<Device> {
 export async function createDevice(input: {
   name: string;
   base_url: string;
+  light_count?: number;
   wled_password?: string;
 }): Promise<Device> {
-  const payload: Record<string, string> = {
+  const payload: Record<string, string | number> = {
     type: "wled",
     name: input.name.trim(),
     base_url: input.base_url.trim(),
   };
+  if (input.light_count !== undefined) {
+    payload.light_count = input.light_count;
+  }
   const pw = input.wled_password?.trim();
   if (pw) {
     payload.wled_password = pw;
@@ -71,7 +91,12 @@ export async function createDevice(input: {
 
 export async function patchDevice(
   id: string,
-  patch: { name?: string; base_url?: string; wled_password?: string },
+  patch: {
+    name?: string;
+    base_url?: string;
+    light_count?: number;
+    wled_password?: string;
+  },
 ): Promise<Device> {
   const res = await fetch(`/api/v1/devices/${encodeURIComponent(id)}`, {
     method: "PATCH",
@@ -125,4 +150,45 @@ export async function unassignDevice(deviceId: string): Promise<Device> {
     throw new Error(readErrorMessage(res, data));
   }
   return data as Device;
+}
+
+export async function startCapture(deviceId: string): Promise<CaptureStatus> {
+  const res = await fetch(
+    `/api/v1/devices/${encodeURIComponent(deviceId)}/capture/start`,
+    { method: "POST", headers: { "Content-Type": "application/json" } },
+  );
+  const data = await res.json().catch(() => null);
+  if (!res.ok) {
+    const j = data as ApiErrorBody;
+    const code = j?.error?.code ?? "unknown";
+    const message = j?.error?.message ?? `Request failed (${res.status})`;
+    throw new CaptureError(message, code);
+  }
+  return data as CaptureStatus;
+}
+
+export async function stopCapture(deviceId: string): Promise<CaptureStatus> {
+  const res = await fetch(
+    `/api/v1/devices/${encodeURIComponent(deviceId)}/capture/stop`,
+    { method: "POST", headers: { "Content-Type": "application/json" } },
+  );
+  const data = await res.json().catch(() => null);
+  if (!res.ok) {
+    throw new Error(readErrorMessage(res, data));
+  }
+  return data as CaptureStatus;
+}
+
+export async function getCaptureStatus(
+  deviceId: string,
+): Promise<CaptureStatus> {
+  const res = await fetch(
+    `/api/v1/devices/${encodeURIComponent(deviceId)}/capture`,
+    { cache: "no-store" },
+  );
+  const data = await res.json().catch(() => null);
+  if (!res.ok) {
+    throw new Error(readErrorMessage(res, data));
+  }
+  return data as CaptureStatus;
 }

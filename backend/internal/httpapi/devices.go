@@ -15,11 +15,12 @@ const maxDeviceBodyBytes = 16384
 
 func deviceToJSON(d store.Device) map[string]any {
 	m := map[string]any{
-		"id":         d.ID,
-		"type":       d.Type,
-		"name":       d.Name,
-		"base_url":   d.BaseURL,
-		"created_at": d.CreatedAt.UTC().Format(time.RFC3339Nano),
+		"id":          d.ID,
+		"type":        d.Type,
+		"name":        d.Name,
+		"base_url":    d.BaseURL,
+		"light_count": d.LightCount,
+		"created_at":  d.CreatedAt.UTC().Format(time.RFC3339Nano),
 	}
 	if d.ModelID != nil && *d.ModelID != "" {
 		m["model_id"] = *d.ModelID
@@ -49,6 +50,7 @@ type jsonDeviceCreate struct {
 	Name         string `json:"name"`
 	BaseURL      string `json:"base_url"`
 	WLEDPassword string `json:"wled_password"`
+	LightCount   int    `json:"light_count"`
 }
 
 func (a *apiDeps) postDevice(w http.ResponseWriter, r *http.Request) {
@@ -70,6 +72,7 @@ func (a *apiDeps) postDevice(w http.ResponseWriter, r *http.Request) {
 		Name:         body.Name,
 		BaseURL:      body.BaseURL,
 		WLEDPassword: body.WLEDPassword,
+		LightCount:   body.LightCount,
 	})
 	if errors.Is(err, store.ErrInvalidBaseURL) {
 		writeAPIError(w, http.StatusBadRequest, "invalid_base_url", err.Error())
@@ -77,7 +80,7 @@ func (a *apiDeps) postDevice(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		msg := err.Error()
-		if strings.Contains(msg, "unsupported") || strings.Contains(msg, "required") {
+		if strings.Contains(msg, "unsupported") || strings.Contains(msg, "required") || strings.Contains(msg, "light_count") {
 			writeAPIError(w, http.StatusBadRequest, "validation_failed", msg)
 			return
 		}
@@ -122,6 +125,7 @@ type jsonDevicePatch struct {
 	Name         *string `json:"name"`
 	BaseURL      *string `json:"base_url"`
 	WLEDPassword *string `json:"wled_password"`
+	LightCount   *int    `json:"light_count"`
 }
 
 func (a *apiDeps) patchDevice(w http.ResponseWriter, r *http.Request) {
@@ -144,6 +148,7 @@ func (a *apiDeps) patchDevice(w http.ResponseWriter, r *http.Request) {
 		Name:         body.Name,
 		BaseURL:      body.BaseURL,
 		WLEDPassword: body.WLEDPassword,
+		LightCount:   body.LightCount,
 	})
 	if errors.Is(err, store.ErrDeviceNotFound) {
 		writeAPIError(w, http.StatusNotFound, "not_found", "device not found")
@@ -155,7 +160,7 @@ func (a *apiDeps) patchDevice(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		msg := err.Error()
-		if strings.Contains(msg, "cannot be empty") {
+		if strings.Contains(msg, "cannot be empty") || strings.Contains(msg, "light_count") {
 			writeAPIError(w, http.StatusBadRequest, "validation_failed", msg)
 			return
 		}

@@ -49,6 +49,11 @@ func normalizeBaseURL(raw string) (string, error) {
 	return strings.TrimRight(u.String(), "/"), nil
 }
 
+const (
+	minDeviceLightCount = 0
+	maxDeviceLightCount = 1000
+)
+
 // Device is persisted device registry metadata (REQ-035 / architecture §3.3).
 type Device struct {
 	ID            string    `json:"id"`
@@ -56,6 +61,7 @@ type Device struct {
 	Name          string    `json:"name"`
 	BaseURL       string    `json:"base_url"`
 	WLEDPassword  string    `json:"-"` // never serialized to JSON from store; HTTP layer omits
+	LightCount    int       `json:"light_count"`
 	ModelID       *string   `json:"model_id,omitempty"`
 	CreatedAt     time.Time `json:"created_at"`
 }
@@ -66,6 +72,7 @@ type DeviceCreate struct {
 	Name         string
 	BaseURL      string
 	WLEDPassword string
+	LightCount   int
 }
 
 // DevicePatch updates optional fields (non-empty strings overwrite).
@@ -73,6 +80,14 @@ type DevicePatch struct {
 	Name         *string
 	BaseURL      *string
 	WLEDPassword *string // set to empty string to clear
+	LightCount   *int
+}
+
+func validateDeviceLightCount(n int) error {
+	if n < minDeviceLightCount || n > maxDeviceLightCount {
+		return fmt.Errorf("light_count must be between %d and %d", minDeviceLightCount, maxDeviceLightCount)
+	}
+	return nil
 }
 
 func (s *Store) ensureDeviceTable(ctx context.Context) error {
@@ -83,6 +98,7 @@ func (s *Store) ensureDeviceTable(ctx context.Context) error {
 			name TEXT NOT NULL,
 			base_url TEXT NOT NULL,
 			wled_password TEXT,
+			light_count INTEGER NOT NULL DEFAULT 0,
 			model_id TEXT UNIQUE,
 			created_at TEXT NOT NULL,
 			FOREIGN KEY (model_id) REFERENCES models(id) ON DELETE SET NULL
@@ -94,6 +110,15 @@ func (s *Store) ensureDeviceTable(ctx context.Context) error {
 			return fmt.Errorf("devices migrate: %w", err)
 		}
 	}
+	cols, err := s.tableColumns(ctx, "devices")
+	if err != nil {
+		return fmt.Errorf("devices migrate columns: %w", err)
+	}
+	if !cols["light_count"] {
+		if _, err := s.db.ExecContext(ctx, `ALTER TABLE devices ADD COLUMN light_count INTEGER NOT NULL DEFAULT 0`); err != nil {
+			return fmt.Errorf("devices migrate light_count: %w", err)
+		}
+	}
 	return nil
 }
 
@@ -102,7 +127,7 @@ func scanDevice(row interface{ Scan(dest ...any) error }) (Device, error) {
 	var modelID sql.NullString
 	var created string
 	var pw sql.NullString
-	if err := row.Scan(&d.ID, &d.Type, &d.Name, &d.BaseURL, &pw, &modelID, &created); err != nil {
+	if err := row.Scan(&d.ID, &d.Type, &d.Name, &d.BaseURL, &pw, &d.LightCount, &modelID, &created); err != nil {
 		return Device{}, err
 	}
 	if modelID.Valid {
@@ -125,7 +150,7 @@ func scanDevice(row interface{ Scan(dest ...any) error }) (Device, error) {
 // ListDevices returns all devices, newest first.
 func (s *Store) ListDevices(ctx context.Context) ([]Device, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, type, name, base_url, wled_password, model_id, created_at
+		SELECT id, type, name, base_url, wled_password, light_count, model_id, created_at
 		FROM devices ORDER BY created_at DESC
 	`)
 	if err != nil {
@@ -146,7 +171,7 @@ func (s *Store) ListDevices(ctx context.Context) ([]Device, error) {
 // GetDevice returns one device by id.
 func (s *Store) GetDevice(ctx context.Context, id string) (Device, error) {
 	row := s.db.QueryRowContext(ctx, `
-		SELECT id, type, name, base_url, wled_password, model_id, created_at
+		SELECT id, type, name, base_url, wled_password, light_count, model_id, created_at
 		FROM devices WHERE id = ?
 	`, id)
 	d, err := scanDevice(row)
@@ -162,7 +187,7 @@ func (s *Store) GetDevice(ctx context.Context, id string) (Device, error) {
 // GetDeviceForModel returns the device assigned to the model, or ErrDeviceNotFound if none.
 func (s *Store) GetDeviceForModel(ctx context.Context, modelID string) (Device, error) {
 	row := s.db.QueryRowContext(ctx, `
-		SELECT id, type, name, base_url, wled_password, model_id, created_at
+		SELECT id, type, name, base_url, wled_password, light_count, model_id, created_at
 		FROM devices WHERE model_id = ?
 	`, modelID)
 	d, err := scanDevice(row)
@@ -193,6 +218,9 @@ func (s *Store) CreateDevice(ctx context.Context, in DeviceCreate) (Device, erro
 		return Device{}, err
 	}
 	in.BaseURL = canonical
+	if err := validateDeviceLightCount(in.LightCount); err != nil {
+		return Device{}, err
+	}
 	id := uuid.NewString()
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	var pw any
@@ -202,9 +230,9 @@ func (s *Store) CreateDevice(ctx context.Context, in DeviceCreate) (Device, erro
 		pw = nil
 	}
 	if _, err := s.db.ExecContext(ctx, `
-		INSERT INTO devices (id, type, name, base_url, wled_password, model_id, created_at)
-		VALUES (?, ?, ?, ?, ?, NULL, ?)
-	`, id, in.Type, in.Name, in.BaseURL, pw, now); err != nil {
+		INSERT INTO devices (id, type, name, base_url, wled_password, light_count, model_id, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, NULL, ?)
+	`, id, in.Type, in.Name, in.BaseURL, pw, in.LightCount, now); err != nil {
 		return Device{}, err
 	}
 	return s.GetDevice(ctx, id)
@@ -240,6 +268,13 @@ func (s *Store) PatchDevice(ctx context.Context, id string, p DevicePatch) (Devi
 		} else {
 			args = append(args, *p.WLEDPassword)
 		}
+	}
+	if p.LightCount != nil {
+		if err := validateDeviceLightCount(*p.LightCount); err != nil {
+			return Device{}, err
+		}
+		sets = append(sets, "light_count = ?")
+		args = append(args, *p.LightCount)
 	}
 	if len(sets) == 0 {
 		return s.GetDevice(ctx, id)

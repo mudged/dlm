@@ -9,13 +9,16 @@ import (
 	"time"
 )
 
-// Config holds HTTP server, CORS, and SQLite path (12-factor env).
+// Config holds HTTP server, CORS, and storage paths (12-factor env).
 type Config struct {
 	HTTPListen         string
 	ReadTimeout        time.Duration
 	WriteTimeout       time.Duration
 	CORSAllowedOrigins []string
 	DBPath             string
+	// DataDir is the root data directory (DLM_DATA_DIR, default "data").
+	// Sub-directories are created as needed (e.g. runtime/capture for reconstruction jobs).
+	DataDir string
 }
 
 // Load reads configuration from environment variables.
@@ -60,12 +63,13 @@ func Load() (*Config, error) {
 		}
 	}
 
+	dataDir := strings.TrimSpace(os.Getenv("DLM_DATA_DIR"))
+	if dataDir == "" {
+		dataDir = "data"
+	}
+
 	dbPath := strings.TrimSpace(os.Getenv("DLM_DB_PATH"))
 	if dbPath == "" {
-		dataDir := strings.TrimSpace(os.Getenv("DLM_DATA_DIR"))
-		if dataDir == "" {
-			dataDir = "data"
-		}
 		dbPath = filepath.Join(dataDir, "dlm.db")
 	}
 
@@ -75,6 +79,7 @@ func Load() (*Config, error) {
 		WriteTimeout:       time.Duration(writeSec) * time.Second,
 		CORSAllowedOrigins: origins,
 		DBPath:             dbPath,
+		DataDir:            dataDir,
 	}, nil
 }
 

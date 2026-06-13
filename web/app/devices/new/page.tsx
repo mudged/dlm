@@ -11,6 +11,7 @@ export default function NewDevicePage() {
   const router = useRouter();
   const [name, setName] = useState("");
   const [baseURL, setBaseURL] = useState("");
+  const [lightCount, setLightCount] = useState<string>("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -26,11 +27,17 @@ export default function NewDevicePage() {
       setError("Base URL is required (for example http://wled.local).");
       return;
     }
+    const parsedLightCount = lightCount === "" ? 0 : parseInt(lightCount, 10);
+    if (isNaN(parsedLightCount) || parsedLightCount < 0 || parsedLightCount > 1000) {
+      setError("Light count must be a whole number between 0 and 1000.");
+      return;
+    }
     setSubmitting(true);
     try {
       const d = await createDevice({
         name: name.trim(),
         base_url: baseURL.trim(),
+        light_count: parsedLightCount,
         wled_password: password.trim() || undefined,
       });
       router.push(`/devices/detail?id=${encodeURIComponent(d.id)}`);
@@ -83,6 +90,27 @@ export default function NewDevicePage() {
             className="min-h-11 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-900"
             placeholder="http://192.168.1.50"
           />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label htmlFor="device-light-count" className="text-sm font-medium">
+            Light count
+          </label>
+          <input
+            id="device-light-count"
+            name="light_count"
+            type="number"
+            inputMode="numeric"
+            min={0}
+            max={1000}
+            step={1}
+            value={lightCount}
+            onChange={(e) => setLightCount(e.target.value)}
+            className="min-h-11 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-900"
+            placeholder="0"
+          />
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Number of addressable LEDs on this device (0–1000).
+          </p>
         </div>
         <div className="flex flex-col gap-1">
           <label htmlFor="device-pw" className="text-sm font-medium">

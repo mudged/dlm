@@ -380,3 +380,19 @@ func (s *Store) StopAllRunningRoutineRuns(ctx context.Context) error {
 	`, RoutineStatusStopped, stoppedAt, RoutineStatusRunning)
 	return err
 }
+
+// ModelHasActiveRoutineRun reports whether any scene containing modelID has a
+// routine_run with status='running'.  Used by the capture controller to prevent
+// starting a sweep while a routine is driving the same device (REQ-047).
+func (s *Store) ModelHasActiveRoutineRun(ctx context.Context, modelID string) (bool, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM routine_runs rr
+		JOIN scene_models sm ON sm.scene_id = rr.scene_id
+		WHERE sm.model_id = ? AND rr.status = ?
+	`, modelID, RoutineStatusRunning).Scan(&n)
+	if err != nil {
+		return false, err
+	}
+	return n > 0, nil
+}

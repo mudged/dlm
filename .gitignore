@@ -45,3 +45,7 @@ web/tsconfig.tsbuildinfo
 
 # Local SQLite (default DLM_DATA_DIR)
 data/
+
+# Python bytecode cache (CV runtime source)
+__pycache__/
+*.pyc

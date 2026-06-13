@@ -76,15 +76,22 @@ func ParseLightsCSV(r io.Reader) ([]Light, error) {
 		lights = append(lights, Light{ID: id, X: x, Y: y, Z: z})
 	}
 
-	n := len(lights)
-	if n > 1000 {
-		return nil, &ParseError{Message: "a model may have at most 1000 lights"}
-	}
-	if err := validateContiguousIDs(lights, n); err != nil {
+	if err := ValidateLights(lights); err != nil {
 		return nil, err
 	}
 
 	return lights, nil
+}
+
+// ValidateLights validates a slice of Light values against the REQ-005/REQ-007 rules:
+// at most 1000 lights, IDs must be 0-based sequential integers with no gaps or duplicates.
+// It is exposed so that confirmation of CV results can reuse the same rules as CSV parsing.
+func ValidateLights(lights []Light) error {
+	n := len(lights)
+	if n > 1000 {
+		return &ParseError{Message: "a model may have at most 1000 lights"}
+	}
+	return validateContiguousIDs(lights, n)
 }
 
 func parseFiniteFloat(s string) (float64, error) {

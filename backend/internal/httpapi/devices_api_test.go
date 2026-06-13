@@ -319,3 +319,150 @@ func TestAPIv1Devices_assignConflict_returns409(t *testing.T) {
 		t.Fatalf("status=%d", res.StatusCode)
 	}
 }
+
+func TestAPIv1Devices_lightCount_createGetPatch(t *testing.T) {
+	srv := httptest.NewServer(newTestHandler(t, nil))
+	t.Cleanup(srv.Close)
+	base := srv.URL + "/api/v1/devices"
+
+	createBody := `{"name":"Strip","base_url":"http://wled.test","light_count":50}`
+	res, err := http.Post(base, "application/json", strings.NewReader(createBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := io.ReadAll(res.Body)
+	_ = res.Body.Close()
+	if res.StatusCode != http.StatusCreated {
+		t.Fatalf("create status=%d body=%s", res.StatusCode, b)
+	}
+	var created map[string]any
+	if err := json.Unmarshal(b, &created); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := created["light_count"].(float64); got != 50 {
+		t.Fatalf("create light_count = %v want 50", created["light_count"])
+	}
+	id, _ := created["id"].(string)
+
+	res2, err := http.Get(base + "/" + id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b2, _ := io.ReadAll(res2.Body)
+	_ = res2.Body.Close()
+	if res2.StatusCode != http.StatusOK {
+		t.Fatalf("get status=%d body=%s", res2.StatusCode, b2)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(b2, &got); err != nil {
+		t.Fatal(err)
+	}
+	if lc, _ := got["light_count"].(float64); lc != 50 {
+		t.Fatalf("get light_count = %v want 50", got["light_count"])
+	}
+
+	patchURL := base + "/" + id
+	req, _ := http.NewRequest(http.MethodPatch, patchURL, strings.NewReader(`{"light_count":75}`))
+	req.Header.Set("Content-Type", "application/json")
+	res3, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b3, _ := io.ReadAll(res3.Body)
+	_ = res3.Body.Close()
+	if res3.StatusCode != http.StatusOK {
+		t.Fatalf("patch status=%d body=%s", res3.StatusCode, b3)
+	}
+	var patched map[string]any
+	if err := json.Unmarshal(b3, &patched); err != nil {
+		t.Fatal(err)
+	}
+	if lc, _ := patched["light_count"].(float64); lc != 75 {
+		t.Fatalf("patch light_count = %v want 75", patched["light_count"])
+	}
+}
+
+func TestAPIv1Devices_lightCount_outOfRange_returns400(t *testing.T) {
+	srv := httptest.NewServer(newTestHandler(t, nil))
+	t.Cleanup(srv.Close)
+	base := srv.URL + "/api/v1/devices"
+
+	cases := []struct {
+		name string
+		body string
+	}{
+		{"create_negative", `{"name":"x","base_url":"http://wled.test","light_count":-1}`},
+		{"create_too_large", `{"name":"x","base_url":"http://wled.test","light_count":1001}`},
+	}
+	for _, tc := range cases {
+		t.Run("post_"+tc.name, func(t *testing.T) {
+			res, err := http.Post(base, "application/json", strings.NewReader(tc.body))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer res.Body.Close()
+			if res.StatusCode != http.StatusBadRequest {
+				t.Fatalf("status=%d want 400", res.StatusCode)
+			}
+			var env struct {
+				Error struct {
+					Code string `json:"code"`
+				} `json:"error"`
+			}
+			if err := json.NewDecoder(res.Body).Decode(&env); err != nil {
+				t.Fatal(err)
+			}
+			if env.Error.Code != "validation_failed" {
+				t.Fatalf("code = %q want validation_failed", env.Error.Code)
+			}
+		})
+	}
+
+	res, err := http.Post(base, "application/json", strings.NewReader(`{"name":"p","base_url":"http://wled.test","light_count":10}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := io.ReadAll(res.Body)
+	_ = res.Body.Close()
+	if res.StatusCode != http.StatusCreated {
+		t.Fatalf("setup create status=%d body=%s", res.StatusCode, b)
+	}
+	var created map[string]any
+	if err := json.Unmarshal(b, &created); err != nil {
+		t.Fatal(err)
+	}
+	id, _ := created["id"].(string)
+
+	patchCases := []struct {
+		name string
+		body string
+	}{
+		{"patch_negative", `{"light_count":-1}`},
+		{"patch_too_large", `{"light_count":1001}`},
+	}
+	for _, tc := range patchCases {
+		t.Run(tc.name, func(t *testing.T) {
+			req, _ := http.NewRequest(http.MethodPatch, base+"/"+id, strings.NewReader(tc.body))
+			req.Header.Set("Content-Type", "application/json")
+			res, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer res.Body.Close()
+			if res.StatusCode != http.StatusBadRequest {
+				t.Fatalf("status=%d want 400", res.StatusCode)
+			}
+			var env struct {
+				Error struct {
+					Code string `json:"code"`
+				} `json:"error"`
+			}
+			if err := json.NewDecoder(res.Body).Decode(&env); err != nil {
+				t.Fatal(err)
+			}
+			if env.Error.Code != "validation_failed" {
+				t.Fatalf("code = %q want validation_failed", env.Error.Code)
+			}
+		})
+	}
+}

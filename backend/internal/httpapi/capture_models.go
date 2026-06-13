@@ -1,0 +1,181 @@
+package httpapi
+
+import (
+	"encoding/json"
+	"errors"
+	"io"
+	"net/http"
+	"path/filepath"
+	"strings"
+
+	"example.com/dlm/backend/internal/reconstruct"
+	"example.com/dlm/backend/internal/store"
+	"example.com/dlm/backend/internal/wiremodel"
+)
+
+// maxCaptureUploadBytes is the per-request body limit for video uploads.
+// Deliberately much larger than the 1 MiB CSV model limit (REQ-048).
+// Allowed video container extensions for reconstruction feeds (REQ-048).
+const maxCaptureUploadBytes = 512 << 20 // 512 MiB
+
+var allowedVideoExts = map[string]bool{
+	".mp4":  true,
+	".mov":  true,
+	".mkv":  true,
+	".webm": true,
+}
+
+// POST /models/capture
+func (a *apiDeps) postModelsCapture(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	if a.reconstruct == nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "service_unavailable", "reconstruction not available")
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, maxCaptureUploadBytes)
+	// ParseMultipartForm spills files to temp-disk beyond the memory threshold,
+	// keeping per-request heap usage bounded (REQ-048 security note).
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		writeAPIError(w, http.StatusBadRequest, "bad_request", "invalid multipart form or payload too large")
+		return
+	}
+
+	fhs := r.MultipartForm.File["files"]
+	if len(fhs) < 2 {
+		writeAPIError(w, http.StatusBadRequest, "bad_request", "at least 2 video files are required")
+		return
+	}
+
+	var fileReaders []io.Reader
+	var fileNames []string
+	for _, fh := range fhs {
+		ext := strings.ToLower(filepath.Ext(fh.Filename))
+		if !allowedVideoExts[ext] {
+			writeAPIError(w, http.StatusBadRequest, "bad_request",
+				"unsupported video container; allowed extensions: .mp4, .mov, .mkv, .webm")
+			return
+		}
+		f, err := fh.Open()
+		if err != nil {
+			writeAPIError(w, http.StatusInternalServerError, "internal_error", "could not read uploaded file")
+			return
+		}
+		defer func() { _ = f.Close() }()
+		fileReaders = append(fileReaders, f)
+		fileNames = append(fileNames, fh.Filename)
+	}
+
+	jobID, err := a.reconstruct.Create(r.Context(), fileReaders, fileNames, reconstruct.CreateParams{})
+	if err != nil {
+		writeAPIError(w, http.StatusBadRequest, "bad_request", err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusAccepted, map[string]any{
+		"job_id": jobID,
+		"status": "pending",
+	})
+}
+
+// GET /models/capture/{jobId}
+func (a *apiDeps) getModelsCaptureJob(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	if a.reconstruct == nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "service_unavailable", "reconstruction not available")
+		return
+	}
+
+	jobID := r.PathValue("jobId")
+	job, ok := a.reconstruct.Get(jobID)
+	if !ok {
+		writeAPIError(w, http.StatusNotFound, "not_found", "job not found")
+		return
+	}
+
+	resp := map[string]any{
+		"status":   job.Status,
+		"progress": job.Progress,
+	}
+	if job.Result != nil {
+		resp["result"] = job.Result
+	}
+	if job.Err != "" {
+		resp["error"] = job.Err
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// POST /models/capture/{jobId}/confirm
+func (a *apiDeps) postModelsCaptureConfirm(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	if a.reconstruct == nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "service_unavailable", "reconstruction not available")
+		return
+	}
+
+	jobID := r.PathValue("jobId")
+
+	var body struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeAPIError(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
+		return
+	}
+	name := strings.TrimSpace(body.Name)
+	if name == "" {
+		writeAPIError(w, http.StatusBadRequest, "validation_failed", "name is required")
+		return
+	}
+
+	sum, err := a.reconstruct.Confirm(r.Context(), jobID, name)
+	if errors.Is(err, reconstruct.ErrJobNotFound) || errors.Is(err, reconstruct.ErrJobNotSucceeded) {
+		writeAPIError(w, http.StatusNotFound, "not_found", "job not found or not in succeeded state")
+		return
+	}
+	var pe *wiremodel.ParseError
+	if errors.As(err, &pe) {
+		writeAPIError(w, http.StatusBadRequest, "validation_failed", pe.Message)
+		return
+	}
+	if errors.Is(err, store.ErrDuplicateName) {
+		writeAPIError(w, http.StatusConflict, "conflict", "a model with this name already exists")
+		return
+	}
+	if err != nil {
+		writeAPIError(w, http.StatusInternalServerError, "internal_error", "could not confirm model")
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, sum)
+}
+
+// DELETE /models/capture/{jobId}
+func (a *apiDeps) deleteModelsCapture(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	if a.reconstruct == nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "service_unavailable", "reconstruction not available")
+		return
+	}
+
+	jobID := r.PathValue("jobId")
+	if err := a.reconstruct.Discard(jobID); errors.Is(err, reconstruct.ErrJobNotFound) {
+		writeAPIError(w, http.StatusNotFound, "not_found", "job not found")
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}

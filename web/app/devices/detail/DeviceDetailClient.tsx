@@ -2,8 +2,10 @@
 
 import {
   faArrowLeft,
+  faCircleStop,
   faFloppyDisk,
   faLink,
+  faPlay,
   faTrash,
   faUnlink,
 } from "@fortawesome/free-solid-svg-icons";
@@ -12,12 +14,16 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { ButtonLink } from "@/components/ui/ButtonLink";
-import type { Device } from "@/lib/devices";
+import type { CaptureStatus, Device } from "@/lib/devices";
 import {
+  CaptureError,
   assignDevice,
   deleteDevice,
   fetchDevice,
+  getCaptureStatus,
   patchDevice,
+  startCapture,
+  stopCapture,
   unassignDevice,
 } from "@/lib/devices";
 import type { ModelSummary } from "@/lib/models";
@@ -31,11 +37,15 @@ export function DeviceDetailClient() {
   const [models, setModels] = useState<ModelSummary[] | null>(null);
   const [name, setName] = useState("");
   const [baseURL, setBaseURL] = useState("");
+  const [lightCount, setLightCount] = useState<string>("");
   const [newPassword, setNewPassword] = useState("");
   const [assignModelId, setAssignModelId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [assignBusy, setAssignBusy] = useState(false);
+  const [captureStatus, setCaptureStatus] = useState<CaptureStatus | null>(null);
+  const [captureBusy, setCaptureBusy] = useState(false);
+  const [captureError, setCaptureError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!rawId) {
@@ -50,6 +60,7 @@ export function DeviceDetailClient() {
       setDevice(d);
       setName(d.name);
       setBaseURL(d.base_url);
+      setLightCount(String(d.light_count ?? 0));
       setNewPassword("");
       if (!mRes.ok) {
         setModels([]);
@@ -67,6 +78,46 @@ export function DeviceDetailClient() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!rawId) return;
+    let active = true;
+    let timer: ReturnType<typeof setInterval> | null = null;
+
+    async function poll() {
+      if (!active || !rawId) return;
+      try {
+        const status = await getCaptureStatus(rawId);
+        if (!active) return;
+        setCaptureStatus(status);
+        if (status.state === "running") {
+          timer = setInterval(() => {
+            void (async () => {
+              if (!active || !rawId) return;
+              try {
+                const s = await getCaptureStatus(rawId);
+                if (!active) return;
+                setCaptureStatus(s);
+                if (s.state !== "running" && timer !== null) {
+                  clearInterval(timer);
+                  timer = null;
+                }
+              } catch {
+                // ignore poll errors silently
+              }
+            })();
+          }, 1000);
+        }
+      } catch {
+        // ignore initial poll error
+      }
+    }
+    void poll();
+    return () => {
+      active = false;
+      if (timer !== null) clearInterval(timer);
+    };
+  }, [rawId]);
 
   const modelNameById = useMemo(() => {
     const m = new Map<string, string>();
@@ -92,11 +143,17 @@ export function DeviceDetailClient() {
   async function onSave(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    const parsedLightCount = lightCount === "" ? 0 : parseInt(lightCount, 10);
+    if (isNaN(parsedLightCount) || parsedLightCount < 0 || parsedLightCount > 1000) {
+      setError("Light count must be a whole number between 0 and 1000.");
+      return;
+    }
     setSaving(true);
     try {
       const patch: {
         name?: string;
         base_url?: string;
+        light_count?: number;
         wled_password?: string;
       } = {};
       if (name.trim() !== device?.name) {
@@ -104,6 +161,9 @@ export function DeviceDetailClient() {
       }
       if (baseURL.trim() !== device?.base_url) {
         patch.base_url = baseURL.trim();
+      }
+      if (parsedLightCount !== device?.light_count) {
+        patch.light_count = parsedLightCount;
       }
       if (newPassword.trim()) {
         patch.wled_password = newPassword.trim();
@@ -114,6 +174,7 @@ export function DeviceDetailClient() {
       }
       const d = await patchDevice(deviceId, patch);
       setDevice(d);
+      setLightCount(String(d.light_count ?? 0));
       setNewPassword("");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Save failed.");
@@ -167,6 +228,48 @@ export function DeviceDetailClient() {
       setError(e instanceof Error ? e.message : "Unassign failed.");
     } finally {
       setAssignBusy(false);
+    }
+  }
+
+  async function onStartCapture() {
+    setCaptureError(null);
+    setCaptureBusy(true);
+    try {
+      const status = await startCapture(deviceId);
+      setCaptureStatus(status);
+    } catch (e) {
+      if (e instanceof CaptureError) {
+        if (e.code === "capture_conflict") {
+          setCaptureError(
+            "A capture is already running, or this device\u2019s model has an active routine.",
+          );
+        } else if (e.code === "capture_no_lights") {
+          setCaptureError("Set a light count first.");
+        } else {
+          setCaptureError(e.message);
+        }
+      } else {
+        setCaptureError(
+          e instanceof Error ? e.message : "Could not start capture.",
+        );
+      }
+    } finally {
+      setCaptureBusy(false);
+    }
+  }
+
+  async function onStopCapture() {
+    setCaptureError(null);
+    setCaptureBusy(true);
+    try {
+      const status = await stopCapture(deviceId);
+      setCaptureStatus(status);
+    } catch (e) {
+      setCaptureError(
+        e instanceof Error ? e.message : "Could not stop capture.",
+      );
+    } finally {
+      setCaptureBusy(false);
     }
   }
 
@@ -257,6 +360,25 @@ export function DeviceDetailClient() {
           />
         </div>
         <div className="flex flex-col gap-1">
+          <label htmlFor="edit-light-count" className="text-sm font-medium">
+            Light count
+          </label>
+          <input
+            id="edit-light-count"
+            type="number"
+            inputMode="numeric"
+            min={0}
+            max={1000}
+            step={1}
+            value={lightCount}
+            onChange={(e) => setLightCount(e.target.value)}
+            className="min-h-11 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-900"
+          />
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Number of addressable LEDs on this device (0–1000).
+          </p>
+        </div>
+        <div className="flex flex-col gap-1">
           <label htmlFor="edit-pw" className="text-sm font-medium">
             New WLED password (optional)
           </label>
@@ -342,6 +464,72 @@ export function DeviceDetailClient() {
             </Button>
           </div>
         )}
+      </section>
+
+      <section className="mt-8 flex flex-col gap-3 rounded-xl border border-slate-200 p-4 dark:border-slate-700">
+        <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
+          Capture sweep
+        </h2>
+        <p className="text-xs text-slate-600 dark:text-slate-400">
+          Before starting the sweep, begin recording from each camera angle.
+          The device will cycle through each light in sequence; upload the
+          recorded videos later via Models &rarr; Create from video.
+        </p>
+
+        {captureStatus?.state === "running" ? (
+          <p className="text-sm font-medium text-sky-700 dark:text-sky-400">
+            Running &mdash; lighting{" "}
+            {captureStatus.current_index !== undefined
+              ? `${captureStatus.current_index + 1} / ${captureStatus.light_count}`
+              : captureStatus.light_count}
+          </p>
+        ) : (
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            {captureStatus ? "Idle" : "Loading status…"}
+          </p>
+        )}
+
+        {captureError ? (
+          <p
+            className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100"
+            role="alert"
+          >
+            {captureError}
+          </p>
+        ) : null}
+
+        <div className="flex flex-col gap-2 sm:flex-row">
+          {captureStatus?.state === "running" ? (
+            <Button
+              type="button"
+              icon={faCircleStop}
+              disabled={captureBusy}
+              className="w-full bg-amber-800 hover:bg-amber-700 sm:w-auto dark:bg-amber-900 dark:hover:bg-amber-800"
+              onClick={() => void onStopCapture()}
+            >
+              Stop capture
+            </Button>
+          ) : (
+            <div className="flex flex-col gap-1">
+              <Button
+                type="button"
+                icon={faPlay}
+                disabled={
+                  captureBusy || device.light_count === 0
+                }
+                className="w-full sm:w-auto"
+                onClick={() => void onStartCapture()}
+              >
+                Start capture
+              </Button>
+              {device.light_count === 0 ? (
+                <p className="text-xs text-amber-700 dark:text-amber-400">
+                  Set a light count above before starting.
+                </p>
+              ) : null}
+            </div>
+          )}
+        </div>
       </section>
 
       <div className="mt-8 border-t border-slate-200 pt-6 dark:border-slate-700">
