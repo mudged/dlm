@@ -1675,4 +1675,4 @@ Feature: Create a model from uploaded video files (REQ-049)
 
 ---
 
-**Next step:** After you approve these documents, invoke the `@architect` agent to update `docs/architecture.md` so implementation can proceed. When the feature is implemented, invoke the `@verifier` agent to audit, run tests, and update `docs/traceability_matrix.md`.
+**Next step:** After you approve these documents, invoke the `@architect` agent to update `docs/architecture.md`. Then invoke `@planner` to break the change into work items under `docs/work-items/`. Run each work item in a fresh chat with `@implementor` (see the **Bootstrap** section in each `WI-*.md` file). When all items are complete, invoke the `@verifier` agent to audit, run tests, and update `docs/traceability_matrix.md`.

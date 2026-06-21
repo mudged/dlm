@@ -14,10 +14,13 @@ This repo uses a **spec-driven, multi-agent** process. Agent definitions live un
 |------:|------------|---------------|----------------|
 | 1 | [`requirements.agent.md`](.github/agents/requirements.agent.md) | `@requirements` | Turn intent into `docs/requirements.md` and `docs/acceptance_criteria.md` (templates under `docs/templates/`). |
 | 2 | [`architect.agent.md`](.github/agents/architect.agent.md) | `@architect` | Produce `docs/architecture.md` with Go + Next.js structure, Pi deployment notes, and **Mermaid** diagrams for boundaries and flows. |
-| 3 | [`implementor.agent.md`](.github/agents/implementor.agent.md) | `@implementor` | Implement code and tests from architecture + Gherkin; TDD aligned with acceptance criteria. |
-| 4 | [`verifier.agent.md`](.github/agents/verifier.agent.md) | `@verifier` | Audit vs architecture, run tests, report gaps or update `docs/traceability_matrix.md` on success. |
+| 3 | [`planner.agent.md`](.github/agents/planner.agent.md) | `@planner` | Decompose the change into self-contained work items under `docs/work-items/` (template: `docs/templates/work-item-template.md`). **Stops before implementation** — the human runs each item in a fresh chat. |
+| 4 | [`implementor.agent.md`](.github/agents/implementor.agent.md) | `@implementor` | Implement code and tests from a work item (or architecture + Gherkin when no work item); TDD aligned with acceptance criteria. **One work item per chat session.** |
+| 5 | [`verifier.agent.md`](.github/agents/verifier.agent.md) | `@verifier` | Audit vs architecture, run tests, report gaps or update `docs/traceability_matrix.md` on success. |
 
 **Handoffs:** Each agent’s instructions end with who to invoke next; follow that chain unless you intentionally revisit an earlier stage.
+
+**Work-item loop (after `@planner`):** For each `docs/work-items/WI-*.md` file, the human opens a **new** Cursor chat, sets the **Model** advised in that file, loads the work item as context, and invokes **`@implementor`**. When all items are complete, invoke **`@verifier`** in a fresh chat.
 
 ## Local build and run (REQ-008)
 
@@ -34,6 +37,8 @@ Create and maintain these as the process runs (templates define shape):
 - `docs/templates/requirement-template.md`
 - `docs/templates/acceptance-criteria-template.md`
 - `docs/templates/traceability-matrix-template.md`
+- `docs/templates/work-item-template.md`
+- `docs/work-items/` (work items produced by `@planner`; index in `docs/work-items/README.md`)
 
 If a template file is missing, add it before strict compliance with “MUST use template” steps is possible.
 
@@ -41,6 +46,7 @@ If a template file is missing, add it before strict compliance with “MUST use 
 
 - **Requirements:** No implementation; no Go/TS source or deployment manifests.
 - **Architect:** No application source; specifications and diagrams only.
+- **Planner:** No application source; work-item Markdown under `docs/work-items/` only. Does not invoke **@implementor** — the human bootstraps each item manually.
 - **Implementor:** Code + tests; escalate spec conflicts to **@architect** rather than inventing divergent architecture.
 - **Verifier:** No application code changes; audit, test execution, reports, and traceability updates only.
 

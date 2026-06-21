@@ -1,9 +1,23 @@
-# Work items: camera-based model capture (REQ-047, REQ-048, REQ-049)
+# Work items
 
-This folder breaks the implementation of the camera-capture feature into small,
-independent work items. **Each `WI-*.md` file is a self-contained prompt**: you can
-start a fresh chat with only that file's contents and the agent has everything it
-needs (it points back to the relevant requirement IDs and architecture sections).
+This folder holds **implementable units** produced by the **`@planner`** agent (see
+[`AGENTS.md`](../../AGENTS.md) and [`docs/templates/work-item-template.md`](../templates/work-item-template.md)).
+
+**Each `WI-*.md` file is a self-contained bootstrap prompt.** To run one:
+
+1. Open a **new** Cursor chat (one item per session).
+2. Set the chat **Model** to the size listed in the work item (**Small/fast** → Composer 2.5, **Medium** → Sonnet, **Hard** → Opus).
+3. Attach or paste the work-item file as context.
+4. Invoke **`@implementor`** and ask it to complete the item.
+
+When all items for a change are done, start a fresh chat with **`@verifier`**.
+
+---
+
+## Camera-based model capture (REQ-047, REQ-048, REQ-049)
+
+The items below break the camera-capture feature into small, independent work items.
+Each file points back to the relevant requirement IDs and architecture sections.
 
 Source specs (read-only background, already merged):
 
