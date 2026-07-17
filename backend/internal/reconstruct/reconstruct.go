@@ -1,7 +1,7 @@
 // Package reconstruct manages async video-to-model reconstruction jobs.
 //
 // Jobs are held in memory only; a job lost to a process restart is acceptable
-// per the design notes in docs/work-items/WI-06-reconstruction-orchestration.md.
+// per the design in docs/design/architecture.md (reconstruction orchestration).
 // The confirmed model is the only artefact that is persisted (via the store).
 package reconstruct
 

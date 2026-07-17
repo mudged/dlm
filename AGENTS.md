@@ -1,94 +1,86 @@
-# Agent workflow (multi-agent development)
+# Agent workflow
 
-This repo uses a **spec-driven, multi-agent** process. Agent definitions live under [`.github/agents/`](.github/agents/). Each definition is a Markdown file with YAML frontmatter (`name`, `description`) and instructions the AI should follow when acting in that role.
+This repo uses the **[Superpowers](https://github.com/obra/superpowers)** methodology for AI-assisted
+development. Superpowers is a set of composable skills that make the agent work like a disciplined
+engineer: it brainstorms a spec, writes a plan, implements with test-driven development, reviews, and
+verifies before claiming done. Project-specific knowledge lives under [`docs/`](docs/) and is
+referenced below.
+
+> **Note:** This repository previously used a five-persona pipeline (`@requirements`, `@architect`,
+> `@planner`, `@implementor`, `@verifier`) with work items and a traceability matrix. That approach
+> has been retired in favor of Superpowers; the knowledge those personas produced now lives in
+> [`docs/`](docs/).
+
+## Install Superpowers (one-time, per developer)
+
+Superpowers is a Cursor plugin, installed client-side (not committed to this repo). In Cursor Agent
+chat:
+
+```text
+/add-plugin superpowers
+```
+
+Or search for "superpowers" in the Cursor plugin marketplace. Once installed, the skills trigger
+automatically. See the [Superpowers README](https://github.com/obra/superpowers) for other hosts and
+details.
 
 ## Product context
 
-- **Backend:** Go (HTTP API/service).
-- **Frontend:** Next.js with Tailwind CSS; UI must be **responsive** (mobile, tablet, desktop).
-- **Deployment target:** Raspberry Pi 4 Model B (plan for ARM64, constrained CPU/RAM, and a clear run model for the Go process and the Next.js build).
+- **Backend:** Go (HTTP API/service), single self-contained binary, pure Go, no cgo.
+- **Frontend:** Next.js with Tailwind CSS; UI must be **responsive** (mobile, tablet, desktop). It is
+  built to a static export and embedded into the Go binary.
+- **Deployment target:** Raspberry Pi 4 Model B (ARM64, constrained CPU/RAM).
 
-## Agent pipeline (order)
+## Project knowledge map (`docs/`)
 
-| Order | Agent file | Cursor invoke | Responsibility |
-|------:|------------|---------------|----------------|
-| 1 | [`requirements.agent.md`](.github/agents/requirements.agent.md) | `@requirements` | Turn intent into `docs/requirements.md` and `docs/acceptance_criteria.md` (templates under `docs/templates/`). |
-| 2 | [`architect.agent.md`](.github/agents/architect.agent.md) | `@architect` | Produce `docs/architecture.md` with Go + Next.js structure, Pi deployment notes, and **Mermaid** diagrams for boundaries and flows. |
-| 3 | [`planner.agent.md`](.github/agents/planner.agent.md) | `@planner` | Decompose the change into self-contained work items under `docs/work-items/` (template: `docs/templates/work-item-template.md`). **Stops before implementation** — the human runs each item in a fresh chat. |
-| 4 | [`implementor.agent.md`](.github/agents/implementor.agent.md) | `@implementor` | Implement code and tests from a work item (or architecture + Gherkin when no work item); TDD aligned with acceptance criteria. **One work item per chat session.** |
-| 5 | [`verifier.agent.md`](.github/agents/verifier.agent.md) | `@verifier` | Audit vs architecture, run tests, report gaps or update `docs/traceability_matrix.md` on success. |
+Read the relevant area before making changes. Index: [`docs/README.md`](docs/README.md).
 
-**Handoffs:** Each agent’s instructions end with who to invoke next; follow that chain unless you intentionally revisit an earlier stage.
+| Area | Use it for |
+|------|-----------|
+| [`docs/requirements/`](docs/requirements/) | What to build: requirements (`REQ-*`) and Gherkin acceptance criteria. |
+| [`docs/design/`](docs/design/) | How it is designed: [`architecture.md`](docs/design/architecture.md) (service, frontend, deployment, diagrams). |
+| [`docs/engineering/`](docs/engineering/) | How to build/generate code: [coding standards](docs/engineering/coding-standards.md), [build and run](docs/engineering/build-and-run.md), [CI and release](docs/engineering/ci-and-release.md), [CV runtime](docs/engineering/cv-runtime.md), [environment and API](docs/engineering/environment-and-api.md). |
+| [`docs/userguide/`](docs/userguide/) | How the end user operates the software. |
 
-**Work-item loop (after `@planner`):** For each `docs/work-items/WI-*.md` file, the human opens a **new** Cursor chat, sets the **Model** advised in that file, loads the work item as context, and invokes **`@implementor`**. When all items are complete, invoke **`@verifier`** in a fresh chat.
+Requirements and acceptance criteria are **authoritative**. If implementation reveals a genuine
+conflict with the design, update the specification first (see
+[`docs/engineering/coding-standards.md`](docs/engineering/coding-standards.md)).
 
-## Local build and run (REQ-008)
+## Local build and run
 
-**REQ-008** (see `docs/requirements.md`) requires a **single documented command** (script or Makefile target) that builds the Next static export for embed and starts the Go server. **`README.md` MUST stay aligned** with that command: the hobbyist-facing README documents **`./scripts/run.sh`** from the repo root as the primary way to install and run (see **[README.md](README.md)**). **`README.md` MUST NOT** mention internal requirement IDs (`REQ-*`), traceability, or other identifiers that only exist in `docs/`—those belong in specifications and **[docs/advanced-setup.md](docs/advanced-setup.md)** for contributors. When changing how the app is built or launched locally, update **requirements/architecture** if behavior changes, then **README** (keep it approachable), **docs/advanced-setup.md** (technical detail), then implementation.
+The supported one-command build-and-run is **`./scripts/run.sh`** from the repo root. It builds the
+Next.js static export into the Go embed tree and starts the Go server on
+[http://127.0.0.1:8080/](http://127.0.0.1:8080/). Full detail (prerequisites, env vars, dev
+two-process workflow, cross-compilation) is in
+[`docs/engineering/build-and-run.md`](docs/engineering/build-and-run.md).
 
-## Supporting documents (expected paths)
+**`README.md`** is the hobbyist-facing landing page and must stay approachable: document
+`./scripts/run.sh` and point at the [user guide](docs/userguide/); do **not** put internal
+requirement IDs (`REQ-*`) in it — those belong in `docs/`.
 
-Create and maintain these as the process runs (templates define shape):
-
-- `docs/requirements.md`
-- `docs/acceptance_criteria.md`
-- `docs/architecture.md`
-- `docs/traceability_matrix.md` (after successful verification)
-- `docs/templates/requirement-template.md`
-- `docs/templates/acceptance-criteria-template.md`
-- `docs/templates/traceability-matrix-template.md`
-- `docs/templates/work-item-template.md`
-- `docs/work-items/` (work items produced by `@planner`; index in `docs/work-items/README.md`)
-
-If a template file is missing, add it before strict compliance with “MUST use template” steps is possible.
-
-## Boundaries (by role)
-
-- **Requirements:** No implementation; no Go/TS source or deployment manifests.
-- **Architect:** No application source; specifications and diagrams only.
-- **Planner:** No application source; work-item Markdown under `docs/work-items/` only. Does not invoke **@implementor** — the human bootstraps each item manually.
-- **Implementor:** Code + tests; escalate spec conflicts to **@architect** rather than inventing divergent architecture.
-- **Verifier:** No application code changes; audit, test execution, reports, and traceability updates only.
-
-## Validation notes (agent files)
-
-The agent files were aligned with this stack and deployment target: **Maven / Vert.x / Java** references in the architect role were replaced with **Go module layout, Next.js + Tailwind structure, and Raspberry Pi 4 deployment** planning. The requirements role no longer refers only to “Java.”
-
-When editing `.github/agents/*.agent.md`, keep frontmatter valid, preserve the handoff at the end of each workflow, and update this file if the pipeline or document paths change.
-
-## Cursor Cloud specific instructions
-
-### System dependencies
-
-- **Go ≥ 1.25** is required (`go.mod` declares `go 1.25.0`). The VM update script installs Go 1.25.x automatically. Verify with `go version`.
-- **Node.js LTS** (22.x) and **npm** are pre-installed and sufficient.
-
-### Key commands (see `README.md` for full table)
+## Key commands
 
 | Task | Command |
 |------|---------|
+| Build + run (embed UI, start server) | `./scripts/run.sh` from repo root |
 | Install frontend deps | `cd web && npm ci` |
 | Download Go deps | `cd backend && go mod download` |
 | Frontend lint | `cd web && npm run lint` |
 | Frontend tests | `cd web && npm test` |
 | Go tests | `cd backend && go test ./...` |
-| Build + run (REQ-008) | `./scripts/run.sh` from repo root |
 | Dev: Go server only | `cd backend && go run ./cmd/server` (serves on `:8080`) |
 | Dev: Next.js hot-reload | `cd web && npm run dev` (`:3000`, proxies API to `:8080`) |
 
-### Running the app
+## Environment and gotchas
 
-1. Build the frontend static export and copy it into the Go embed tree: `cd web && npm run release:sync`
-2. Start the Go server: `cd backend && go run ./cmd/server`
-3. The app is at `http://127.0.0.1:8080/`
+- **Go ≥ 1.25** is required (`backend/go.mod` declares `go 1.25.0`); the default system Go (1.22) will
+  refuse to build. Ensure a 1.25.x toolchain is on `PATH` (`/usr/local/go/bin` on Cursor Cloud).
+- **No external services** — SQLite is embedded (pure Go). The DB auto-creates at `data/dlm.db`.
+- **Sample data** — a fresh/empty DB seeds 3 models (sphere, cube, cone) and 3 Python routines.
+- **CSV upload** — `POST /api/v1/models` expects field name `file`; header exactly `id,x,y,z`; light
+  IDs 0-based sequential.
+- **`next build`** is the slow step; use `DLM_SKIP_NPM_CI=1 ./scripts/run.sh` to skip `npm ci` on
+  repeat runs.
 
-Alternatively, `./scripts/run.sh` does both steps (plus `npm ci` if `node_modules` is missing).
-
-### Gotchas
-
-- **`go.mod` says `go 1.25.0`** — the default system Go (1.22) will refuse to build. The update script installs Go 1.25.x to `/usr/local/go`. Ensure `/usr/local/go/bin` is on `PATH`.
-- **No external services** — SQLite is embedded (pure Go, no CGO). Database file auto-creates at `data/dlm.db`. No Docker, Redis, or Postgres needed.
-- **Sample data** — on first start with an empty DB, 3 sample models (sphere, cube, cone) are auto-seeded. Deleting all models and restarting re-seeds them.
-- **CSV upload field name** — the `POST /api/v1/models` endpoint expects the CSV file under field name `file` (not `csv`), and the CSV header must be exactly `id,x,y,z`. Light IDs must be **0-based sequential** integers (0, 1, 2, …); 1-based IDs will fail validation.
-- **`next build`** is the slow step (~30–120 s). The `.next/` cache speeds up subsequent builds. Use `DLM_SKIP_NPM_CI=1 ./scripts/run.sh` to skip `npm ci` on repeat runs.
-- **Next.js dev + SSE (live light updates)** — `npm run dev` rewrites buffer `text/event-stream`, so the UI opens EventSource against `http://127.0.0.1:8080` directly (`web/lib/sseUrl.ts`). The Go server defaults `CORS_ALLOWED_ORIGINS` to common Next dev origins on `:3000` and `:8000` (`localhost` + `127.0.0.1`); override it for other page origins, or set `NEXT_PUBLIC_DLM_API_ORIGIN` to match your API. `./scripts/run.sh` serves UI and API on the same origin and does not need this.
+Full detail: [`docs/engineering/build-and-run.md`](docs/engineering/build-and-run.md) and
+[`docs/engineering/environment-and-api.md`](docs/engineering/environment-and-api.md).

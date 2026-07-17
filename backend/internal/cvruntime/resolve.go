@@ -46,7 +46,7 @@ func resolve() (string, error) {
 		"cvruntime: no CV runtime bundle found for %s/%s; "+
 			"set DLM_CV_RUNTIME_DIR to an extracted bundle path, "+
 			"or place the bundle at %s%cruntime%ccv%c "+
-			"(see docs/advanced-setup.md §\"CV runtime bundle\" for build instructions)",
+			"(see docs/engineering/cv-runtime.md for build instructions)",
 		runtime.GOOS, runtime.GOARCH,
 		filepath.Dir(exe), filepath.Separator, filepath.Separator, filepath.Separator,
 	)

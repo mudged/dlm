@@ -9,12 +9,11 @@
 // upgrade; keeping the resolver pluggable (resolve.go) makes the switch cheap.
 //
 // For bundle build instructions and on-disk footprint estimates see:
-// docs/advanced-setup.md §CV runtime bundle.
-// WI-09 will expand that section with operator-facing setup notes.
+// docs/engineering/cv-runtime.md.
 package cvruntime
 
 // JobSpec is the JSON payload written to a temp file and passed to the CV child
-// process as its first argument.  Mirrors the contract in docs/work-items/WI-04.
+// process as its first argument.  See docs/engineering/cv-runtime.md.
 type JobSpec struct {
 	Feeds     []FeedRef `json:"feeds"`
 	Marker    *Marker   `json:"marker,omitempty"`

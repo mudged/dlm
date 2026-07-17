@@ -16,7 +16,7 @@ Pick the file that matches your system:
 | **Linux** PC or server (64-bit x86) | `dlm_linux_amd64.tar.gz` |
 | **Windows** 10 or 11 (64-bit) | `dlm_windows_amd64.exe` |
 
-Each **Linux** release is a `.tar.gz` archive containing the server binary **and** a bundled OpenCV runtime folder (`runtime/cv/`). Extract the archive and run the binary from the extracted directory so it can find that folder. The **Windows** release is a single executable; camera capture from video is not available on Windows yet (see [docs/advanced-setup.md](docs/advanced-setup.md)).
+Each **Linux** release is a `.tar.gz` archive containing the server binary **and** a bundled OpenCV runtime folder (`runtime/cv/`). Extract the archive and run the binary from the extracted directory so it can find that folder. The **Windows** release is a single executable; camera capture from video is not available on Windows yet (see [docs/engineering/cv-runtime.md](docs/engineering/cv-runtime.md)).
 
 ### Linux and Raspberry Pi (quick start)
 
@@ -36,7 +36,7 @@ Each **Linux** release is a `.tar.gz` archive containing the server binary **and
 
 3. Open **[http://127.0.0.1:8080/](http://127.0.0.1:8080/)** in your browser.
 
-Data is stored under a `data` folder in the **current working directory** by default (see environment variables in [docs/advanced-setup.md](docs/advanced-setup.md)).
+Data is stored under a `data` folder in the **current working directory** by default (see environment variables in [docs/engineering/environment-and-api.md](docs/engineering/environment-and-api.md)).
 
 ### Windows (quick start)
 
@@ -48,7 +48,7 @@ Data is stored under a `data` folder in the **current working directory** by def
 
 The app can run **automated Python routines** that change lights through a built-in editor. That feature needs **Python 3** on the **same machine as the server**, with `python3` available on your PATH. If Python is not installed, the rest of the app still works; only starting a Python routine will fail until you install Python.
 
-You can point the server at a specific interpreter by setting **`DLM_PYTHON3`** (see [docs/advanced-setup.md](docs/advanced-setup.md)).
+You can point the server at a specific interpreter by setting **`DLM_PYTHON3`** (see [docs/engineering/environment-and-api.md](docs/engineering/environment-and-api.md)).
 
 ### Camera capture (no extra install)
 
@@ -166,15 +166,15 @@ The OpenCV runtime used for reconstruction is bundled with the Linux release—n
 
 ## Live light updates for integrators
 
-The server pushes light changes with **Server-Sent Events** so clients do not need to poll rapidly. For batch HTTP updates when changing many lights, prefer the batch routes documented in **[docs/architecture.md](docs/architecture.md)** instead of one request per light—this keeps performance reasonable on small hardware when many lights update often.
+The server pushes light changes with **Server-Sent Events** so clients do not need to poll rapidly. For batch HTTP updates when changing many lights, prefer the batch routes documented in **[docs/design/architecture.md](docs/design/architecture.md)** instead of one request per light—this keeps performance reasonable on small hardware when many lights update often.
 
 - **Model stream:** `GET /api/v1/models/{id}/lights/events` (`text/event-stream`) sends JSON `data:` lines shaped like `{ "seq": <uint64>, "deltas": [ { "light_id", "on"?, "color"?, "brightness_pct"? }, ... ] }`; `model_id` is implicit from the URL.
 - **Scene stream:** `GET /api/v1/scenes/{id}/lights/events` sends `{ "seq": <uint64>, "deltas": [ { "model_id", "light_id", "on"?, "color"?, "brightness_pct"? }, ... ] }`.
-- Clients should apply each event’s `deltas[]` incrementally (see **[docs/architecture.md](docs/architecture.md)** §3.18). Resync with `GET .../lights/state`, `GET /api/v1/models/{id}`, or `GET /api/v1/scenes/{id}` only when the sequence number skips or `EventSource.onerror` fires.
+- Clients should apply each event’s `deltas[]` incrementally (see **[docs/design/architecture.md](docs/design/architecture.md)** §3.18). Resync with `GET .../lights/state`, `GET /api/v1/models/{id}`, or `GET /api/v1/scenes/{id}` only when the sequence number skips or `EventSource.onerror` fires.
 
 ## More for developers and advanced users
 
-Scripts, optional environment variables, developing with two terminals (live-reload UI + API), continuous integration, cutting releases, API performance tips, and troubleshooting live updates are in **[docs/advanced-setup.md](docs/advanced-setup.md)**.
+Scripts, optional environment variables, developing with two terminals (live-reload UI + API), continuous integration, cutting releases, API performance tips, and troubleshooting live updates are in **[docs/engineering/](docs/engineering/)** — start with [build and run](docs/engineering/build-and-run.md), [environment and API](docs/engineering/environment-and-api.md), and [CI and release](docs/engineering/ci-and-release.md). The full end-user guide is in **[docs/userguide/](docs/userguide/)**.
 
 ## License
 

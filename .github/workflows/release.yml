@@ -1,7 +1,7 @@
 # Release: tag push (v*) builds embedded UI + cross-compiled binaries and uploads to GitHub Releases.
 #
 # Each Linux release asset is a tar.gz archive containing the dlm binary AND the
-# bundled CV runtime (mechanism B, see docs/advanced-setup.md §"CV runtime bundle"):
+# bundled CV runtime (mechanism B, see docs/engineering/cv-runtime.md):
 #
 #   dlm_linux_arm64.tar.gz
 #     dlm_linux_arm64          — Go binary

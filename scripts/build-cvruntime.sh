@@ -2,7 +2,7 @@
 # build-cvruntime.sh — Build a self-contained OpenCV+Python CV runtime bundle.
 #
 # Packaging mechanism: B — sibling asset alongside the release binary.
-# See docs/architecture.md §3.23.1 and docs/advanced-setup.md §"CV runtime bundle".
+# See docs/design/architecture.md §3.23.1 and docs/engineering/cv-runtime.md.
 #
 # Usage (from repository root):
 #   GOOS=linux GOARCH=arm64  scripts/build-cvruntime.sh
