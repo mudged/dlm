@@ -114,7 +114,8 @@ Keep your **`data`** directory (or whatever you set **`DLM_DATA_DIR`** / **`DLM_
 
 ## Build from source (developers)
 
-Use this path when you are working on the project or building yourself.
+Use this path when you are working on the project or building yourself. If you plan to contribute,
+start with **[CONTRIBUTING.md](CONTRIBUTING.md)** for one-time setup (including the Superpowers plugin).
 
 ### What you need installed
 

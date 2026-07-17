@@ -11,19 +11,6 @@ referenced below.
 > has been retired in favor of Superpowers; the knowledge those personas produced now lives in
 > [`docs/`](docs/).
 
-## Install Superpowers (one-time, per developer)
-
-Superpowers is a Cursor plugin, installed client-side (not committed to this repo). In Cursor Agent
-chat:
-
-```text
-/add-plugin superpowers
-```
-
-Or search for "superpowers" in the Cursor plugin marketplace. Once installed, the skills trigger
-automatically. See the [Superpowers README](https://github.com/obra/superpowers) for other hosts and
-details.
-
 ## Product context
 
 - **Backend:** Go (HTTP API/service), single self-contained binary, pure Go, no cgo.
