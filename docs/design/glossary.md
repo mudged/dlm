@@ -29,8 +29,10 @@ Part of the [dlm architecture](architecture.md).
 
 ## Backend / Go terms
 
-- **Single binary** — the whole product ships as one executable file with the web UI embedded
-  inside it; there is no separate web server or database server to install.
+- **Single binary** — the product app is one Go executable with the web UI embedded inside it; there
+  is no separate web server or database server to install. On Linux the release archive may also
+  include a sibling `runtime/cv/` directory next to that binary (camera capture); Windows may ship as
+  a bare `.exe`.
 - **embed / `//go:embed`** — a Go feature that bakes files (here, the built web UI) into the compiled
   binary so they ship as part of the executable.
 - **cgo** — Go's mechanism for calling C code. dlm avoids it ("pure Go, no cgo") because it

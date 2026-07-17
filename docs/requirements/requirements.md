@@ -78,11 +78,12 @@ curious.
 - **Made for a Raspberry Pi 4.** The app is designed to run happily on a **Raspberry Pi 4 Model B**,
   which is a small computer with limited memory and processing power (its chip is an "ARM64" type). The
   design keeps this in mind so it doesn't hog more than the little Pi can give.
-- **One file to run.** When you install it, you get **a single program file** — copy it across, run it,
-  done. You do *not* need to install a pile of other software or juggle "containers" (Docker). Anything
-  extra the app needs is either baked inside that one file or created automatically when it starts. The
-  only acceptable helper is a small system file that simply tells the computer to launch the app on
-  startup.
+- **Simple to install.** When you install it, you get **one download per platform** — on Linux that may
+  be a `.tar.gz` containing the app plus a small `runtime/cv/` folder that must stay next to it; on
+  Windows it may be a bare `.exe`. Copy it across, run it, done. You do *not* need to install a pile of
+  other software or juggle "containers" (Docker). Anything extra the app needs is either baked inside
+  the program, shipped beside it in that archive, or created automatically when it starts. The only
+  acceptable helper is a small system file that simply tells the computer to launch the app on startup.
 - **One command for developers.** Someone working on the app can build and start everything with a
   **single command** from the project folder, instead of following a long checklist.
 
@@ -463,18 +464,21 @@ don't have to keep the tab open the whole time.
 
 Finally, the practical side of shipping the app to real people:
 
-- **Ready-made downloads.** The app is published as a **single program file for each platform**:
-  **Windows**, **regular Linux**, and **Linux on ARM** (for the Raspberry Pi). No building from source
-  required.
+- **Ready-made downloads.** The app is published as **one download per platform**: **Windows** (may be
+  a bare `.exe`), **regular Linux**, and **Linux on ARM** (for the Raspberry Pi). Linux releases may
+  ship as a `.tar.gz` with the program plus the `runtime/cv/` folder used for "build from video". No
+  building from source required.
 - **Automatic building and testing.** The project uses **GitHub Actions** to build and test the code
   automatically whenever someone proposes a change (and those checks must pass before it's accepted),
   and to publish the downloadable files when a new version is released.
-- **Almost nothing to install.** To run the app you normally just need that one file. The **only**
-  exception is if you want to run your own **Python** routines — then you need Python installed on the
-  machine. (Everything else, including the no-code shape animations, works without it.)
-- **Friendly setup guide.** The main README explains, in plain language, how to download the right file,
-  run it on a Raspberry Pi so it starts automatically on boot, and update it later when a new version
-  comes out.
+- **Almost nothing to install.** To run the app you normally just need that download (and on Linux,
+  keeping `runtime/cv/` next to the program). The **only** extra exception is if you want to run your
+  own **Python** routines — then you need Python installed on the machine. (Everything else, including
+  the no-code shape animations and video-based model building, works without a separate Python install.)
+- **Friendly setup guide.** The [user guide](../userguide/) explains, in plain language, how to
+  download the right file, run it, set it up on a Raspberry Pi so it starts automatically on boot, and
+  update it later when a new version comes out. The main README stays a short landing page that points
+  there.
 
 ---
 
@@ -489,7 +493,7 @@ described, so those references still make sense.
 | REQ-001 | Go "brain" + Next.js/Tailwind "face" | §3 How the app is built |
 | REQ-002 | Works on phone, tablet, desktop | §3 How the app is built |
 | REQ-003 | Runs on a Raspberry Pi 4 | §3 How the app is built |
-| REQ-004 | Ships as one single program file | §3 How the app is built |
+| REQ-004 | Simple install: one download per platform | §3 How the app is built |
 | REQ-005 | The model: lights, numbering, CSV | §4 Models |
 | REQ-006 | List, view, delete, upload models | §4 Models |
 | REQ-007 | Checking the CSV before saving | §4 Models |
@@ -528,10 +532,10 @@ described, so those references still make sense.
 | REQ-040 | Stop finishes within two seconds | §8 Routines |
 | REQ-041 | Server pushes only what changed | §6 Controlling the lights |
 | REQ-042 | Catching up when you return to a scene | §8 Routines |
-| REQ-043 | One download per platform | §12 Getting it running |
+| REQ-043 | One download per platform (Linux may be .tar.gz) | §12 Getting it running |
 | REQ-044 | Automatic build/test + releases | §12 Getting it running |
 | REQ-045 | What you need installed to run it | §12 Getting it running |
-| REQ-046 | The setup guide in the README | §12 Getting it running |
+| REQ-046 | Setup guide (README → user guide) | §12 Getting it running |
 | REQ-047 | Capture sweep (blink lights in order) | §11 Building a model from video |
 | REQ-048 | 3D positions from videos (OpenCV) | §11 Building a model from video |
 | REQ-049 | Create a model from uploaded videos | §11 Building a model from video |

@@ -60,8 +60,40 @@ func TestPatchSceneLightsSceneAndBatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res2.UpdatedCount != 0 || !res2.UnchangedAll || len(res2.States) != 2 {
+	if res2.UpdatedCount != 0 || !res2.UnchangedAll || len(res2.States) != 0 {
 		t.Fatalf("idempotent scene patch want 0 writes unchanged_all, got %+v", res2)
+	}
+}
+
+func TestPatchSceneLightsSceneReturnsOnlyChangedLights(t *testing.T) {
+	ctx := context.Background()
+	s := testDB(t)
+	sum, err := s.Create(ctx, "m1", []wiremodel.Light{
+		{ID: 0, X: 0, Y: 0, Z: 0},
+		{ID: 1, X: 1, Y: 0, Z: 0},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sc, err := s.CreateScene(ctx, "s1", []string{sum.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	on := true
+	if _, err := s.PatchSceneLightsBatch(ctx, sc.ID, []SceneBatchLightUpdate{
+		{ModelID: sum.ID, LightID: 0, Patch: LightStatePatch{On: &on}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	res, err := s.PatchSceneLightsScene(ctx, sc.ID, LightStatePatch{On: ptrBool(true)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.UnchangedAll || res.UpdatedCount != 1 || len(res.States) != 1 {
+		t.Fatalf("mixed scene patch want one changed light, got %+v", res)
+	}
+	if res.States[0].ID != 1 || !res.States[0].On {
+		t.Fatalf("want only changed light 1, got %+v", res.States[0])
 	}
 }
 

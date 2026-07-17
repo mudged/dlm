@@ -30,7 +30,7 @@ export type CaptureJobResult = {
 
 export type CaptureJobStatus =
   | "pending"
-  | "processing"
+  | "running"
   | "succeeded"
   | "failed";
 

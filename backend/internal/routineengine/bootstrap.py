@@ -52,7 +52,7 @@ async def _refresh_dims():
 
 
 class Scene:
-    """Async scene shim — same routes as §3.15 / dlm-python-scene-worker.mjs."""
+    """Async scene shim — same routes as §3.15; catalog/bootstrap is the sole production surface."""
 
     def random_hex_colour(self) -> str:
         return "#%06x" % random.randrange(0x1000000)

@@ -1,6 +1,7 @@
 /**
  * REQ-032: full novice sample routines — single source for catalog + toolbar.
- * Keep in sync with `public/dlm-python-scene-worker.mjs` (`scene` API).
+ * Keep in sync with `backend/internal/routineengine/bootstrap.py` (`scene` API)
+ * and `pythonSceneApiCatalog.ts`.
  *
  * Each run executes one short step; state lives in `_grow` / `_sweep` dicts so
  * Stop stays responsive (no long inner loops inside one `runPythonAsync` call).

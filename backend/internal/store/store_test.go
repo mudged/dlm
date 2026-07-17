@@ -327,7 +327,7 @@ func TestStore_BatchPatchLightStates(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !allNoop || len(st3) != 2 {
+	if !allNoop || len(st3) != 0 {
 		t.Fatalf("idempotent batch want unchanged_all, got %+v unchanged=%v", st3, allNoop)
 	}
 
@@ -380,7 +380,7 @@ func TestStore_ResetAllLightStates_noopWhenAlreadyDefault(t *testing.T) {
 		t.Fatal(err)
 	}
 	states, unchangedAll, err := s.ResetAllLightStates(ctx, sum.ID)
-	if err != nil || len(states) != 1 {
+	if err != nil || len(states) != 0 {
 		t.Fatalf("ResetAllLightStates: %v %+v", err, states)
 	}
 	if !unchangedAll {

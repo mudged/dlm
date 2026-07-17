@@ -221,18 +221,22 @@ does). No coding knowledge needed — just follow the steps.
 
 **There's a download for each platform.**
 - Try: look at the project's releases.
-- You should see: a single program file for **Windows**, **Linux**, and **Linux on ARM** (Raspberry Pi).
+- You should see: one download each for **Windows**, **Linux**, and **Linux on ARM** (Raspberry Pi) —
+  Windows may be a bare program file; Linux may be a `.tar.gz` with the program plus a `runtime/cv/`
+  folder that stays next to it.
 
 **Changes are built and tested automatically.**
 - Try: propose a change to the project.
 - You should see: automated build-and-test checks run, and they must pass before the change is accepted.
 
 **Running it needs almost nothing installed.**
-- Try: download the file and run it on a fresh machine.
+- Try: download the right asset and run it on a fresh machine (on Linux: unpack the archive and keep
+  `runtime/cv/` beside the program).
 - You should see: the app starts and the web page opens, with no extra installs — except that running
   your own **Python** routines needs Python on the machine.
 
-**The README explains setup in plain words.**
-- Try: read the main README as a hobbyist.
-- You should see: how to download the right file, run it on a Raspberry Pi so it starts on boot, and
-  update it later — no jargon or internal codes.
+**Setup is explained in plain words.**
+- Try: read the main README, then follow its link to the user guide.
+- You should see: a short README landing page, and in the user guide how to download the right file,
+  run it, set it up on a Raspberry Pi so it starts on boot, and update it later — no jargon or
+  internal codes.

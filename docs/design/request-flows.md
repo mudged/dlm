@@ -557,7 +557,7 @@ sequenceDiagram
   G->>S: UPDATE routine_runs stopped
   S-->>G: OK
   G->>RE: signal stop REQ-040
-  RE->>Py: cooperative then SIGTERM/SIGKILL
+  RE->>Py: cancel context / CommandContext kill
   G-->>Page: 200
 ```
 
@@ -610,7 +610,7 @@ sequenceDiagram
   P->>G: POST
   G->>S: UPDATE routine_runs stopped
   G->>RE: teardown §3.17 REQ-040
-  RE->>Py: SIGTERM then SIGKILL if needed
+  RE->>Py: cancel context / CommandContext kill
   G-->>Page: 200
 ```
 

@@ -26,7 +26,7 @@ A few domain terms used throughout:
 - **`internal/devices`:** CRUD for the `devices` table (§3.20); a WLED HTTP JSON API client; an optional discovery adapter (mDNS / subnet probe — not required for the MVP, the minimum viable product); and startup / post-assign sync with `LightStateStore` (§3.21).
 - **`internal/capture`:** The REQ-047 capture-sweep controller (§3.22). It runs one `time.Ticker`-driven server-side sweep per device that drives the `internal/devices` WLED client to light exactly one LED (`idx` `0 … light_count−1`) for a fixed ≈ 1 s dwell, then off. It does not route through `LightStateStore` (the device may be unassigned). Start/stop status is exposed via §3.2; stop or completion turns all swept LEDs off within REQ-040's 2 s.
 - **`internal/reconstruct`:** The REQ-048 / REQ-049 camera-capture orchestration (§3.23). It accepts uploaded video files into a work dir under `DLM_DATA_DIR`, runs an async job that invokes the bundled OpenCV child (`internal/cvruntime` — §3.23.1), parses its JSON result (per-light `x,y,z` plus missing / low-confidence lists), holds the candidate set in memory for review, and on confirm hands a validated `[]wiremodel.Light` to `internal/store` for the normal create transaction (§3.3, REQ-005 / REQ-007). It never persists a model before explicit confirm (REQ-049).
-- **`internal/cvruntime`:** The REQ-048 self-contained OpenCV + Python runtime bundle (`//go:embed` compressed, extracted on first use to `DLM_DATA_DIR/runtime/cv/<version>/`, or shipped as a sibling asset in the release archive — §3.23.1) plus the frozen `reconstruct` CV script. It resolves / extracts the interpreter and exposes a `Run(ctx, args) (result, error)` child-process wrapper. No operator `python3` install is required (contrast with §3.17 / REQ-045).
+- **`internal/cvruntime`:** The REQ-048 self-contained OpenCV + Python runtime bundle shipped as a sibling `runtime/cv/` directory next to the binary (mechanism B — §3.23.1 / §6.9) plus the frozen `reconstruct` CV script. It resolves the interpreter relative to the executable and exposes a `Run(ctx, args) (result, error)` child-process wrapper. No operator `python3` install is required (contrast with §3.17 / REQ-045).
 - **`internal/routineengine`:** One supervisor per active `routine_runs` row (§3.16): a `python3` child for `python_scene_script` (§3.17), or a Go `time.Ticker` for `shape_animation` (§3.17.2). It mutates lights via internal calls equivalent to §3.15 (or loopback `127.0.0.1` — implementor's choice) so REQ-021 / REQ-039 semantics still hold. `cmd/server` starts the scheduler on process boot (either resuming `running` rows or marking orphaned runs stopped — document the chosen policy).
 - **`internal/wiremodel`:** Parses and validates uploaded CSV (comma-separated values) per §3.6; returns structured errors for HTTP 400 responses (REQ-007).
 - **`internal/store`:** The SQLite repository (see §3.3, §3.12, §3.16). It persists models (geometry only for `lights` rows — §3.3), scenes, scene_models, routines, routine_runs, and device metadata. It does not store per-light `on` / `color` / `brightness` (REQ-039). It handles the idempotent seed (§3.8, §3.8.1) and factory reset (§3.14): factory reset MUST `DELETE` all `devices` rows (REQ-017 / REQ-035) before re-seeding.
@@ -86,11 +86,11 @@ A few domain terms used throughout:
 | API | `POST /api/v1/devices/{id}/capture/start` | REQ-047: Start the capture light sequence for the device (§3.22). **202** / **200** `{ "device_id", "state":"running", "light_count", "current_index":0 }`. **404** unknown device; **409** `capture_conflict` if a sweep is already running for this device or the device's assigned model is in an active routine run (§3.22); **422** `capture_no_lights` if `light_count = 0`. |
 | API | `POST /api/v1/devices/{id}/capture/stop` | REQ-047: Stop the running sweep; all swept LEDs off within REQ-040's 2 s. **200** `{ "device_id", "state":"idle" }` / **204**. **404** unknown device. |
 | API | `GET /api/v1/devices/{id}/capture` | REQ-047: Sweep status `{ "state":"idle"|"running", "light_count", "current_index"? }` (poll while recording). **404** unknown device. |
-| API | `POST /api/v1/models/capture` | REQ-048 / REQ-049: Create a reconstruction job from `multipart/form-data` with **two or more** `files` (video) + optional `marker` (fiducial dictionary/board id) and optional scale hints. **202** `{ "job_id", "status":"pending" }`. **400** if **< 2** files or unsupported container (§3.23). |
+| API | `POST /api/v1/models/capture` | REQ-048 / REQ-049: Create a reconstruction job from `multipart/form-data` with **two or more** `files` (video) + optional `marker` / `scale_hint`. When `marker=true` (or `1`), the handler fills the default printable ArUco marker (`Dictionary: "DICT_4X4_50"`, `EdgeLengthM: 0.1` — 100 mm); otherwise omit marker config. Optional `scale_hint` is a positive finite metres hint forwarded as `scale_hint_m`. **202** `{ "job_id", "status":"pending" }`. **400** if **< 2** files, unsupported container, or invalid `scale_hint` (§3.23). |
 | API | `GET /api/v1/models/capture/{jobId}` | REQ-048 / REQ-049: Job progress / result: `{ "status":"pending"|"running"|"succeeded"|"failed", "progress":0..1, "result"?: { "light_count", "lights":[{"id","x","y","z"}], "missing":[<id>], "low_confidence":[<id>] }, "error"? }` (§3.23). **404** unknown job. |
 | API | `POST /api/v1/models/capture/{jobId}/confirm` | REQ-049: Persist the reviewed result as a new model. Body `{ "name" }` (required, trimmed). Server re-validates the candidate lights with the same REQ-005 / REQ-007 rules and creates the model transactionally (§3.3). **201** model summary; **400** invalid name / validation failure; **404** unknown or non-`succeeded` job; **409** duplicate `name` (§3.3). |
 | API | `DELETE /api/v1/models/capture/{jobId}` | REQ-049: Cancel / discard the job and delete its uploaded work files. **204** / **404**. |
-| API | `GET /api/v1/capture/marker` | REQ-049: Return an optional printable fiducial marker artifact (PDF or PNG) with brief placement guidance; query selects `type` / `size` where offered (§3.23.2). Optional: never required to create a model. |
+| API | `GET /api/v1/capture/marker` | REQ-049: Return an optional printable fiducial marker artifact (PDF or PNG) with brief placement guidance; query may select `type` (PDF vs PNG). Default asset is ArUco `DICT_4X4_50`, id 0, 100 mm edge — same default as `marker=true` on `POST …/models/capture` (§3.23.2). Optional: never required to create a model. |
 | API | `/api/v1/*` | Other versioned JSON endpoints as the product grows. |
 | Static | `/`, `/*.html`, `/_next/**`, other export assets | Next static export tree from embed; SPA (single-page app) / HTML5 fallback policy: serve `index.html` for unmatched non-API GET if needed (implementor defines exact fallback rules). |
 
@@ -124,17 +124,17 @@ A few domain terms used throughout:
 
 **Single embed step (all targets):** Every release build MUST bake the same Next.js static export into `backend/internal/webdist/` (or the package `go:embed` reads from — see §3.5) before invoking `go build`. The canonical sequence matches `npm run release:sync` from `web/` (same contract as `scripts/run.sh` / REQ-008), normally executed once per CI job before cross-compilation so all `GOOS` / `GOARCH` binaries embed identical UI bytes.
 
-**Canonical release targets** (REQ-043) — normative `GOOS` / `GOARCH` triple:
+**Canonical release targets** (REQ-043) — normative `GOOS` / `GOARCH` triple and published asset names (§6.6):
 
-| GOOS | GOARCH | Primary use | Example artifact basename |
+| GOOS | GOARCH | Primary use | Published release asset |
 |------|--------|-------------|---------------------------|
-| `linux` | `arm64` | Raspberry Pi 4 / 5 (64-bit OS), REQ-003 | `dlm_linux_arm64` |
-| `linux` | `amd64` | Desktop / server Linux x86_64 | `dlm_linux_amd64` |
-| `windows` | `amd64` | Windows 10/11 x86_64 | `dlm_windows_amd64.exe` |
+| `linux` | `arm64` | Raspberry Pi 4 / 5 (64-bit OS), REQ-003 | `dlm_linux_arm64.tar.gz` (binary + sibling `runtime/cv/`) |
+| `linux` | `amd64` | Desktop / server Linux x86_64 | `dlm_linux_amd64.tar.gz` (binary + sibling `runtime/cv/`) |
+| `windows` | `amd64` | Windows 10/11 x86_64 | `dlm_windows_amd64.exe` (bare executable; CV bundle optional / pending) |
 
 **Optional:** `linux/arm` (ARMv7) MAY be added later for older 32-bit Pi OS installs; it is not part of the REQ-043 MUST set unless requirements change.
 
-**Cross-compile commands** (run from `backend/` after `internal/webdist/` is populated):
+**Cross-compile commands** (run from `backend/` after `internal/webdist/` is populated; Linux outputs are then packaged into the `.tar.gz` assets above):
 
 ```bash
 GOOS=linux  GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o ../dist/dlm_linux_arm64 ./cmd/server
@@ -146,9 +146,9 @@ GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o ../dist/dlm_win
 
 - Pure Go SQLite (`modernc.org/sqlite`) avoids cgo so `linux/arm64` builds can run on `ubuntu-latest` runners without an ARM builder for most configurations; if the implementation enables cgo, architecture MUST document Zig / `musl` or native ARM64 runners for Pi artifacts.
 - `-trimpath` and `-ldflags="-s -w"` reduce binary size (recommended for Pi SD cards); exact flags are implementor choice.
-- **Single file per platform:** each row is one executable per REQ-004; systemd / Windows Service wrappers are OS infrastructure, not a second product binary.
+- **One download per platform (REQ-004 / REQ-043):** Windows may ship as a bare `.exe`; Linux ships as a `.tar.gz` containing the Go binary plus sibling `runtime/cv/` (§3.23.1 / §6.9). The UI remains embedded in the Go binary. systemd / Windows Service wrappers are OS infrastructure, not a second product binary.
 
-**CI packaging:** Built files SHOULD be uploaded from a `dist/` (or `artifacts/`) directory at repo root with the stable names above so GitHub Releases assets are predictable (§6.8).
+**CI packaging:** Stage the §6.6 asset names from a `dist/` (or `artifacts/`) directory at repo root — Linux `.tar.gz` archives and the Windows `.exe` — so GitHub Releases assets are predictable (§6.8).
 
 ### 3.5 Embedding static UI
 
@@ -205,14 +205,14 @@ GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o ../dist/dlm_win
 
 **Surface placement (nominal solids, centered/aligned as today):**
 
-- **Nominal boundary:** the analytic surface of the intended sphere (radius R = 1.0 m, diameter 2 m, center origin), axis-aligned cube (edge 2 m, center origin, faces at ±1 m), or right circular cone (height 2 m, base radius 1 m, base in z = 0 plane, apex at (0,0,2) — or an equivalent consistent pose documented in code).
+- **Nominal boundary:** the analytic surface of the intended sphere (radius R = 1.0 m, diameter 2 m, center origin), axis-aligned cube (edge 2 m, center origin, faces at ±1 m), or right circular cone (height 2 m, base radius 1 m) in **Y-up** pose: base disk in the xz plane at y = 0, apex at `(0, h, 0)` — matching `samples/cone.go` (or an equivalent consistent pose documented there).
 - **Exterior only:** Each vertex MUST lie on the nominal boundary or in the thin outer shell allowed by requirements: the closest distance from the point to the nominal surface MUST be ≤ 0.03 m, and the point MUST not lie in the interior of the solid (e.g. sphere: ‖p‖ ≥ R − δ with δ tiny for float; cube: not strictly inside the 2×2×2 volume; cone: on or outside the lateral surface + base disk region as defined by the implementor's half-space test).
 
 **Coverage intent (REQ-009 "not edge-only"):**
 
 - **Cube:** Lights MUST be placed on all six exterior square face planes. A wireframe layout (vertices and edges only) is not sufficient. The majority of lights MUST lie in the interior of each face's square (parameterized patch), not only on edges or corners — architecture sets a quota: at least ⌊0.85 n⌋ lights MUST lie strictly in the open face patches (each coordinate on a face is inside the (−1,1)² parameter rectangle for that face, i.e. not on the rim of the square in face-local (u,v)). The remaining lights MAY be used for transitions between faces or to satisfy dᵢ if needed. **Evenness (cube):** Partition n across the six faces with counts differing by at most one (e.g. base q = ⌊n/6⌋, r = n mod 6 faces get q+1 lights). On each face, place that many points on a deterministic quasi-uniform 2D pattern in (u,v) (e.g. regular staggered grid, 2D Halton pairs, or boustrophedon rows) so area coverage is even within the face; document the chosen pattern in code comments.
 - **Sphere:** Lights MUST lie on ‖p‖ = R and MUST not read as concentrated on a single narrow strip or one 1D curve only. **Evenness (sphere):** Use a point set known for approximate equal area per point on the sphere (e.g. Fibonacci / golden-angle lattice, HEALPix-style construction, or subdivided icosahedron vertices). After placement, order into the final polyline (below) so REQ-010 still shows a connected path; the underlying set MUST pass tests that no hemisphere (or other fixed cap of bounded area) contains more than a documented fraction of lights (e.g. ≤ 55% of n in any closed hemisphere through the center) — implementor picks caps and thresholds to match acceptance tests.
-- **Cone:** Lights MUST cover both the lateral (curved) surface and the flat base disk (z = 0, ρ ≤ r). **Evenness (cone):** Split n between lateral and base in proportion to surface areas (lateral π r ℓ, base π r² with slant height ℓ), rounding with a deterministic rule so the two counts sum to n. On the lateral patch, use a (height, azimuth) quasi-uniform grid or spiral; on the base, use a polar or 2D quasi-uniform pattern in the disk. The same ≥ 85% rule as the cube applies within each part: at least ⌊0.85 n_lat⌋ lateral lights MUST lie in the interior of the lateral patch (not only on the rim or apex), and at least ⌊0.85 n_base⌋ base lights in the interior of the disk (ρ strictly between 0 and r), unless n for that part is too small — in which case document the degenerate exception in tests.
+- **Cone:** Lights MUST cover both the lateral (curved) surface and the flat base disk (y = 0, ρ ≤ r in xz). **Evenness (cone):** Split n between lateral and base in proportion to surface areas (lateral π r ℓ, base π r² with slant height ℓ), rounding with a deterministic rule so the two counts sum to n. On the lateral patch, use a (height along +Y, azimuth) quasi-uniform grid or spiral; on the base, use a polar or 2D quasi-uniform pattern in the disk. The same ≥ 85% rule as the cube applies within each part: at least ⌊0.85 n_lat⌋ lateral lights MUST lie in the interior of the lateral patch (not only on the rim or apex), and at least ⌊0.85 n_base⌋ base lights in the interior of the disk (ρ strictly between 0 and r), unless n for that part is too small — in which case document the degenerate exception in tests.
 
 **Ordering vs spacing (two-step design):**
 
@@ -347,7 +347,7 @@ Requirements demand both even 2D/area placement and consecutive dᵢ in [0.05, 0
 
 | Table | Columns | Notes |
 |-------|---------|--------|
-| `scenes` | `id` (TEXT UUID PK), `name` (TEXT NOT NULL, UNIQUE), `created_at` (TEXT RFC3339 UTC) | One row per scene. No row without ≥ 1 `scene_models` row after a successful create (transaction). |
+| `scenes` | `id` (TEXT UUID PK), `name` (TEXT NOT NULL, UNIQUE), `created_at` (TEXT RFC3339 UTC), `margin_m` (REAL NOT NULL DEFAULT 0.3) | One row per scene. No row without ≥ 1 `scene_models` row after a successful create (transaction). `margin_m` is the per-scene framing / query padding (REQ-015 BR 12 / REQ-034) — see Automatic bounds below and §3.15 `GetSceneDimensions`. |
 | `scene_models` | `scene_id` (TEXT FK → `scenes.id` ON DELETE CASCADE), `model_id` (TEXT FK → `models.id` ON DELETE RESTRICT or check before model delete), `offset_x`, `offset_y`, `offset_z` (INTEGER NOT NULL) | PK `(scene_id, model_id)` — each model at most once per scene. Offsets are signed integers interpreted as whole SI meters added to each light's `x`, `y`, `z` (float64) from `lights`. The API accepts only non-negative offsets; invalid combinations fail the containment checks below. |
 
 **Referential integrity:** Deleting a model MUST fail with **409** if any `scene_models` row references `model_id` (REQ-006 rule 5). Use `ON DELETE RESTRICT` on `scene_models.model_id` and/or an explicit pre-check in the handler so the JSON error matches `model_in_scenes` (§3.13).
@@ -360,7 +360,7 @@ Requirements demand both even 2D/area placement and consecutive dᵢ in [0.05, 0
 
 **Containment (authoritative in Go):** For every light in every model in the scene, `sx`, `sy`, `sz` MUST be ≥ 0 (treat tiny negative float noise < 1e-9 as 0 if needed — document ε). Violations → **400** on create / add / patch with `error.message` naming the model and axis where possible.
 
-**Automatic bounds / margin for rendering:** Let `Mmax_x`, `Mmax_y`, `Mmax_z` be the maxima of `sx`, `sy`, `sz` respectively over all lights in the scene. The visual / framing AABB (axis-aligned bounding box) uses origin `(0,0,0)` and upper corner `(Mmax_x + 1, Mmax_y + 1, Mmax_z + 1)` meters (≥ 1 m padding beyond the tight max per axis; mins at 0 per REQ-015). Camera framing (§4.9) uses this box (+ sphere radius for 2 cm markers).
+**Automatic bounds / margin for rendering:** The visual / framing AABB is the tight axis-aligned box over all scene-space light positions `(sx, sy, sz)`, expanded by the scene's persisted `margin_m` (default `0.3` SI metres on create) on **all six sides**. Lower corner = `max(0, min(s*) − margin_m)` per axis (min corner reduced then clamped ≥ 0); upper corner = `max(s*) + margin_m` per axis. This is the same box returned by `GET …/dimensions` / `GetSceneDimensions` (§3.15). Camera framing (§4.9) uses this padded box (+ sphere radius for 2 cm markers).
 
 **Canonical "right" axis (+X):** three.js's default camera looks toward −Z with +Y up; "to the right" of the existing layout means increasing scene `+X`. Document in UI copy if needed for the user mental model.
 

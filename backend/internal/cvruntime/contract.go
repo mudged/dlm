@@ -2,11 +2,13 @@
 // light-position reconstruction.  The Go binary itself stays pure-Go / cgo-free;
 // all CV work runs in a separate supervised child (see run.go).
 //
-// Packaging mechanism: B — the runtime bundle ships as a sibling directory to the
-// binary (dist/cvruntime/<goos>_<goarch>/) rather than being embedded inside the
-// binary.  This keeps the binary sizes manageable while still requiring no operator
-// Python install (REQ-048 BR5).  Mechanism A (go:embed) is a possible future
-// upgrade; keeping the resolver pluggable (resolve.go) makes the switch cheap.
+// Packaging mechanism: B — the runtime bundle ships as a sibling runtime/cv/
+// directory next to the binary (Linux release .tar.gz layout) rather than being
+// embedded inside the binary.  Build tooling may stage under
+// dist/cvruntime/<goos>_<goarch>/ before packaging; at runtime the resolver looks
+// beside the executable.  This keeps binary sizes manageable while still requiring
+// no operator Python install (REQ-048 BR5).  Mechanism A (go:embed) is a possible
+// future upgrade; keeping the resolver pluggable (resolve.go) makes the switch cheap.
 //
 // For bundle build instructions and on-disk footprint estimates see:
 // docs/engineering/cv-runtime.md.

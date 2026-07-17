@@ -23,6 +23,7 @@ import (
 // fakeReconstructCtrl is a minimal in-process reconstructCtrl for HTTP tests.
 type fakeReconstructCtrl struct {
 	jobs map[string]*reconstruct.Job
+	last reconstruct.CreateParams
 	next int
 }
 
@@ -30,7 +31,8 @@ func newFakeReconstructCtrl() *fakeReconstructCtrl {
 	return &fakeReconstructCtrl{jobs: make(map[string]*reconstruct.Job)}
 }
 
-func (f *fakeReconstructCtrl) Create(_ context.Context, files []io.Reader, _ []string, _ reconstruct.CreateParams) (string, error) {
+func (f *fakeReconstructCtrl) Create(_ context.Context, files []io.Reader, _ []string, p reconstruct.CreateParams) (string, error) {
+	f.last = p
 	if len(files) < 2 {
 		return "", errors.New("at least 2 video files are required")
 	}
@@ -106,9 +108,13 @@ func newCaptureModelsTestServer(t *testing.T) (*httptest.Server, *fakeReconstruc
 	return srv, fake
 }
 
-// multipartBody builds a multipart/form-data body with one or more "files" fields.
-func multipartBody(t *testing.T, files map[string]string) (body *bytes.Buffer, contentType string) {
+// multipartBody builds a multipart/form-data body with one or more "files" fields
+// and optional non-file form fields.
+func multipartBody(t *testing.T, files map[string]string, fields ...string) (body *bytes.Buffer, contentType string) {
 	t.Helper()
+	if len(fields)%2 != 0 {
+		t.Fatal("fields must be key/value pairs")
+	}
 	body = &bytes.Buffer{}
 	w := multipart.NewWriter(body)
 	for name, content := range files {
@@ -120,8 +126,68 @@ func multipartBody(t *testing.T, files map[string]string) (body *bytes.Buffer, c
 			t.Fatal(err)
 		}
 	}
+	for i := 0; i < len(fields); i += 2 {
+		if err := w.WriteField(fields[i], fields[i+1]); err != nil {
+			t.Fatal(err)
+		}
+	}
 	_ = w.Close()
 	return body, w.FormDataContentType()
+}
+
+func TestAPIv1CaptureModels_postWithMarkerAndScaleHint_forwardsCreateParams(t *testing.T) {
+	srv, fake := newCaptureModelsTestServer(t)
+
+	body, ct := multipartBody(t, map[string]string{
+		"feed_a.mp4": "fake-video-a",
+		"feed_b.mp4": "fake-video-b",
+	}, "marker", "true", "scale_hint", "1.5")
+	res, err := http.Post(srv.URL+"/api/v1/models/capture", ct, body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusAccepted {
+		b, _ := io.ReadAll(res.Body)
+		t.Fatalf("status = %d, body = %s", res.StatusCode, b)
+	}
+
+	if fake.last.Marker == nil {
+		t.Fatal("expected Marker to be set")
+	}
+	if fake.last.Marker.Dictionary != "DICT_4X4_50" {
+		t.Fatalf("Marker.Dictionary = %q, want DICT_4X4_50", fake.last.Marker.Dictionary)
+	}
+	if fake.last.Marker.EdgeLengthM != 0.1 {
+		t.Fatalf("Marker.EdgeLengthM = %v, want 0.1", fake.last.Marker.EdgeLengthM)
+	}
+	if fake.last.ScaleHint == nil {
+		t.Fatal("expected ScaleHint to be set")
+	}
+	if *fake.last.ScaleHint != 1.5 {
+		t.Fatalf("ScaleHint = %v, want 1.5", *fake.last.ScaleHint)
+	}
+}
+
+func TestAPIv1CaptureModels_postWithInvalidScaleHint_returns400(t *testing.T) {
+	srv, fake := newCaptureModelsTestServer(t)
+
+	body, ct := multipartBody(t, map[string]string{
+		"feed_a.mp4": "fake-video-a",
+		"feed_b.mp4": "fake-video-b",
+	}, "scale_hint", "not-a-number")
+	res, err := http.Post(srv.URL+"/api/v1/models/capture", ct, body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusBadRequest {
+		b, _ := io.ReadAll(res.Body)
+		t.Fatalf("status = %d, want 400, body = %s", res.StatusCode, b)
+	}
+	if fake.last.ScaleHint != nil {
+		t.Fatal("Create should not be called with invalid scale_hint")
+	}
 }
 
 func TestAPIv1CaptureModels_postWith2Files_returns202(t *testing.T) {

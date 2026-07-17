@@ -21,7 +21,9 @@ dlm lets a hobbyist design and animate home LED light installations from a web b
 - You can even build a model **from video**: record the lights blinking in a set order, upload two or
   more clips, and the server reconstructs each light's 3D position with computer vision.
 
-Everything ships as **one executable file**. There is no separate database server, no Node.js server,
+Everything ships as **one downloadable app per platform** (REQ-004): the web UI is embedded in the Go
+binary. On Linux the release may be a `.tar.gz` that also includes a sibling `runtime/cv/` folder for
+camera capture; Windows may be a bare `.exe`. There is no separate database server, no Node.js server,
 and no Docker requirement. It is designed to run on a small **Raspberry Pi 4** on your home network.
 
 ## The big picture

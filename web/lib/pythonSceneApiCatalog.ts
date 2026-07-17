@@ -1,6 +1,6 @@
 /**
  * Scene command list for the Python routine UI — keep in sync with
- * `public/dlm-python-scene-worker.mjs` and CodeMirror completions.
+ * `backend/internal/routineengine/bootstrap.py` and CodeMirror completions.
  */
 import {
   PYTHON_SAMPLE_GROWING_SPHERE_SOURCE,

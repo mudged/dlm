@@ -1216,17 +1216,17 @@ func (s *Store) patchSceneLightsByRegionTx(ctx context.Context, tx *sql.Tx, scen
 			if !unch {
 				writeCount++
 			}
+			updated = append(updated, ScenePatchedState{
+				ModelID:       L.ModelID,
+				ID:            L.LightID,
+				On:            on,
+				Color:         color,
+				BrightnessPct: brightness,
+				Sx:            L.Sx,
+				Sy:            L.Sy,
+				Sz:            L.Sz,
+			})
 		}
-		updated = append(updated, ScenePatchedState{
-			ModelID:       L.ModelID,
-			ID:            L.LightID,
-			On:            on,
-			Color:         color,
-			BrightnessPct: brightness,
-			Sx:            L.Sx,
-			Sy:            L.Sy,
-			Sz:            L.Sz,
-		})
 	}
 
 	res := &SceneBulkPatchResult{
@@ -1375,17 +1375,17 @@ func (s *Store) patchSceneLightsBatchTx(ctx context.Context, tx *sql.Tx, sceneID
 			if !unch {
 				writeCount++
 			}
+			updated = append(updated, ScenePatchedState{
+				ModelID:       u.ModelID,
+				ID:            u.LightID,
+				On:            on,
+				Color:         color,
+				BrightnessPct: brightness,
+				Sx:            flat.Sx,
+				Sy:            flat.Sy,
+				Sz:            flat.Sz,
+			})
 		}
-		updated = append(updated, ScenePatchedState{
-			ModelID:       u.ModelID,
-			ID:            u.LightID,
-			On:            on,
-			Color:         color,
-			BrightnessPct: brightness,
-			Sx:            flat.Sx,
-			Sy:            flat.Sy,
-			Sz:            flat.Sz,
-		})
 	}
 
 	return &SceneBulkPatchResult{

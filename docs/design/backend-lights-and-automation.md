@@ -163,10 +163,10 @@ must stay aligned with the documented `scene` API names and sync/async semantics
   bootstrap + `python_source` (§3.17). Shape kind: start a Go `time.Ticker` (a repeating timer;
   §3.17.2) that calls the same store/lightstate merge paths as §3.15 (internal function calls
   preferred over loopback HTTP for latency — either is valid if validation is identical).
-  `POST …/stop` sets `stopped`; the supervisor cooperatively stops, then `SIGTERM`/`SIGKILL`s the
-  child / cancels the ticker within REQ-040. (`SIGTERM` politely asks a process to exit; `SIGKILL`
-  force-terminates it.) The browser never hosts production routine loops; it only calls start/stop
-  and subscribes to SSE/GET (REQ-041).
+  `POST …/stop` sets `stopped`; the supervisor cancels the run context (cooperative exit when the
+  script checks between iterations) and tears down the `python3` child via `exec.CommandContext`
+  (OS kill / SIGKILL on Unix) / cancels the shape ticker within REQ-040's 2 s bound. The browser
+  never hosts production routine loops; it only calls start/stop and subscribes to SSE/GET (REQ-041).
 - **Concurrency:** at most one `routine_runs` row with `status = 'running'` per `scene_id`. Any
   second `POST …/start` while that row exists (same or different `routine_id`) → `409`
   `scene_routine_conflict` (REQ-021 BR 5) — no `200` "already running" success for duplicate starts.
@@ -217,7 +217,7 @@ loopback (`127.0.0.1`). So the user's Python is effectively an ordinary HTTP cli
 run on the same machine, and it gets exactly the same validation as any external caller.
 
 **Execution placement (production):** `internal/routineengine` spawns `python3` (from the system
-`PATH` on the Pi — document this in `README.md`) with a small bootstrap that injects `scene` and runs
+`PATH` on the Pi — document this in `docs/userguide/`) with a small bootstrap that injects `scene` and runs
 `python_source` in a loop. `scene` methods are thin wrappers around `urllib.request` / `httpx` / a
 documented HTTP client to `http://127.0.0.1:{listenPort}/api/v1/scenes/{sceneId}/…` (§3.15) — same
 JSON and validation as any external client. REQ-004: no Node runtime; `python3` is an OS dependency
@@ -244,9 +244,9 @@ document aliases):
 | `scene.get_lights_within_sphere(center, radius)` | `POST …/lights/query/sphere` with `center`, `radius` |
 | `scene.get_lights_within_cuboid(position, dimensions)` | `POST …/lights/query/cuboid` |
 | `scene.get_all_lights()` | `GET …/lights` |
-| `scene.set_lights_in_sphere(center, radius, on=…, color=…, brightness_pct=…)` | `PATCH …/lights/state/sphere` |
-| `scene.set_lights_in_cuboid(…)` | `PATCH …/lights/state/cuboid` |
-| `scene.set_all_lights(…)` | `PATCH …/lights/state/scene` |
+| `scene.set_lights_in_sphere(center, radius, patch)` — positional `patch` dict, e.g. `{"on": True, "color": colour, "brightness_pct": 100}` | `PATCH …/lights/state/sphere` |
+| `scene.set_lights_in_cuboid(position, dimensions, patch)` — same positional `patch` dict | `PATCH …/lights/state/cuboid` |
+| `scene.set_all_lights(patch)` — positional `patch` dict | `PATCH …/lights/state/scene` |
 | `scene.update_lights_batch(updates)` | `PATCH …/lights/state/batch` with `{ "updates": … }` |
 
 Return types should mirror JSON (e.g. lists of dicts with `model_id`, `light_id`, `sx`, `sy`, `sz`,
@@ -264,23 +264,24 @@ flowchart LR
   end
   RE -->|spawn + bootstrap + python_source| PY["python3 child"]
   PY -->|"loopback HTTP 127.0.0.1 (scene.* calls)"| API
-  RE -.->|"stop flag, then SIGTERM/SIGKILL"| PY
+  RE -.->|"cancel context → CommandContext / SIGKILL"| PY
 ```
 
 **Loop (`python_scene_script` only):** the supervisor passes `python_source` + `sceneId` into the
 child process. Each iteration runs the user body once; default gap ≈ 50 ms between iterations unless
 the script uses `asyncio.sleep`. Shape animation §3.17.2 uses `time.Ticker` in Go instead.
 
-**Cooperative stop:** the supervisor sets a shared stop flag or closes a pipe when `POST …/stop`
-commits; the bootstrap checks it between iterations. SQLite `routine_runs` reflects `stopped` for the
-concurrency rules.
+**Cooperative stop:** the supervisor cancels the run context when `POST …/stop` commits; the
+bootstrap checks between iterations and exits cleanly when possible. SQLite `routine_runs` reflects
+`stopped` for the concurrency rules.
 
 **Stop latency (REQ-040):** from a successful `POST …/stop`, within ≤ 2 s: no further §3.15 writes
-from that `python3` child and no further shape ticks (§3.17.2). Path: cooperative exit; then
-`SIGTERM`; then `SIGKILL` after `T_force` (aggregate ≤ 2 s).
+from that `python3` child and no further shape ticks (§3.17.2). Path: cooperative cancel via context,
+then OS kill of the child (`exec.CommandContext` → SIGKILL on Unix) so the aggregate stays within
+the 2 s bound. SIGTERM staging is not required.
 
-**Forced stop (REQ-022 rule 8, bounded by REQ-040):** `SIGTERM` then `SIGKILL` on the `python3`
-process.
+**Forced stop (REQ-022 rule 8, bounded by REQ-040):** cancel the supervisor context so
+`exec.CommandContext` kills the `python3` child (SIGKILL on Unix) within the 2 s bound.
 
 **Editor (§4.13, REQ-022 rules 2–4):** CodeMirror 6 unchanged. Lint/format may use
 `dlm-python-editor-worker.mjs` / Pyodide — not the production runner.
@@ -329,8 +330,8 @@ brand-new blank routines unless product replaces it later.
    sample comments). For `elapsed` from `0` to `10` s (SI), `r = r0 + (R - r0) * (elapsed / 10.0)`
    (linear interpolation — simplest for novices).
 5. Updates per frame:
-   `await scene.set_lights_in_sphere({"x": cx, "y": cy, "z": cz}, r, on=True, color=colour, brightness_pct=100)`
-   (or equivalent positional args per shim signature). Do not issue a second call to force off lights
+   `await scene.set_lights_in_sphere({"x": cx, "y": cy, "z": cz}, r, {"on": True, "color": colour, "brightness_pct": 100})`
+   (positional `patch` dict — §3.17 table / `bootstrap.py`). Do not issue a second call to force off lights
    outside the sphere during growth (REQ-032).
 6. Loop structure (pseudocode for the `python3` iteration model): outer `while` run active
    (cooperative stop check between cycles — §3.17); inner `while elapsed < 10` with
@@ -351,8 +352,8 @@ brand-new blank routines unless product replaces it later.
    `dimensions = {"width": w, "height": h, "depth": d}` (§3.15 cuboid JSON).
 4. Per frame: `inside = await scene.get_lights_within_cuboid(position, dimensions)` (or sync
    equivalent). Build `current_inside` as a set of `(model_id, light_id)` from `inside`. Then:
-   - `await scene.set_lights_in_cuboid(position, dimensions, on=True, color=colour, brightness_pct=100)`
-     (one bulk call for all lights in the slab).
+   - `await scene.set_lights_in_cuboid(position, dimensions, {"on": True, "color": colour, "brightness_pct": 100})`
+     (one bulk call for all lights in the slab; positional `patch` dict).
    - For each pair that was in `previous_inside` but not in `current_inside`,
      `await scene.update_lights_batch([{ "model_id", "light_id", "on": False }, …])` (REQ-011 `on`
      false). (The sample comments should explain why batch is used for exited lights.)
@@ -365,14 +366,14 @@ brand-new blank routines unless product replaces it later.
 `random_colour_cycle_all`):**
 
 1. On first entry after start (or once per outer loop iteration):
-   `await scene.set_all_lights(on=True, color=…, brightness_pct=100)` with a valid initial hex (e.g.
+   `await scene.set_all_lights({"on": True, "color": …, "brightness_pct": 100})` with a valid initial hex (e.g.
    `#ffffff` or `scene.random_hex_colour()`) so every light in the scene is on at 100%.
 2. Thereafter, at most once per ~1 s wall clock (SI) while the run stays active: build `updates[]`
    with one entry per light from `scene.get_all_lights()` (or equivalent), each `on: true`,
    `brightness_pct: 100`, `color: scene.random_hex_colour()` (REQ-030); `await scene.update_lights_batch(updates)`.
 3. Use `time.monotonic()` and a stored `last_tick` (or `asyncio.sleep(1)` between colour passes if the
    host iteration gap is small enough) so the ~1 s cadence is approximate but not faster than once per
-   elapsed second per REQ-032 (document the exact approach in sample `#` comments and `README.md`).
+   elapsed second per REQ-032 (document the exact approach in sample `#` comments).
 4. Stopping is only via `POST …/stop` (§3.16) — the script must cooperate with the supervisor stop
    check between iterations (§3.17).
 
@@ -548,10 +549,10 @@ skips storing, and the WLED device skips receiving an HTTP call. The shared rule
 change?" compares one normalized "light state triple": `(on, color, brightness_pct)`.
 
 **Goals:** (1) skip three.js rebuilds when effective triples are unchanged (client); (2) skip
-`LightStateStore` writes when the merged state ≡ current (server); (3) skip WLED HTTP calls when the
-device output would not change (§3.20 last-applied cache); (4) align SSE `deltas[]` with the same
-equivalence rules so the server does not emit redundant delta rows (empty `deltas` when there is no
-logical change).
+`LightStateStore` writes when the merged state ≡ current (server); (3) skip WLED HTTP when the
+commit did not change logical model state (call `PushModel` only when something changed — §3.20);
+(4) align SSE `deltas[]` with the same equivalence rules so the server does not emit redundant delta
+rows (empty `deltas` when there is no logical change).
 
 #### Canonical equivalence (logical state)
 
@@ -578,8 +579,8 @@ Single-light `PATCH`, batch, scene region routes, and writes originating from ro
 `python3`): use one helper `mergeIfChanged(modelID, idx, patch) (newTriple, changed bool)` under a
 per-model mutex (or RW mutex map) so read + compare + conditional write are atomic in memory. On
 `changed==false`, still `200` with the full body and optional `unchanged` / `unchanged_all`. On
-`true`, record the triple, bump the SSE `seq`, and enqueue WLED segment updates (§3.20) only for
-indices that differ from the last-applied device state.
+`true`, record the triple, bump the SSE `seq`, and enqueue a whole-model WLED push (§3.20) for that
+model (commit/model-level elision — only when logical state changed).
 
 **Concurrency:** per-model locking prevents lost updates from interleaved HTTP and routine ticks.
 
@@ -618,17 +619,18 @@ three.js rebuild — update timestamps / refs only if required for React. This c
 (WLED = open-source LED-controller firmware that runs on an ESP32 and exposes a JSON HTTP API.)
 
 After logical state changes (`changed==true` from the §3.19 helper) for a model with an assigned WLED
-device (`devices.model_id` = that model), `internal/devices` maps each `idx` to WLED segment / LED
-indices (document the mapping table — default 1:1 idx → LED index for a single addressable strip) and
-calls the WLED JSON API (e.g. `/json/state`). Maintain `lastApplied[idx]` in memory per device;
-suppress HTTP when the projected RGB / brightness / on matches (same normalization + optional 8-bit
-quantization). Startup and post-assign sync (REQ-039 business rule 7) — normative for this product:
-after loading geometry, initialize `LightStateStore` for that model to REQ-014 defaults (all off,
-`#ffffff`, `brightness_pct=100`), then `SyncModelLights` (or equivalent) pushes those triples to WLED
-so the running service remains authoritative after restart (device follows server). Reading live state
-from WLED into `LightStateStore` on startup is not the default (avoids silent divergence from
-REQ-014); if a future product mode trusts the device first, document it as an explicit operator
-option.
+device (`devices.model_id` = that model), handlers call `devices.Pusher.PushModel` once for that model
+(commit/model-level elision: skip the call entirely when the commit produced no logical change —
+e.g. empty changed-state list). `PushModel` maps each `idx` to WLED segment / LED indices (document
+the mapping table — default 1:1 idx → LED index for a single addressable strip) and posts the full
+projected strip state to the WLED JSON API (e.g. `/json/state`). A per-index `lastApplied[idx]` cache
+is **not** implemented in this product pass (optional future optimization only). Startup and
+post-assign sync (REQ-039 business rule 7) — normative for this product: after loading geometry,
+initialize `LightStateStore` for that model to REQ-014 defaults (all off, `#ffffff`,
+`brightness_pct=100`), then `SyncModelLights` (or equivalent) pushes those triples to WLED so the
+running service remains authoritative after restart (device follows server). Reading live state from
+WLED into `LightStateStore` on startup is not the default (avoids silent divergence from REQ-014);
+if a future product mode trusts the device first, document it as an explicit operator option.
 
 ```mermaid
 flowchart LR
@@ -779,8 +781,10 @@ Python install (§3.23.1).
 **Job model (async, Pi-feasible — REQ-003, REQ-048 BR 6):**
 
 1. `POST /api/v1/models/capture` accepts `multipart/form-data` with two or more `files` (video),
-   optional `marker` (fiducial dictionary / board identifier) and optional scale hints (e.g. known
-   marker edge length in metres). The handler streams uploads to a work directory under
+   optional `marker` and optional `scale_hint`. When `marker=true` (or `1`), the handler sets the
+   default printable ArUco marker (`Dictionary: "DICT_4X4_50"`, `EdgeLengthM: 0.1` m — 100 mm);
+   otherwise marker config is omitted. Optional `scale_hint` is a positive finite metres value
+   forwarded as `scale_hint_m`. The handler streams uploads to a work directory under
    `DLM_DATA_DIR` (e.g. `runtime/capture/<job_id>/`), enforces an upload size limit and an allowed
    container list (§9 notes), and returns `202 { job_id, status:"pending" }`.
 2. A bounded worker (one job at a time on a Pi by default; implementor may add a small queue) runs the
@@ -847,13 +851,14 @@ capture CV = bundled interpreter the product controls (REQ-048).
   (single-folder) or a `python-build-standalone` interpreter + pinned wheels. The bundle is
   platform-specific and built per release target (REQ-043: `linux/arm64`, `linux/amd64`,
   `windows/amd64`); `aarch64` OpenCV wheels exist for the Pi.
-- **Packaging vs REQ-004 (single executable):** the default is `//go:embed` of the compressed
-  platform-matched bundle into `internal/cvruntime`, extracted on first use to
-  `DLM_DATA_DIR/runtime/cv/<version>/` (checksum-gated; re-extract on version change). This keeps the
-  single-file deliverable at the cost of a larger binary and first-run extraction. Alternative (when
-  binary size matters): ship the bundle as a sibling directory inside the same release archive and
-  resolve it relative to the executable. The implementor picks one and documents it in
-  `docs/engineering/`; either way the operator installs no Python (REQ-048 BR 5).
+- **Packaging vs REQ-004 (mechanism B — normative):** the platform-matched OpenCV+Python bundle ships
+  as a sibling `runtime/cv/` directory next to the Go binary inside the Linux release archive
+  (`.tar.gz`). `internal/cvruntime` resolves the interpreter relative to the executable path — **not**
+  by extracting under `DLM_DATA_DIR`. Build tooling may stage the bundle under
+  `dist/cvruntime/<goos>_<goarch>/` before packaging; that is a build-time path only. Mechanism A
+  (`//go:embed` + first-run extract) remains a possible future upgrade; the resolver stays pluggable
+  (`resolve.go`). Either way the operator installs no Python (REQ-048 BR 5). Windows may ship a bare
+  `.exe` until a CV runtime bundle is packaged for that target.
 - **Invocation:** `internal/cvruntime` exposes `Run(ctx, jobSpec)`; it launches the bundled interpreter
   as a supervised child (timeout, cancellation on `ctx`, captured stderr) — the same supervision
   discipline as §3.17 but with a product-shipped interpreter rather than `PATH` `python3`.
@@ -869,11 +874,11 @@ metric scale. dlm can hand you a printable one, but it's always optional.
 
 - `GET /api/v1/capture/marker` returns a printable marker artifact (PDF preferred for print fidelity,
   or PNG) with brief on-page guidance (place flat and fully visible in all feeds; keep it stationary
-  during the sweep). Query params may select `type` (e.g. ArUco single marker vs ChArUco board) and
-  `size`; a sensible default is served when omitted.
+  during the sweep). Query params may select `type` (PDF vs PNG); the default served asset is ArUco
+  `DICT_4X4_50`, id 0, 100 mm edge — the same default `marker=true` maps to on `POST …/models/capture`.
 - **Generation:** markers may be static embedded assets (simplest) or generated on demand by the CV
   bundle's marker module so the dictionary / size matches what §3.23 detects. The marker's printed edge
-  length is documented so it can supply metric scale to reconstruction.
+  length (0.1 m for the default) is documented so it can supply metric scale to reconstruction.
 - **Optional, never gating:** obtaining or printing a marker is optional; reconstruction proceeds
   without it (REQ-048 BR 4 / REQ-049 BR 5).
 

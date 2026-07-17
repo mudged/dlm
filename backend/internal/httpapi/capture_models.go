@@ -4,10 +4,13 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"math"
 	"net/http"
 	"path/filepath"
+	"strconv"
 	"strings"
 
+	"example.com/dlm/backend/internal/cvruntime"
 	"example.com/dlm/backend/internal/reconstruct"
 	"example.com/dlm/backend/internal/store"
 	"example.com/dlm/backend/internal/wiremodel"
@@ -73,7 +76,20 @@ func (a *apiDeps) postModelsCapture(w http.ResponseWriter, r *http.Request) {
 		fileNames = append(fileNames, fh.Filename)
 	}
 
-	jobID, err := a.reconstruct.Create(r.Context(), fileReaders, fileNames, reconstruct.CreateParams{})
+	params := reconstruct.CreateParams{}
+	if m := strings.TrimSpace(r.FormValue("marker")); m == "true" || m == "1" {
+		params.Marker = &cvruntime.Marker{Dictionary: "DICT_4X4_50", EdgeLengthM: 0.1}
+	}
+	if sh := strings.TrimSpace(r.FormValue("scale_hint")); sh != "" {
+		v, err := strconv.ParseFloat(sh, 64)
+		if err != nil || !(v > 0) || math.IsNaN(v) || math.IsInf(v, 0) {
+			writeAPIError(w, http.StatusBadRequest, "bad_request", "scale_hint must be a positive finite number")
+			return
+		}
+		params.ScaleHint = &v
+	}
+
+	jobID, err := a.reconstruct.Create(r.Context(), fileReaders, fileNames, params)
 	if errors.Is(err, reconstruct.ErrCapExceeded) {
 		writeAPIError(w, http.StatusServiceUnavailable, "capacity_exceeded", "a reconstruction job is already in progress; try again later")
 		return

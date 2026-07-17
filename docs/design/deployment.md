@@ -42,14 +42,14 @@ ARM64 (also written `arm64`) is the 64-bit instruction set the Pi's CPU uses —
 - **One `systemd` service** — the application binary only. (`systemd` is the standard Linux service manager that starts programs on boot and restarts them if they crash.)
 - **Scene routines (REQ-021 / REQ-038):** `internal/routineengine` (see §3.16–§3.17.2) runs a supervised `python3` process (§3.17) and a Go `time.Ticker`-driven shape simulation (§3.17.2) headless — meaning no browser tab is required for lights to keep updating. The UI only calls start/stop and observes progress via SSE (Server-Sent Events, a one-way stream from server to browser) or GET.
 - **Python (REQ-022):** In production, execution uses the operating system's `python3` — it is not bundled into the Go binary (REQ-004). Pi docs should note installing `python3`, the child process's RAM use, and the loopback HTTP cadence back to §3.15. Pyodide (Python compiled to run in the browser) in the static bundle is optional and editor-only, for lint/format — see §3.17.
-- **Optional proxy:** A separate `caddy.service` or `nginx` is OS/infrastructure, not part of REQ-004's single binary. The product itself stays one file.
+- **Optional proxy:** A separate `caddy.service` or `nginx` is OS/infrastructure, not part of REQ-004's product download. The product itself is one binary (Linux: plus sibling `runtime/cv/` from the archive).
 
 ### 6.3 Distribution (REQ-004 / anti-Docker)
 
-**In plain terms:** You install dlm by copying one file (and optionally a service file). Docker is deliberately not the primary path.
+**In plain terms:** You install dlm by copying one download (Windows: a bare `.exe`; Linux: unpack the `.tar.gz` so the binary and sibling `runtime/cv/` stay together — §6.6) plus an optional service file. Docker is deliberately not the primary path.
 
-- **Canonical install:** copy one binary plus an optional unit file. It is not Docker-first.
-- **Docs** (`README`, this file) must describe the binary + `systemd` path. Production does not require a Dockerfile or Docker Compose.
+- **Canonical install:** copy the release binary (Linux: unpack the `.tar.gz` so the binary and sibling `runtime/cv/` stay together) plus an optional unit file. It is not Docker-first.
+- **Docs** ([user guide](../userguide/), this file) must describe the binary + `systemd` path. Production does not require a Dockerfile or Docker Compose.
 
 ### 6.4 Networking
 
@@ -67,11 +67,11 @@ ARM64 (also written `arm64`) is the 64-bit instruction set the Pi's CPU uses —
 
 ### 6.6 Canonical release targets and artifact map (REQ-043)
 
-**In plain terms:** Every release publishes three prebuilt executables ("artifacts" — the downloadable output files). Pick the one matching your OS and CPU. `GOOS`/`GOARCH` are the Go environment variables that select the target operating system and CPU when cross-compiling (building for a machine other than the one doing the build).
+**In plain terms:** Every release publishes prebuilt downloads ("artifacts") for three OS/CPU pairs. Pick the one matching your machine. `GOOS`/`GOARCH` are the Go environment variables that select the target operating system and CPU when cross-compiling (building for a machine other than the one doing the build).
 
-- **Windows desktop / laptop:** download `dlm_windows_amd64.exe` (`GOOS=windows` `GOARCH=amd64`).
-- **Linux x86_64:** download `dlm_linux_amd64` (`GOOS=linux` `GOARCH=amd64`).
-- **Raspberry Pi (64-bit OS, REQ-003):** download `dlm_linux_arm64` (`GOOS=linux` `GOARCH=arm64`). Do not deploy the amd64 binary on Pi 64-bit images.
+- **Windows desktop / laptop:** download `dlm_windows_amd64.exe` (`GOOS=windows` `GOARCH=amd64`) — bare executable (CV runtime bundle for Windows is optional / pending).
+- **Linux x86_64:** download `dlm_linux_amd64.tar.gz` (`GOOS=linux` `GOARCH=amd64`) — archive contains the binary plus sibling `runtime/cv/` (§6.9).
+- **Raspberry Pi (64-bit OS, REQ-003):** download `dlm_linux_arm64.tar.gz` (`GOOS=linux` `GOARCH=arm64`) — same archive layout. Do not deploy the amd64 archive on Pi 64-bit images.
 
 ### 6.7 GitHub Actions — continuous integration (REQ-044)
 
@@ -84,32 +84,33 @@ ARM64 (also written `arm64`) is the 64-bit instruction set the Pi's CPU uses —
 
 ### 6.8 GitHub Actions — release and downloadable binaries (REQ-044)
 
-**In plain terms:** A separate workflow builds the three binaries and attaches them to a GitHub Release whenever a version tag is pushed.
+**In plain terms:** A separate workflow builds the three release assets (§6.6: Linux arm64/amd64 as `.tar.gz` with sibling `runtime/cv/`, Windows as `.exe`) and attaches them to a GitHub Release whenever a version tag is pushed.
 
 - **Workflow** (example name `release.yml`): triggered by pushing a tag matching `v*` (a semantic version is recommended — e.g. `v1.2.3`), or manually via `workflow_dispatch` with a tag input (per team policy).
 - **Steps (normative shape):**
   1. Checkout the tag.
   2. `npm ci` + `npm run release:sync` (or equivalent) to populate `backend/internal/webdist/`.
-  3. Build three binaries per §3.4 into `dist/` (or an artifact staging directory).
-  4. Attach those files to a GitHub Release for the tag (`softprops/action-gh-release` or `gh release upload` — implementor's choice).
+  3. Cross-compile per §3.4, then package Linux targets into `.tar.gz` (binary + sibling `runtime/cv/`) and stage the Windows `.exe` into `dist/` (or an artifact staging directory) with the §6.6 names.
+  4. Attach those three release assets to a GitHub Release for the tag (`softprops/action-gh-release` or `gh release upload` — implementor's choice).
 
 ### 6.9 Deployment runtime prerequisites (REQ-045)
 
-**In plain terms:** To *run* the shipped product you only need the downloaded executable plus normal OS facilities. `python3` is needed only when running user-authored Python scene routines; camera capture bundles its own runtime.
+**In plain terms:** To *run* the shipped product you need the downloaded binary (Linux: unpack the `.tar.gz` so the binary and `runtime/cv/` stay side by side) plus normal OS facilities. `python3` is needed only when running user-authored Python scene routines; camera capture uses the sibling CV runtime.
 
-- **Always:** no Node.js, no npm, and no Go toolchain on the Pi / production host to run the shipped product — only the downloaded executable (plus OS facilities like `systemd`).
-- **`python3`:** required on the server only when the operator runs user-authored Python scene routines (§3.17). The routine engine finds the interpreter via `PATH`, overridden by `DLM_PYTHON3` when set (an existing `internal/routineengine` convention). The minimum CPython version (e.g. 3.11+) must be stated in `README` (for operators) and in this section after implementor verification.
+- **Always:** no Node.js, no npm, and no Go toolchain on the Pi / production host to run the shipped product — only the downloaded binary (plus OS facilities like `systemd`). On Linux, keep the sibling `runtime/cv/` directory next to the binary after unpacking the release archive.
+- **`python3`:** required on the server only when the operator runs user-authored Python scene routines (§3.17). The routine engine finds the interpreter via `PATH`, overridden by `DLM_PYTHON3` when set (an existing `internal/routineengine` convention). The minimum CPython version (e.g. 3.11+) must be stated in the [user guide](../userguide/) (for operators) and in this section after implementor verification.
 - **Shape animation only** (no Python routines started): may run without `python3` installed. Starting a Python routine then fails lazily with a clear error — this resolves the REQ-045 open question.
-- **Camera capture / OpenCV (REQ-048):** requires no separate Python install. The computer-vision (CV) pipeline runs from a product-shipped, self-contained OpenCV runtime (§3.23.1) that is embedded in (and extracted by) the binary, or shipped alongside it in the release archive. This is distinct from the user-routine `python3` above: an operator who never authors Python routines but does use camera capture still needs no system Python. `README`/`docs/engineering/` must state that the CV runtime is bundled and note its on-disk footprint (extraction under `DLM_DATA_DIR/runtime/cv/`).
+- **Camera capture / OpenCV (REQ-048, mechanism B):** requires no separate Python install. The computer-vision (CV) pipeline runs from a product-shipped, self-contained OpenCV runtime (§3.23.1) that ships as a **sibling** `runtime/cv/` directory next to the binary inside the Linux release archive. The resolver looks beside the executable — it does **not** extract the bundle under `DLM_DATA_DIR`. This is distinct from the user-routine `python3` above: an operator who never authors Python routines but does use camera capture still needs no system Python. `docs/engineering/cv-runtime.md` and the [user guide](../userguide/getting-started.md) document the layout and on-disk footprint.
 
 ### 6.10 README operator documentation (REQ-046)
 
-**In plain terms:** The `README` is written for hobbyists and must walk them through downloading, permitting, and running the binary, plus a copy-paste `systemd` unit for the Pi.
+**In plain terms:** `README.md` is a short hobbyist landing page. Download, run, and `systemd` details live in the user guide so the README stays approachable.
 
-- **`README.md`** (hobbyist-facing) must lead with, or prominently feature: download the correct release asset (§6.6) from GitHub Releases, `chmod +x` on Unix (make the file executable), and run the binary (with `HTTP_LISTEN` unset it defaults to `:8080` per `internal/config`).
-- **Raspberry Pi:** a worked `systemd` unit (`User=`, `WorkingDirectory=`, `Environment=DLM_DATA_DIR=…`, `ExecStart=` with the full path to `dlm_linux_arm64`, `Restart=on-failure`) so the service starts on boot.
-- **Updating:** stop the service → replace the binary → `systemctl daemon-reload` (if the unit changed) → start the service. Note that the SQLite file lives under `DLM_DATA_DIR` / `DLM_DB_PATH` and should be preserved across updates unless release notes require a migration.
-- The `README` must not mention `REQ-*` IDs (repository policy). The developer build via `./scripts/run.sh` stays documented as the local contributor path (REQ-008), with detail in `docs/engineering/` if needed.
+- **`README.md`** (hobbyist-facing) stays short: what the product is, point at `./scripts/run.sh` for contributors, and link the [user guide](../userguide/) for operators. It must **not** expand into a full install/systemd tutorial, and must not mention `REQ-*` IDs (repository policy).
+- **Download / first run:** documented in [`docs/userguide/getting-started.md`](../userguide/getting-started.md) — choose the §6.6 asset from GitHub Releases, unpack Linux `.tar.gz` (keep `runtime/cv/` beside the binary), `chmod +x` on Unix, run with `HTTP_LISTEN` unset defaulting to `:8080` per `internal/config`.
+- **Raspberry Pi as a service:** documented in [`docs/userguide/running-as-a-service.md`](../userguide/running-as-a-service.md) — worked `systemd` unit (`User=`, `WorkingDirectory=`, `Environment=DLM_DATA_DIR=…`, `ExecStart=` with the full path to the binary, `Restart=on-failure`) so the service starts on boot.
+- **Updating:** stop the service → replace the binary (and sibling `runtime/cv/` from the new archive) → `systemctl daemon-reload` (if the unit changed) → start the service. Note that the SQLite file lives under `DLM_DATA_DIR` / `DLM_DB_PATH` and should be preserved across updates unless release notes require a migration.
+- The developer build via `./scripts/run.sh` stays documented as the local contributor path (REQ-008), with detail in `docs/engineering/` if needed.
 
 ### 6.11 Branch protection and merge gates (REQ-044)
 

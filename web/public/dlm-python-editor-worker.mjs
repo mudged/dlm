@@ -1,6 +1,5 @@
 /**
  * Pyodide worker for REQ-022: ast.parse diagnostics and black (fallback: textwrap) formatting.
- * Same CDN as dlm-python-scene-worker.mjs per architecture §3.17.
  */
 import { loadPyodide } from "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.mjs";
 

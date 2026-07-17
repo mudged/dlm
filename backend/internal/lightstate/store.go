@@ -244,13 +244,13 @@ func (s *Store) BatchPatch(modelID string, ids []int, patch Patch) ([]DTO, bool,
 		if !rowUnchanged {
 			allUnchanged = false
 			sl[lightID] = lightTriple{on: on, color: color, brightnessPct: br}
+			out = append(out, DTO{ID: lightID, On: on, Color: color, BrightnessPct: br})
 		}
-		out = append(out, DTO{ID: lightID, On: on, Color: color, BrightnessPct: br})
 	}
 	return out, allUnchanged, nil
 }
 
-// ResetAll sets every light to defaults; returns all states and whether nothing changed.
+// ResetAll sets every light to defaults; returns changed states and whether nothing changed.
 func (s *Store) ResetAll(modelID string) ([]DTO, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -266,17 +266,19 @@ func (s *Store) ResetAll(modelID string) ([]DTO, bool, error) {
 			break
 		}
 	}
-	if !allDefault {
-		for i := range sl {
-			sl[i] = lightTriple{on: DefaultOn, color: DefaultColor, brightnessPct: DefaultBrightnessPct}
-		}
+	if allDefault {
+		return nil, true, nil
 	}
-	out := make([]DTO, len(sl))
+	out := make([]DTO, 0, len(sl))
 	for i := range sl {
 		t := sl[i]
-		out[i] = DTO{ID: i, On: t.on, Color: t.color, BrightnessPct: t.brightnessPct}
+		if EquivLightStateTriple(t.on, t.color, t.brightnessPct, DefaultOn, DefaultColor, DefaultBrightnessPct) {
+			continue
+		}
+		sl[i] = lightTriple{on: DefaultOn, color: DefaultColor, brightnessPct: DefaultBrightnessPct}
+		out = append(out, DTO{ID: i, On: DefaultOn, Color: DefaultColor, BrightnessPct: DefaultBrightnessPct})
 	}
-	return out, allDefault, nil
+	return out, false, nil
 }
 
 // SetTriple sets absolute state if different from current; returns whether unchanged (equiv).
