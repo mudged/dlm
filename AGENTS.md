@@ -37,7 +37,7 @@ Read the relevant area before making changes. Index: [`docs/README.md`](docs/REA
 
 | Area | Use it for |
 |------|-----------|
-| [`docs/requirements/`](docs/requirements/) | What to build: requirements (`REQ-*`) and Gherkin acceptance criteria. |
+| [`docs/requirements/`](docs/requirements/) | What to build: a plain-English feature tour and a "try this → you should see" checklist (feature codes `REQ-*` are cross-referenced in an index). |
 | [`docs/design/`](docs/design/) | How it is designed: [`architecture.md`](docs/design/architecture.md) (service, frontend, deployment, diagrams). |
 | [`docs/engineering/`](docs/engineering/) | How to build/generate code: [coding standards](docs/engineering/coding-standards.md), [build and run](docs/engineering/build-and-run.md), [CI and release](docs/engineering/ci-and-release.md), [CV runtime](docs/engineering/cv-runtime.md), [environment and API](docs/engineering/environment-and-api.md). |
 | [`docs/userguide/`](docs/userguide/) | How the end user operates the software. |
@@ -45,6 +45,13 @@ Read the relevant area before making changes. Index: [`docs/README.md`](docs/REA
 Requirements and acceptance criteria are **authoritative**. If implementation reveals a genuine
 conflict with the design, update the specification first (see
 [`docs/engineering/coding-standards.md`](docs/engineering/coding-standards.md)).
+
+Requirements are written for a **non-technical reader** (aim for a ~15-year-old): `requirements.md` is
+a plain-English, themed feature tour and `acceptance-criteria.md` is a "try this → you should see"
+checklist — no templated fields or Gherkin. Feature codes (`REQ-*`) stay out of the prose and instead
+live in the **feature code index** at the bottom of `requirements.md`; when adding a requirement,
+append a new `REQ-NNN` (never reuse or renumber) and add its index row. Full convention:
+[`docs/engineering/coding-standards.md`](docs/engineering/coding-standards.md) → "Writing requirements".
 
 ## Local build and run
 

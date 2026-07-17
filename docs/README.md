@@ -5,7 +5,7 @@ Project knowledge for Domestic Light & Magic (dlm), organized by concern. The re
 
 | Area | What it covers |
 |------|----------------|
-| [`requirements/`](requirements/) | Product requirements (REQ-*) and Gherkin acceptance criteria. |
+| [`requirements/`](requirements/) | What the product does: a plain-English feature tour and a "try this → you should see" checklist. |
 | [`design/`](design/) | Architecture and design of the application, with Mermaid diagrams. |
 | [`engineering/`](engineering/) | How code is built and generated for this repo: coding standards, build/run, CI/release, CV runtime, environment and API. |
 | [`userguide/`](userguide/) | How an end user installs and operates the software. |

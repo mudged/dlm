@@ -34,14 +34,13 @@ repository [`AGENTS.md`](../../AGENTS.md) (brainstorm, plan, TDD, review, verify
 ## Testing
 
 - **Test-driven development.** Write a failing test first, watch it fail, then write the minimal
-  code to pass (RED-GREEN-REFACTOR). Acceptance tests trace to the Gherkin scenarios in
-  [`../requirements/acceptance-criteria.md`](../requirements/acceptance-criteria.md).
+  code to pass (RED-GREEN-REFACTOR). Tests should verify the behaviour described in
+  [`../requirements/`](../requirements) (the feature tour and its "try this → you should see"
+  checklist).
 - **Commands:**
   - Backend: `cd backend && go test ./...`
   - Frontend: `cd web && npm test` and `cd web && npm run lint`
-- **Add or adjust tests with every change.** Do not break existing tests. The acceptance suite in
-  `backend/internal/acceptance/` reads the specs and source by path; if you move a documented file,
-  update those references too.
+- **Add or adjust tests with every change.** Do not break existing tests.
 
 ## Specifications are authoritative
 
@@ -49,3 +48,26 @@ repository [`AGENTS.md`](../../AGENTS.md) (brainstorm, plan, TDD, review, verify
   lives in [`../design/architecture.md`](../design/architecture.md). Keep code aligned with them.
 - If you hit a genuine conflict with the design, **stop and fix the specification first** (update
   the design/requirements), then implement — do not silently work around the architecture.
+
+## Writing requirements
+
+The docs in [`../requirements/`](../requirements) are deliberately **not** a formal, templated spec.
+Keep them that way when you add or change requirements:
+
+- **Audience: a curious non-technical reader** (aim for a ~15-year-old with little background). Use
+  plain language, short sentences, and everyday analogies. Explain any unavoidable jargon in one
+  friendly line the first time it appears, or avoid it. No field tables, no
+  "User story / Scope / Business rules" template, no Gherkin.
+- **`requirements.md` is a themed feature tour.** Group related behaviour into readable sections
+  rather than one block per requirement. Add a Mermaid diagram only where it genuinely helps a
+  beginner. Keep concrete, testable facts accurate (limits, hex colours, measurements, timings,
+  technology names).
+- **`acceptance-criteria.md` is a "try this → you should see" checklist**, grouped by the same
+  themes.
+- **Feature codes stay out of the prose.** Every requirement still has a stable `REQ-NNN` code
+  (referenced from source-code comments and [`../design/architecture.md`](../design/architecture.md)),
+  but the code does **not** appear inline in the readable text. Instead:
+  - keep the **feature code index** table at the bottom of `requirements.md` up to date, and
+  - when you add a new requirement, **append a new `REQ-NNN`** (never reuse or renumber existing
+    codes) with a new row mapping it to the section that describes it.
+- This keeps the many existing `REQ-NNN` references resolvable while the docs stay approachable.
