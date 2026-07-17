@@ -1,61 +1,99 @@
-# Run as a service on Raspberry Pi (starts on boot)
+# Make it start on its own (Raspberry Pi)
 
-This uses **systemd**, which is standard on Raspberry Pi OS. Adjust paths and user if you prefer.
+This page is a bit more advanced — **skip it unless you want the app to start automatically** every
+time your Raspberry Pi turns on. Normally you have to start the app by hand each time; this makes the
+Pi do it for you, even after a power cut or reboot.
 
-1. Extract the release archive into a folder for the app (example):
+We use something called **systemd**, which is a built-in "manager" on Raspberry Pi OS that starts and
+watches over programs. You'll type a few commands, but you can copy-paste them.
 
-   ```bash
-   sudo mkdir -p /opt/dlm
-   sudo tar -xzf /path/to/dlm_linux_arm64.tar.gz -C /opt/dlm
-   sudo chmod +x /opt/dlm/dlm_linux_arm64
-   sudo mkdir -p /opt/dlm/data
-   sudo chown -R pi:pi /opt/dlm
-   ```
+```mermaid
+flowchart LR
+    A[Pi turns on] --> B[systemd starts<br/>automatically]
+    B --> C[systemd launches dlm]
+    C --> D[App is ready<br/>in your browser]
+```
 
-   The **`runtime/cv/`** folder must stay next to the binary (for example `/opt/dlm/runtime/cv/`).
+> `sudo` in front of a command means "do this as the administrator." The Pi may ask for your
+> password. That's expected here.
 
-2. Create **`/etc/systemd/system/dlm.service`** (use `nano` or another editor **with sudo**):
+## Step 1: Put the app in a shared folder
 
-   ```ini
-   [Unit]
-   Description=Domestic Light & Magic
-   After=network.target
+Unpack the download into `/opt/dlm` (a common place for apps like this):
 
-   [Service]
-   Type=simple
-   User=pi
-   WorkingDirectory=/opt/dlm
-   Environment=DLM_DATA_DIR=/opt/dlm/data
-   ExecStart=/opt/dlm/dlm_linux_arm64
-   Restart=on-failure
+```bash
+sudo mkdir -p /opt/dlm
+sudo tar -xzf /path/to/dlm_linux_arm64.tar.gz -C /opt/dlm
+sudo chmod +x /opt/dlm/dlm_linux_arm64
+sudo mkdir -p /opt/dlm/data
+sudo chown -R pi:pi /opt/dlm
+```
 
-   [Install]
-   WantedBy=multi-user.target
-   ```
+Keep the `runtime/cv/` folder right next to the app (so, `/opt/dlm/runtime/cv/`). It comes inside the
+download and the app needs it.
 
-3. Enable and start:
+## Step 2: Create the service file
 
-   ```bash
-   sudo systemctl daemon-reload
-   sudo systemctl enable dlm
-   sudo systemctl start dlm
-   ```
+Make a file at **`/etc/systemd/system/dlm.service`** (open it with `sudo nano
+/etc/systemd/system/dlm.service`) and paste in this:
 
-4. Check status: `systemctl status dlm` — then open **[http://127.0.0.1:8080/](http://127.0.0.1:8080/)**
-   from another device on the same network (use the Pi’s IP address instead of `127.0.0.1` if needed).
+```ini
+[Unit]
+Description=Domestic Light & Magic
+After=network.target
 
-The server listens on **port 8080** by default. To use another port, set **`HTTP_LISTEN`** (for
-example add `Environment=HTTP_LISTEN=:80` in the `[Service]` section).
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/opt/dlm
+Environment=DLM_DATA_DIR=/opt/dlm/data
+ExecStart=/opt/dlm/dlm_linux_arm64
+Restart=on-failure
 
-## Updating after a new release
+[Install]
+WantedBy=multi-user.target
+```
 
-1. Download the new release for your platform from
+This is just a set of instructions telling systemd *what* to run, *where*, and to restart it if it
+ever crashes.
+
+## Step 3: Turn it on
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable dlm
+sudo systemctl start dlm
+```
+
+- `enable` means "start this every time the Pi boots."
+- `start` starts it right now, without waiting for a reboot.
+
+## Step 4: Check it worked
+
+Run:
+
+```bash
+systemctl status dlm
+```
+
+If it says it's running, open **[http://127.0.0.1:8080/](http://127.0.0.1:8080/)** on the Pi itself.
+From another phone or computer on the same Wi-Fi, use the **Pi's IP address** instead of
+`127.0.0.1` (for example `http://192.168.1.50:8080/`).
+
+> **Changing the port:** the app uses port `8080` by default. To use a different one, add a line like
+> `Environment=HTTP_LISTEN=:80` in the `[Service]` section of the service file.
+
+## Updating to a newer version
+
+When a new release comes out:
+
+1. Download the new file for your Pi from
    **[Releases](https://github.com/mudged/dlm/releases)**.
-2. If you use **systemd**: `sudo systemctl stop dlm`
-3. Replace the old files with the new ones — on Linux, extract the new `.tar.gz` over `/opt/dlm` (or
-   replace the binary **and** the `runtime/cv/` folder together). Keep the same layout: binary and
-   `runtime/cv/` as siblings.
-4. If you use **systemd**: `sudo systemctl start dlm`
+2. Stop the app: `sudo systemctl stop dlm`
+3. Replace the old files with the new ones — unpack the new `.tar.gz` over `/opt/dlm`, keeping the
+   app and its `runtime/cv/` folder side by side as before.
+4. Start it again: `sudo systemctl start dlm`
 
-Keep your **`data`** directory (or whatever you set **`DLM_DATA_DIR`** / **`DLM_DB_PATH`** to) so
-models and settings stay unless release notes say otherwise.
+**Don't delete your `data` folder** when updating — that's where all your models and settings live.
+(If you changed where data is stored using `DLM_DATA_DIR` or `DLM_DB_PATH`, keep that location
+safe instead.)

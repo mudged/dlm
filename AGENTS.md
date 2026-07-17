@@ -27,7 +27,7 @@ Read the relevant area before making changes. Index: [`docs/README.md`](docs/REA
 | [`docs/requirements/`](docs/requirements/) | What to build: a plain-English feature tour and a "try this → you should see" checklist (feature codes `REQ-*` are cross-referenced in an index). |
 | [`docs/design/`](docs/design/) | How it is designed, split into junior-readable topic files. Start at [`architecture.md`](docs/design/architecture.md) (big picture + `§`→file index); details in service/frontend/deployment/request-flow pages, with a [`glossary`](docs/design/glossary.md) and Mermaid diagrams. |
 | [`docs/engineering/`](docs/engineering/) | How to build/generate code: [coding standards](docs/engineering/coding-standards.md), [build and run](docs/engineering/build-and-run.md), [CI and release](docs/engineering/ci-and-release.md), [CV runtime](docs/engineering/cv-runtime.md), [environment and API](docs/engineering/environment-and-api.md). |
-| [`docs/userguide/`](docs/userguide/) | How the end user operates the software. |
+| [`docs/userguide/`](docs/userguide/) | How the end user operates the software, written for a non-technical beginner (see audience note below). |
 
 Requirements and acceptance criteria are **authoritative**. If implementation reveals a genuine
 conflict with the design, update the specification first (see
@@ -46,6 +46,14 @@ section with a plain-language summary, and use Mermaid diagrams where they help.
 stability contract — **never renumber or reuse a `§N.N` section number or a `REQ-*` code** (both are
 cited from source-code comments and other docs). Full convention:
 [`docs/engineering/coding-standards.md`](docs/engineering/coding-standards.md) → "Writing design docs".
+
+User guide docs in [`docs/userguide/`](docs/userguide/) are written for a **non-technical beginner
+(aim for a curious ~15-year-old)**: assume no programming knowledge, use plain language and everyday
+analogies, explain any jargon on first use, number the steps, and use simple Mermaid diagrams for
+"big picture" flows. Keep concrete facts (file names, `http://127.0.0.1:8080/`, port `8080`, the
+`id,x,y,z` CSV header, env var names, `runtime/cv/` layout) accurate, and push developer/API detail
+into [`docs/engineering/`](docs/engineering/). Full convention:
+[`docs/engineering/coding-standards.md`](docs/engineering/coding-standards.md) → "Writing the user guide".
 
 ## Local build and run
 

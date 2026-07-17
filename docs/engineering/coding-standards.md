@@ -99,3 +99,31 @@ for a junior developer as you edit or extend them:
   as the entry-point hub (big-picture overview plus the `§`→file section index). Other files (and
   source-code comments) may link to `architecture.md` by name and cite `§` numbers, so keep that file
   as the stable landing page.
+
+## Writing the user guide
+
+The docs in [`../userguide/`](../userguide) tell an **end user** how to install and operate the app.
+Keep them beginner-friendly whenever you add or change a page:
+
+- **Audience: a curious 15-year-old with little technical background.** Assume no programming
+  knowledge and no familiarity with this project. Use plain language, short sentences, and everyday
+  analogies (fairy lights, taking photos of a statue, a game and its data folder). Be encouraging,
+  not intimidating.
+- **Explain jargon on first use, or avoid it.** Terms like *terminal*, *Raspberry Pi*, *systemd*,
+  *CSV*, *ESP32/WLED*, *SSE* get one friendly sentence the first time they appear (a `>` blockquote
+  "jargon check" works well). Prefer a plain word over a technical one when both fit.
+- **Lead with the goal and the payoff**, then the steps. Number step-by-step instructions and keep
+  each step to one clear action.
+- **Use Mermaid diagrams** for anything with a flow or a "big picture" (download→run→open, the
+  capture workflow, how the sections relate). Keep them simple — a handful of boxes, short labels.
+- **Keep concrete facts accurate.** File names (`dlm_linux_arm64.tar.gz`), the address
+  `http://127.0.0.1:8080/`, the default port `8080`, the CSV header `id,x,y,z` with 0-based
+  sequential IDs, supported video formats (MP4/MOV/MKV/WebM), env var names (`DLM_DATA_DIR`,
+  `DLM_DB_PATH`, `DLM_PYTHON3`, `HTTP_LISTEN`), and the `runtime/cv/` layout must stay correct even
+  when the prose is casual.
+- **Push technical depth elsewhere.** Developer/build topics belong in
+  [`../engineering/`](../engineering); API and streaming details live in
+  [`environment-and-api.md`](environment-and-api.md). Link out to them instead of explaining them
+  here.
+- **Don't put internal `REQ-*` codes in the user guide.** Those belong in
+  [`../requirements/`](../requirements) and [`../design/`](../design).
