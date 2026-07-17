@@ -49,3 +49,7 @@ data/
 # Python bytecode cache (CV runtime source)
 __pycache__/
 *.pyc
+
+# Python virtual environments (e.g. backend/internal/cvruntime/src/.venv)
+.venv/
+venv/
