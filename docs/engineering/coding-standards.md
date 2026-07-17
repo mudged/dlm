@@ -71,3 +71,31 @@ Keep them that way when you add or change requirements:
   - when you add a new requirement, **append a new `REQ-NNN`** (never reuse or renumber existing
     codes) with a new row mapping it to the section that describes it.
 - This keeps the many existing `REQ-NNN` references resolvable while the docs stay approachable.
+
+## Writing design docs
+
+The design docs in [`../design/`](../design) explain **how** the product is built. Keep them readable
+for a junior developer as you edit or extend them:
+
+- **Audience: a junior developer** who knows basic Go, JavaScript/TypeScript, and HTTP, but **not**
+  this project's domain (home LEDs, WLED, three.js, computer-vision reconstruction, Raspberry Pi
+  constraints). Explain domain jargon and acronyms in one short clause the first time they appear, or
+  link to [`../design/glossary.md`](../design/glossary.md). Add new terms to the glossary.
+- **Lead with plain language.** Start each major section with a one-to-three-sentence
+  "**In plain terms:**" summary before the detailed bullets, tables, or schemas.
+- **Bold sparingly.** Do not bold whole sentences or every noun; reserve bold for genuine emphasis.
+- **Use Mermaid diagrams** where a picture helps a beginner (architecture, data flow, sequence of a
+  request). Keep existing diagrams; improve rather than delete.
+- **Keep concrete facts accurate and authoritative:** HTTP methods/paths, status and error codes,
+  JSON field names, SQL schema, numeric limits, hex colours, timings, env var names, and
+  `GOOS`/`GOARCH` values. Do not soften these into vague prose.
+- **Stability contract (do not break):**
+  - Never renumber, reuse, or delete a `§N.N` **section number** — they are cited from source-code
+    comments and other docs. Add new sections with new numbers; keep moved content under the same
+    number in whichever file now hosts it, and update the `§`→file index in
+    [`../design/architecture.md`](../design/architecture.md).
+  - Never renumber or reuse a `REQ-*` **feature code**; keep the traceability references intact.
+- **Structure:** the design is split into topic files with [`architecture.md`](../design/architecture.md)
+  as the entry-point hub (big-picture overview plus the `§`→file section index). Other files (and
+  source-code comments) may link to `architecture.md` by name and cite `§` numbers, so keep that file
+  as the stable landing page.

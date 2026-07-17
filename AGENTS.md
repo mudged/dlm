@@ -25,7 +25,7 @@ Read the relevant area before making changes. Index: [`docs/README.md`](docs/REA
 | Area | Use it for |
 |------|-----------|
 | [`docs/requirements/`](docs/requirements/) | What to build: a plain-English feature tour and a "try this → you should see" checklist (feature codes `REQ-*` are cross-referenced in an index). |
-| [`docs/design/`](docs/design/) | How it is designed: [`architecture.md`](docs/design/architecture.md) (service, frontend, deployment, diagrams). |
+| [`docs/design/`](docs/design/) | How it is designed, split into junior-readable topic files. Start at [`architecture.md`](docs/design/architecture.md) (big picture + `§`→file index); details in service/frontend/deployment/request-flow pages, with a [`glossary`](docs/design/glossary.md) and Mermaid diagrams. |
 | [`docs/engineering/`](docs/engineering/) | How to build/generate code: [coding standards](docs/engineering/coding-standards.md), [build and run](docs/engineering/build-and-run.md), [CI and release](docs/engineering/ci-and-release.md), [CV runtime](docs/engineering/cv-runtime.md), [environment and API](docs/engineering/environment-and-api.md). |
 | [`docs/userguide/`](docs/userguide/) | How the end user operates the software. |
 
@@ -39,6 +39,13 @@ checklist — no templated fields or Gherkin. Feature codes (`REQ-*`) stay out o
 live in the **feature code index** at the bottom of `requirements.md`; when adding a requirement,
 append a new `REQ-NNN` (never reuse or renumber) and add its index row. Full convention:
 [`docs/engineering/coding-standards.md`](docs/engineering/coding-standards.md) → "Writing requirements".
+
+Design docs in [`docs/design/`](docs/design/) are written for a **junior developer** (knows basic
+Go/JS/HTTP, but not this project's domain): explain jargon on first use, keep bold sparing, lead each
+section with a plain-language summary, and use Mermaid diagrams where they help. Preserve the
+stability contract — **never renumber or reuse a `§N.N` section number or a `REQ-*` code** (both are
+cited from source-code comments and other docs). Full convention:
+[`docs/engineering/coding-standards.md`](docs/engineering/coding-standards.md) → "Writing design docs".
 
 ## Local build and run
 
