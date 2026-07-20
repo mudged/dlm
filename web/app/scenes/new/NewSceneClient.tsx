@@ -11,13 +11,14 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { ButtonLink } from "@/components/ui/ButtonLink";
+import { clientId } from "@/lib/clientId";
 import type { ModelSummary } from "@/lib/models";
 import { createScene } from "@/lib/scenes";
 
 type Row = { key: string; modelId: string };
 
 function newRow(): Row {
-  return { key: crypto.randomUUID(), modelId: "" };
+  return { key: clientId(), modelId: "" };
 }
 
 export function NewSceneClient() {
