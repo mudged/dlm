@@ -36,6 +36,12 @@ jobs:
           go-version-file: backend/go.mod
           cache-dependency-path: backend/go.sum
 
+      # Host Python+pip is required to cross-install manylinux wheels into the
+      # arm64/amd64 python-build-standalone bundles (see scripts/build-cvruntime.sh).
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
       - name: Install web dependencies and sync static export into Go embed tree
         working-directory: web
         run: |

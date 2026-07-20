@@ -35,16 +35,19 @@ OPENCV_VERSION="4.10.0.84"
 NUMPY_VERSION="2.1.3"
 
 # Map GOOS/GOARCH → python-build-standalone triple and manylinux platform tag.
+# Use the short manylinux2014_* tag (not the dual manylinux_2_17_*.manylinux2014_*
+# form): pip's --platform matcher rejects the dual tag and then reports
+# "No matching distribution" for opencv-python-headless / numpy.
 case "${GOOS}_${GOARCH}" in
   linux_arm64)
     PBS_TRIPLE="aarch64-unknown-linux-gnu"
     PBS_MACHINE="aarch64"
-    WHEEL_PLATFORM="manylinux_2_17_aarch64.manylinux2014_aarch64"
+    WHEEL_PLATFORM="manylinux2014_aarch64"
     ;;
   linux_amd64)
     PBS_TRIPLE="x86_64-unknown-linux-gnu"
     PBS_MACHINE="x86_64"
-    WHEEL_PLATFORM="manylinux_2_17_x86_64.manylinux2014_x86_64"
+    WHEEL_PLATFORM="manylinux2014_x86_64"
     ;;
   *)
     echo "ERROR: unsupported target ${GOOS}/${GOARCH}" >&2
@@ -100,13 +103,16 @@ else
   # and install them into the bundle's site-packages.  No emulation required.
   echo "    Cross-platform wheel install (host=${NATIVE_MACHINE} → target=${PBS_MACHINE})"
   PY_SITE="${OUTDIR}/python/lib/python3.12/site-packages"
+  # --abi cp312 is required so pip accepts opencv's cp37-abi3 wheels and
+  # numpy's cp312 wheels for the target; without it resolution returns none.
   python3 -m pip install \
     --quiet \
     --no-cache-dir \
     --target "${PY_SITE}" \
     --platform "${WHEEL_PLATFORM}" \
     --implementation cp \
-    --python-version "3.12" \
+    --python-version "312" \
+    --abi cp312 \
     --only-binary=:all: \
     "opencv-python-headless==${OPENCV_VERSION}" \
     "numpy==${NUMPY_VERSION}"
