@@ -44,8 +44,8 @@ jobs:
 
       - name: Build CV runtime bundles (linux/arm64 and linux/amd64)
         run: |
-          GOOS=linux GOARCH=arm64 scripts/build-cvruntime.sh
-          GOOS=linux GOARCH=amd64 scripts/build-cvruntime.sh
+          GOOS=linux GOARCH=arm64 bash scripts/build-cvruntime.sh
+          GOOS=linux GOARCH=amd64 bash scripts/build-cvruntime.sh
 
       - name: Create dist directory
         run: mkdir -p dist
