@@ -23,8 +23,9 @@ profile.cov
 backend/bin/
 
 # Next static export copied into embed tree (run: cd web && npm run release:sync)
+# Keep placeholder.txt so //go:embed works before the first UI bake.
 backend/internal/webdist/dist/**
-!backend/internal/webdist/dist/index.html
+!backend/internal/webdist/dist/placeholder.txt
 
 # Go workspace file
 go.work
@@ -53,3 +54,6 @@ __pycache__/
 # Python virtual environments (e.g. backend/internal/cvruntime/src/.venv)
 .venv/
 venv/
+
+# Release / CV runtime build outputs at repo root (not webdist/dist)
+/dist
