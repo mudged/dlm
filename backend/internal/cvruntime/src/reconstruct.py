@@ -111,6 +111,16 @@ CUE_SEQUENCE = ("r", "b", "g")
 # A frame whose bright area is under this fraction of its pulse's peak area is
 # treated as dark: compression and sensor lag leave a faint smear after a flash.
 CUE_TAIL_FRAC = 0.25
+# REQ-051: quiet room outside the bookend. A side shorter than this is not
+# the room with the bulbs off.
+QUIET_MIN_S = 0.3
+QUIET_SAMPLE_FRAMES = 15
+QUIET_BOUNDARY_FRAMES = 2
+PROVISIONAL_S = 1.0
+QUIET_ROOM_REASON = (
+    "the recording needs a moment of the room with the bulbs off, "
+    "before the opening flash or after the closing flash"
+)
 
 LIGHT_COUNT_MAX = 1000
 LIGHT_COUNT_ERROR = "light_count must be a whole number from 1 to 1000"
@@ -488,6 +498,72 @@ def _cue_frames(
         else:
             i += 1
     return cues
+
+
+def _quiet_interval(
+    cue_frames: list[tuple[int, int]],
+    n_frames: int,
+    fps: float,
+) -> tuple[Optional[tuple[str, int, int]], Optional[str]]:
+    """
+    Picks the quiet side for the room picture (REQ-051).
+
+    Returns ``((side, start, end_exclusive), None)``, ``(None, QUIET_ROOM_REASON)``,
+    or ``(None, None)`` when *cue_frames* is empty. *side* is ``"before"`` or
+    ``"after"``. Cue tuples are ``(first_red, last_green)`` inclusive.
+    """
+    if not cue_frames:
+        return None, None
+    if not fps or fps <= 0:
+        fps = 30.0
+    first_red = cue_frames[0][0]
+    after_start = cue_frames[-1][1] + 1
+    before_n = first_red
+    after_n = max(0, n_frames - after_start)
+    if len(cue_frames) == 1:
+        if after_n > before_n:
+            start, end, side = 0, first_red, "before"
+        else:
+            start, end, side = after_start, n_frames, "after"
+    elif before_n / fps >= QUIET_MIN_S:
+        start, end, side = 0, first_red, "before"
+    else:
+        start, end, side = after_start, n_frames, "after"
+    if (end - start) / fps + 1e-9 < QUIET_MIN_S:
+        return None, QUIET_ROOM_REASON
+    return (side, start, end), None
+
+
+def _positive_excess(frame: np.ndarray, baseline: np.ndarray) -> np.ndarray:
+    """Brightening of *frame* over *baseline*, minus the frame-wide median lift."""
+    diff = cv2.subtract(frame, baseline)
+    lift = int(np.median(diff))
+    if lift <= 0:
+        return diff
+    return cv2.subtract(diff, np.full_like(diff, np.uint8(lift)))
+
+
+def _boundary_moved(
+    old: list[tuple[int, int]],
+    new: list[tuple[int, int]],
+    side: str,
+) -> bool:
+    """True when the quiet boundary moved by more than QUIET_BOUNDARY_FRAMES."""
+    if not new or len(old) != len(new):
+        return True
+    if side == "before":
+        return abs(old[0][0] - new[0][0]) > QUIET_BOUNDARY_FRAMES
+    return abs(old[-1][1] - new[-1][1]) > QUIET_BOUNDARY_FRAMES
+
+
+def _sample_indexes(start: int, end: int, k: int) -> list[int]:
+    """Up to *k* unique indexes in ``[start, end)``, spread across the span."""
+    span = end - start
+    if span <= 0 or k <= 0:
+        return []
+    if span <= k:
+        return list(range(start, end))
+    return [start + (i * span) // k for i in range(k)]
 
 
 def _find_bright_blob(

@@ -1536,6 +1536,80 @@ class TestBookends(unittest.TestCase):
         self.assertIn(7, res["missing"])
 
 
+class TestQuietRoomHelpers(unittest.TestCase):
+    """REQ-051: which frames are the room, and what counts as brighter."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.m = _load_reconstruct_module()
+
+    def test_empty_cues_mean_legacy_background(self):
+        interval, reason = self.m._quiet_interval([], 100, 30.0)
+        self.assertIsNone(interval)
+        self.assertIsNone(reason)
+
+    def test_two_bookends_prefer_before_when_long_enough(self):
+        interval, reason = self.m._quiet_interval([(15, 30), (100, 115)], 130, 30.0)
+        self.assertIsNone(reason)
+        self.assertEqual(interval, ("before", 0, 15))
+
+    def test_two_bookends_fall_back_to_after(self):
+        interval, reason = self.m._quiet_interval([(3, 20), (40, 55)], 80, 30.0)
+        self.assertIsNone(reason)
+        self.assertEqual(interval, ("after", 56, 80))
+
+    def test_two_bookends_reject_when_both_sides_are_short(self):
+        interval, reason = self.m._quiet_interval([(3, 20), (23, 40)], 43, 30.0)
+        self.assertIsNone(interval)
+        self.assertEqual(reason, self.m.QUIET_ROOM_REASON)
+
+    def test_opening_only_uses_before_not_the_sweep(self):
+        interval, reason = self.m._quiet_interval([(15, 40)], 200, 30.0)
+        self.assertIsNone(reason)
+        self.assertEqual(interval, ("before", 0, 15))
+
+    def test_closing_only_uses_after_not_the_sweep(self):
+        interval, reason = self.m._quiet_interval([(90, 110)], 120, 30.0)
+        self.assertIsNone(reason)
+        self.assertEqual(interval, ("after", 111, 120))
+
+    def test_single_bookend_tie_counts_as_closing(self):
+        interval, reason = self.m._quiet_interval([(10, 19)], 30, 30.0)
+        self.assertIsNone(reason)
+        self.assertEqual(interval, ("after", 20, 30))
+
+    def test_opening_only_short_lead_does_not_use_the_sweep(self):
+        interval, reason = self.m._quiet_interval([(3, 20)], 200, 30.0)
+        self.assertIsNone(interval)
+        self.assertEqual(reason, self.m.QUIET_ROOM_REASON)
+
+    def test_positive_excess_removes_frame_wide_lift_and_ignores_darkening(self):
+        frame = np.full((4, 4), 40, np.uint8)
+        frame[0, 0] = 255
+        excess = self.m._positive_excess(frame, np.zeros((4, 4), np.uint8))
+        self.assertEqual(int(excess[0, 0]), 215)
+        self.assertEqual(int(excess[1, 1]), 0)
+        dark = self.m._positive_excess(
+            np.zeros((2, 2), np.uint8), np.full((2, 2), 180, np.uint8)
+        )
+        self.assertTrue(np.all(dark == 0))
+
+    def test_boundary_moved_tolerates_two_frames(self):
+        old = [(10, 40), (80, 100)]
+        self.assertFalse(self.m._boundary_moved(old, [(12, 40), (80, 100)], "before"))
+        self.assertTrue(self.m._boundary_moved(old, [(13, 40), (80, 100)], "before"))
+        self.assertFalse(self.m._boundary_moved(old, [(10, 40), (80, 102)], "after"))
+        self.assertTrue(self.m._boundary_moved(old, [(10, 40), (80, 103)], "after"))
+        self.assertTrue(self.m._boundary_moved(old, [(10, 40)], "before"))
+
+    def test_sample_indexes_cover_short_and_long_spans(self):
+        self.assertEqual(self.m._sample_indexes(0, 9, 15), list(range(9)))
+        indexes = self.m._sample_indexes(5, 35, 15)
+        self.assertEqual(len(indexes), 15)
+        self.assertEqual(len(set(indexes)), 15)
+        self.assertTrue(all(5 <= i < 35 for i in indexes))
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Entry point
 # ──────────────────────────────────────────────────────────────────────────────
