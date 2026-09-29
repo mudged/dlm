@@ -1486,7 +1486,8 @@ class TestBookends(unittest.TestCase):
             self._write(path, frames)
             blinks, cues, _fw, _fh, _K = self.m.analyse_feed(str(path), 1000)
 
-        # A pre-cue flash is not a bulb: the quiet-room picture may absorb it, and numbering still drops anything before the opening cue.
+        # A pre-cue flash is not a bulb. The quiet-room picture may absorb it,
+        # and numbering still drops anything before the opening cue.
         self.assertEqual(len(cues), 2, f"cues={cues}")
         inside = [b for b in blinks if cues[0][1] <= b[0] < cues[1][0]]
         self.assertEqual(len(inside), 3, f"blinks={blinks}")
@@ -1553,6 +1554,13 @@ class TestQuietRoomHelpers(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.m = _load_reconstruct_module()
+
+    def test_quiet_room_reason_sentence(self):
+        self.assertEqual(
+            self.m.QUIET_ROOM_REASON,
+            "the recording needs a moment of the room with the bulbs off, "
+            "before the opening flash or after the closing flash",
+        )
 
     def test_empty_cues_mean_legacy_background(self):
         interval, reason = self.m._quiet_interval([], 100, 30.0)
@@ -1768,9 +1776,13 @@ class TestQuietRoom(unittest.TestCase):
             meta, colours, _tail = self.m._classify_against_head(path)
             first_cues = self.m._cue_frames(colours, meta["fps"])
             blinks, cues, *_ = self.m.analyse_feed(path, 500)
+            problems: list[str] = []
+            listed, _cues, *_ = self.m.analyse_feed(path, 500, None, problems)
         self.assertEqual(len(first_cues), 2, first_cues)
         self.assertEqual(len(cues), 1, cues)
         self.assertEqual(blinks, [])
+        self.assertEqual(listed, [])
+        self.assertEqual(problems, [self.m.QUIET_ROOM_REASON])
 
     def _short_clip(self, path: str) -> None:
         frames = (
@@ -1805,6 +1817,27 @@ class TestQuietRoom(unittest.TestCase):
                 {"file": "a.avi", "reason": self.m.QUIET_ROOM_REASON},
                 {"file": "b.avi", "reason": self.m.QUIET_ROOM_REASON},
             ],
+        )
+
+    def test_bright_clips_keep_the_stays_bright_hint_beside_a_short_clip(self):
+        with tempfile.TemporaryDirectory() as d:
+            dark = np.zeros((self.H, self.W, 3), dtype=np.uint8)
+            bright = np.full((self.H, self.W, 3), 200, dtype=np.uint8)
+            feeds = []
+            for i in range(2):
+                path = str(Path(d) / f"bright_{i}.avi")
+                self._write(path, [dark] + [bright] * 149)
+                feeds.append({"path": path, "name": f"bright_{i}.avi"})
+            short = str(Path(d) / "short.avi")
+            self._short_clip(short)
+            feeds.append({"path": short, "name": "short.avi"})
+            res, code = _reconstruct_with_exit({"feeds": feeds, "dwell_ms": 1000})
+        self.assertEqual(code, 1)
+        self.assertEqual(res["status"], "failed")
+        self.assertIn("stays bright", res["error"].lower())
+        self.assertEqual(
+            res["rejected_feeds"],
+            [{"file": "short.avi", "reason": self.m.QUIET_ROOM_REASON}],
         )
 
     def test_good_feeds_still_succeed_when_one_clip_is_short(self):

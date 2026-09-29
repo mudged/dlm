@@ -337,6 +337,7 @@ def _classify_against_head(video_path: str) -> tuple[dict, list, list]:
                     continue
                 baseline = _median_baselines(head)
                 colours.extend(_colour_of(stored, *baseline) for stored in head)
+                head.clear()
                 continue
             colours.append(_colour_of(small, *baseline))
         if baseline is None and head:
@@ -1823,8 +1824,13 @@ def main() -> None:
             scans.append({"name": name, "blinks": blinks, "cues": cues})
             all_Ks.append(K)
 
-        if not any(s["blinks"] for s in scans) and not quiet_reasons:
-            _emit_failure(_no_blinks_message(rejections, dwell_ms))
+        if not any(s["blinks"] for s in scans) and any(
+            fi not in quiet_reasons for fi in range(len(scans))
+        ):
+            _emit_failure(
+                _no_blinks_message(rejections, dwell_ms),
+                _rejected_feeds(scans, quiet_reasons),
+            )
 
         # Stage 2 — number each feed from its bookend, then keep usable feeds.
         numbered, rejected = _number_from_bookends(scans, light_count)
