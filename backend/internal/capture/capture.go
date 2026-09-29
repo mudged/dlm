@@ -150,11 +150,7 @@ func New(getter deviceGetter, drv driver, checker RoutineChecker, opts *Controll
 }
 
 func (c *Controller) dwellTooShort() bool {
-	usingDefaultBookend := c.cueOn == defaultCueOn && c.cueGap == defaultCueGap && c.settle == defaultSettle
-	if !usingDefaultBookend {
-		return false
-	}
-	if c.dwell < minDefaultDwell {
+	if c.cueOn == defaultCueOn && c.dwell < minDefaultDwell {
 		return true
 	}
 	return c.dwell <= c.cueOn

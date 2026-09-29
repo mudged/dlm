@@ -161,7 +161,7 @@ func TestCapture_stopDuringPreamble_neverLightsBulbZero(t *testing.T) {
 	drv := &fakeDriver{}
 	dev := store.Device{ID: "d-pre", LightCount: 4}
 	ctrl := capture.New(&fakeGetter{device: dev}, drv, nil, &capture.ControllerOpts{
-		Dwell:  30 * time.Millisecond,
+		Dwell:  100 * time.Millisecond,
 		CueOn:  80 * time.Millisecond,
 		CueGap: 5 * time.Millisecond,
 		Settle: 5 * time.Millisecond,
@@ -194,6 +194,24 @@ func TestCapture_defaultCue_dwellUnder500_rejected(t *testing.T) {
 		Dwell: 100 * time.Millisecond,
 	})
 	_, err := ctrl.Start(context.Background(), "d-short")
+	if !errors.Is(err, capture.ErrCaptureDwellTooShort) {
+		t.Fatalf("err = %v, want ErrCaptureDwellTooShort", err)
+	}
+	if len(drv.snapshot()) != 0 {
+		t.Fatalf("driver called on rejected start: %+v", drv.snapshot())
+	}
+}
+
+func TestCapture_customCue_dwellNotGreaterThanCueOn_rejected(t *testing.T) {
+	drv := &fakeDriver{}
+	dev := store.Device{ID: "d-cue", LightCount: 2}
+	ctrl := capture.New(&fakeGetter{device: dev}, drv, nil, &capture.ControllerOpts{
+		Dwell:  80 * time.Millisecond,
+		CueOn:  80 * time.Millisecond,
+		CueGap: 5 * time.Millisecond,
+		Settle: 5 * time.Millisecond,
+	})
+	_, err := ctrl.Start(context.Background(), "d-cue")
 	if !errors.Is(err, capture.ErrCaptureDwellTooShort) {
 		t.Fatalf("err = %v, want ErrCaptureDwellTooShort", err)
 	}
