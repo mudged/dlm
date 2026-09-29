@@ -19,6 +19,7 @@ import type { CaptureStatus, Device } from "@/lib/devices";
 import {
   CaptureError,
   assignDevice,
+  capturePhaseMessage,
   deleteDevice,
   fetchDevice,
   getCaptureStatus,
@@ -444,22 +445,22 @@ export function DeviceDetailClient() {
         </h2>
         <p className="text-xs text-slate-600 dark:text-slate-400">
           Before starting the sweep, begin recording from each camera angle.
+          Keep recording until the closing red, blue, and green flash finishes.
           The device will cycle through each light in sequence; upload the
           recorded videos later via Models &rarr; Create from video.
         </p>
 
-        {captureStatus?.state === "running" ? (
-          <p className="text-sm font-medium text-sky-700 dark:text-sky-400">
-            Running &mdash; lighting{" "}
-            {captureStatus.current_index !== undefined
-              ? `${captureStatus.current_index + 1} / ${captureStatus.light_count}`
-              : captureStatus.light_count}
-          </p>
-        ) : (
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            {captureStatus ? "Idle" : "Loading status…"}
-          </p>
-        )}
+        <p
+          className={
+            captureStatus?.state === "running"
+              ? "text-sm font-medium text-sky-700 dark:text-sky-400"
+              : "text-sm text-slate-500 dark:text-slate-400"
+          }
+        >
+          {captureStatus
+            ? capturePhaseMessage(captureStatus)
+            : "Loading status…"}
+        </p>
 
         {captureError ? (
           <p

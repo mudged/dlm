@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   CaptureError,
+  capturePhaseMessage,
   createDevice,
   fetchDevice,
   getCaptureStatus,
@@ -101,7 +102,7 @@ describe("startCapture (REQ-047)", () => {
     globalThis.fetch = vi.fn(async (url, init) => {
       calls.push({ url: url as string, init: init as RequestInit });
       return new Response(
-        JSON.stringify({ device_id: "dev-1", state: "running", light_count: 120, current_index: 0 }),
+        JSON.stringify({ device_id: "dev-1", state: "running", light_count: 120, phase: "preamble" }),
         { status: 200, headers: { "Content-Type": "application/json" } },
       );
     }) as typeof globalThis.fetch;
@@ -109,7 +110,8 @@ describe("startCapture (REQ-047)", () => {
     const status = await startCapture("dev-1");
     expect(status.state).toBe("running");
     expect(status.light_count).toBe(120);
-    expect(status.current_index).toBe(0);
+    expect(status.phase).toBe("preamble");
+    expect(status.current_index).toBeUndefined();
     expect(calls[0].url).toBe("/api/v1/devices/dev-1/capture/start");
     expect(calls[0].init.method).toBe("POST");
   });
@@ -196,5 +198,17 @@ describe("getCaptureStatus (REQ-047)", () => {
     ) as typeof globalThis.fetch;
 
     await expect(getCaptureStatus("dev-missing")).rejects.toThrow("device not found");
+  });
+});
+
+describe("capturePhaseMessage", () => {
+  it("describes preamble, sweep, and postamble", () => {
+    expect(capturePhaseMessage({ state: "running", light_count: 120, phase: "preamble" }))
+      .toBe("Starting — red, blue, green flash");
+    expect(capturePhaseMessage({ state: "running", light_count: 120, phase: "sweep", current_index: 2 }))
+      .toBe("Lighting 3 / 120");
+    expect(capturePhaseMessage({ state: "running", light_count: 120, phase: "postamble" }))
+      .toBe("Finishing — red, blue, green flash. Keep recording until this ends.");
+    expect(capturePhaseMessage({ state: "idle", light_count: 120 })).toBe("Idle");
   });
 });

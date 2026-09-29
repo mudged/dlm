@@ -12,7 +12,20 @@ export type CaptureStatus = {
   state: "idle" | "running" | "stopping";
   light_count: number;
   current_index?: number;
+  phase?: "preamble" | "sweep" | "postamble";
 };
+
+export function capturePhaseMessage(status: CaptureStatus): string {
+  if (status.state !== "running") return "Idle";
+  if (status.phase === "preamble") return "Starting — red, blue, green flash";
+  if (status.phase === "postamble") {
+    return "Finishing — red, blue, green flash. Keep recording until this ends.";
+  }
+  if (status.phase === "sweep" && status.current_index !== undefined) {
+    return `Lighting ${status.current_index + 1} / ${status.light_count}`;
+  }
+  return "Running";
+}
 
 export class CaptureError extends Error {
   code: string;
