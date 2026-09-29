@@ -27,12 +27,22 @@ var (
 	// ErrCaptureRoutineCheck is returned when the active-routine conflict guard
 	// cannot be evaluated (e.g. store query failure).  Start must fail closed.
 	ErrCaptureRoutineCheck = errors.New("could not check for active routine run")
+	// ErrCaptureDwellTooShort is returned when dwell is shorter than the bookend allows.
+	ErrCaptureDwellTooShort = errors.New("capture dwell is shorter than the bookend signal allows")
+)
+
+const (
+	defaultCueOn      = 200 * time.Millisecond
+	defaultCueGap     = 200 * time.Millisecond
+	defaultSettle     = 500 * time.Millisecond
+	minDefaultDwell   = 500 * time.Millisecond
 )
 
 // driver drives raw LED frames on a WLED device.
 type driver interface {
 	DriveSingleLED(ctx context.Context, d store.Device, litIdx, n int) error
 	DriveAllOff(ctx context.Context, d store.Device, n int) error
+	DriveAllColor(ctx context.Context, d store.Device, n, r, g, b int) error
 }
 
 // deviceGetter retrieves a device from persistent storage.
@@ -51,6 +61,7 @@ type Status struct {
 	State        string `json:"state"`
 	LightCount   int    `json:"light_count"`
 	CurrentIndex int    `json:"current_index"`
+	Phase        string `json:"phase"`
 }
 
 const (
@@ -65,6 +76,7 @@ type sweepEntry struct {
 	state        string
 	lightCount   int
 	currentIndex int
+	phase        string
 	stopOnce     sync.Once
 	stop         chan struct{}
 }
@@ -75,8 +87,10 @@ func (e *sweepEntry) doStop() {
 
 // ControllerOpts configures optional Controller parameters.
 type ControllerOpts struct {
-	// Dwell overrides the per-LED on-time.  Ignored if <= 0.
-	Dwell time.Duration
+	Dwell  time.Duration
+	CueOn  time.Duration
+	CueGap time.Duration
+	Settle time.Duration
 }
 
 // Controller manages at most one active capture sweep per device.
@@ -86,6 +100,9 @@ type Controller struct {
 	drv     driver
 	checker RoutineChecker // may be nil
 	dwell   time.Duration
+	cueOn   time.Duration
+	cueGap  time.Duration
+	settle  time.Duration
 
 	mu     sync.Mutex
 	sweeps map[string]*sweepEntry
@@ -96,11 +113,28 @@ type Controller struct {
 // DLM_CAPTURE_DWELL_MS env var → default 1000 ms.
 func New(getter deviceGetter, drv driver, checker RoutineChecker, opts *ControllerOpts) *Controller {
 	dwell := 1000 * time.Millisecond
+	cueOn := defaultCueOn
+	cueGap := defaultCueGap
+	settle := defaultSettle
 
-	if opts != nil && opts.Dwell > 0 {
-		dwell = opts.Dwell
-	} else if ms, err := strconv.Atoi(os.Getenv("DLM_CAPTURE_DWELL_MS")); err == nil && ms > 0 {
-		dwell = time.Duration(ms) * time.Millisecond
+	if opts != nil {
+		if opts.Dwell > 0 {
+			dwell = opts.Dwell
+		}
+		if opts.CueOn > 0 {
+			cueOn = opts.CueOn
+		}
+		if opts.CueGap > 0 {
+			cueGap = opts.CueGap
+		}
+		if opts.Settle > 0 {
+			settle = opts.Settle
+		}
+	}
+	if opts == nil || opts.Dwell <= 0 {
+		if ms, err := strconv.Atoi(os.Getenv("DLM_CAPTURE_DWELL_MS")); err == nil && ms > 0 {
+			dwell = time.Duration(ms) * time.Millisecond
+		}
 	}
 
 	return &Controller{
@@ -108,8 +142,22 @@ func New(getter deviceGetter, drv driver, checker RoutineChecker, opts *Controll
 		drv:     drv,
 		checker: checker,
 		dwell:   dwell,
+		cueOn:   cueOn,
+		cueGap:  cueGap,
+		settle:  settle,
 		sweeps:  make(map[string]*sweepEntry),
 	}
+}
+
+func (c *Controller) dwellTooShort() bool {
+	usingDefaultBookend := c.cueOn == defaultCueOn && c.cueGap == defaultCueGap && c.settle == defaultSettle
+	if !usingDefaultBookend {
+		return false
+	}
+	if c.dwell < minDefaultDwell {
+		return true
+	}
+	return c.dwell <= c.cueOn
 }
 
 // Start begins a capture sweep for deviceID.  It returns the initial Status
@@ -139,6 +187,10 @@ func (c *Controller) Start(ctx context.Context, deviceID string) (Status, error)
 
 	n := d.LightCount
 
+	if c.dwellTooShort() {
+		return Status{}, ErrCaptureDwellTooShort
+	}
+
 	c.mu.Lock()
 	if entry, exists := c.sweeps[deviceID]; exists {
 		entry.mu.Lock()
@@ -153,6 +205,7 @@ func (c *Controller) Start(ctx context.Context, deviceID string) (Status, error)
 	entry := &sweepEntry{
 		state:      stateRunning,
 		lightCount: n,
+		phase:      "preamble",
 		stop:       make(chan struct{}),
 	}
 	c.sweeps[deviceID] = entry
@@ -160,36 +213,82 @@ func (c *Controller) Start(ctx context.Context, deviceID string) (Status, error)
 
 	go c.runSweep(d, entry, n)
 
-	return Status{State: stateRunning, LightCount: n, CurrentIndex: 0}, nil
+	return Status{State: stateRunning, LightCount: n, Phase: "preamble"}, nil
+}
+
+func (c *Controller) waitOrStop(entry *sweepEntry, d time.Duration) bool {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-entry.stop:
+		return false
+	case <-timer.C:
+		return true
+	}
+}
+
+func (c *Controller) setPhase(entry *sweepEntry, phase string, idx int, haveIdx bool) {
+	entry.mu.Lock()
+	entry.phase = phase
+	if haveIdx {
+		entry.currentIndex = idx
+	}
+	entry.mu.Unlock()
+}
+
+// playBookend paints red, blue, green. settleAfter waits c.settle after the
+// green pulse's all-off (opening signal). The closing signal passes false.
+// Returns false when Stop fires. On Stop the strip is all off.
+func (c *Controller) playBookend(ctx context.Context, d store.Device, entry *sweepEntry, n int, settleAfter bool) bool {
+	colors := [][3]int{{255, 0, 0}, {0, 0, 255}, {0, 255, 0}}
+	for i, rgb := range colors {
+		_ = c.drv.DriveAllColor(ctx, d, n, rgb[0], rgb[1], rgb[2])
+		if !c.waitOrStop(entry, c.cueOn) {
+			_ = c.drv.DriveAllOff(ctx, d, n)
+			return false
+		}
+		_ = c.drv.DriveAllOff(ctx, d, n)
+		if i == len(colors)-1 {
+			if !settleAfter {
+				return true
+			}
+			return c.waitOrStop(entry, c.settle)
+		}
+		if !c.waitOrStop(entry, c.cueGap) {
+			return false
+		}
+	}
+	return true
 }
 
 // runSweep executes the LED sweep loop in a goroutine.
 func (c *Controller) runSweep(d store.Device, entry *sweepEntry, n int) {
-	ticker := time.NewTicker(c.dwell)
-	defer ticker.Stop()
-
 	ctx := context.Background()
-	idx := 0
-	for {
+	defer c.removeSweep(d.ID)
+
+	c.setPhase(entry, "preamble", 0, false)
+	if !c.playBookend(ctx, d, entry, n, true) {
+		_ = c.drv.DriveAllOff(ctx, d, n)
+		return
+	}
+
+	for idx := 0; idx < n; idx++ {
+		c.setPhase(entry, "sweep", idx, true)
 		_ = c.drv.DriveSingleLED(ctx, d, idx, n)
-
-		entry.mu.Lock()
-		entry.currentIndex = idx
-		entry.mu.Unlock()
-
-		select {
-		case <-entry.stop:
+		if !c.waitOrStop(entry, c.dwell) {
 			_ = c.drv.DriveAllOff(ctx, d, n)
-			c.removeSweep(d.ID)
 			return
-		case <-ticker.C:
-			idx++
-			if idx >= n {
-				_ = c.drv.DriveAllOff(ctx, d, n)
-				c.removeSweep(d.ID)
-				return
-			}
 		}
+	}
+
+	c.setPhase(entry, "postamble", 0, false)
+	_ = c.drv.DriveAllOff(ctx, d, n)
+	if !c.waitOrStop(entry, c.settle) {
+		return
+	}
+	if !c.playBookend(ctx, d, entry, n, false) {
+		_ = c.drv.DriveAllOff(ctx, d, n)
+		return
 	}
 }
 
@@ -234,6 +333,7 @@ func (c *Controller) GetStatus(deviceID string) Status {
 		State:        entry.state,
 		LightCount:   entry.lightCount,
 		CurrentIndex: entry.currentIndex,
+		Phase:        entry.phase,
 	}
 }
 

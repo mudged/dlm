@@ -29,6 +29,9 @@ func (n *noopDriver) DriveSingleLED(_ context.Context, _ store.Device, _, _ int)
 	return nil
 }
 func (n *noopDriver) DriveAllOff(_ context.Context, _ store.Device, _ int) error { return nil }
+func (n *noopDriver) DriveAllColor(_ context.Context, _ store.Device, _, _, _, _ int) error {
+	return nil
+}
 
 // newCaptureTestServer creates an httptest.Server with a real capture controller
 // backed by noopDriver so no WLED network calls happen.
@@ -40,7 +43,12 @@ func newCaptureTestServer(t *testing.T, st *store.Store) *httptest.Server {
 		WriteTimeout: 15 * time.Second,
 		DBPath:       filepath.Join(t.TempDir(), "unused.db"),
 	}
-	ctrl := capture.New(st, &noopDriver{}, nil, &capture.ControllerOpts{Dwell: 20 * time.Millisecond})
+	ctrl := capture.New(st, &noopDriver{}, nil, &capture.ControllerOpts{
+		Dwell:  20 * time.Millisecond,
+		CueOn:  5 * time.Millisecond,
+		CueGap: 5 * time.Millisecond,
+		Settle: 5 * time.Millisecond,
+	})
 	t.Cleanup(ctrl.Shutdown)
 
 	log := noopLogger()

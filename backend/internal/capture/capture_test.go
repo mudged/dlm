@@ -18,8 +18,9 @@ type fakeDriver struct {
 }
 
 type driveCall struct {
-	kind string // "single" or "alloff"
-	idx  int
+	kind    string // "single", "alloff", "color"
+	idx     int
+	r, g, b int
 }
 
 func (f *fakeDriver) DriveSingleLED(_ context.Context, _ store.Device, litIdx, _ int) error {
@@ -36,12 +37,28 @@ func (f *fakeDriver) DriveAllOff(_ context.Context, _ store.Device, _ int) error
 	return nil
 }
 
+func (f *fakeDriver) DriveAllColor(_ context.Context, _ store.Device, _ int, r, g, b int) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, driveCall{kind: "color", r: r, g: g, b: b})
+	return nil
+}
+
 func (f *fakeDriver) snapshot() []driveCall {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	out := make([]driveCall, len(f.calls))
 	copy(out, f.calls)
 	return out
+}
+
+func fastTiming(dwell time.Duration) *capture.ControllerOpts {
+	return &capture.ControllerOpts{
+		Dwell:  dwell,
+		CueOn:  5 * time.Millisecond,
+		CueGap: 5 * time.Millisecond,
+		Settle: 5 * time.Millisecond,
+	}
 }
 
 // fakeGetter returns a fixed device.
@@ -67,7 +84,7 @@ func (c *fakeRoutineChecker) ModelHasActiveRoutineRun(_ context.Context, _ strin
 func newController(t *testing.T, d store.Device, drv *fakeDriver) *capture.Controller {
 	t.Helper()
 	getter := &fakeGetter{device: d}
-	return capture.New(getter, drv, nil, &capture.ControllerOpts{Dwell: 20 * time.Millisecond})
+	return capture.New(getter, drv, nil, fastTiming(20*time.Millisecond))
 }
 
 func TestCapture_sweepCallsInOrder_thenAllOff(t *testing.T) {
@@ -82,31 +99,45 @@ func TestCapture_sweepCallsInOrder_thenAllOff(t *testing.T) {
 	if st.State != "running" {
 		t.Fatalf("initial state = %q want running", st.State)
 	}
+	if st.Phase != "preamble" {
+		t.Fatalf("initial phase = %q want preamble", st.Phase)
+	}
 
-	// Wait generously for the 3-LED sweep + alloff to complete.
-	deadline := time.Now().Add(500 * time.Millisecond)
+	want := []driveCall{
+		{kind: "color", r: 255},
+		{kind: "alloff"},
+		{kind: "color", b: 255},
+		{kind: "alloff"},
+		{kind: "color", g: 255},
+		{kind: "alloff"},
+		{kind: "single", idx: 0},
+		{kind: "single", idx: 1},
+		{kind: "single", idx: 2},
+		{kind: "alloff"},
+		{kind: "color", r: 255},
+		{kind: "alloff"},
+		{kind: "color", b: 255},
+		{kind: "alloff"},
+		{kind: "color", g: 255},
+		{kind: "alloff"},
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
 		calls := drv.snapshot()
-		if len(calls) >= 4 {
+		if len(calls) >= len(want) {
 			break
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
 
 	calls := drv.snapshot()
-	if len(calls) < 4 {
-		t.Fatalf("expected ≥4 calls (3 single + alloff), got %d: %+v", len(calls), calls)
+	if len(calls) != len(want) {
+		t.Fatalf("got %d calls, want %d: %+v", len(calls), len(want), calls)
 	}
-
-	// Verify sequence: single(0), single(1), single(2), alloff
-	for i, want := range []driveCall{
-		{kind: "single", idx: 0},
-		{kind: "single", idx: 1},
-		{kind: "single", idx: 2},
-		{kind: "alloff"},
-	} {
-		if calls[i] != want {
-			t.Errorf("calls[%d] = %+v, want %+v", i, calls[i], want)
+	for i, w := range want {
+		if calls[i] != w {
+			t.Errorf("calls[%d] = %+v, want %+v", i, calls[i], w)
 		}
 	}
 
@@ -126,11 +157,56 @@ func TestCapture_sweepCallsInOrder_thenAllOff(t *testing.T) {
 	}
 }
 
+func TestCapture_stopDuringPreamble_neverLightsBulbZero(t *testing.T) {
+	drv := &fakeDriver{}
+	dev := store.Device{ID: "d-pre", LightCount: 4}
+	ctrl := capture.New(&fakeGetter{device: dev}, drv, nil, &capture.ControllerOpts{
+		Dwell:  30 * time.Millisecond,
+		CueOn:  80 * time.Millisecond,
+		CueGap: 5 * time.Millisecond,
+		Settle: 5 * time.Millisecond,
+	})
+	if _, err := ctrl.Start(context.Background(), "d-pre"); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	time.Sleep(15 * time.Millisecond)
+	ctrl.Stop("d-pre")
+
+	deadline := time.Now().Add(500 * time.Millisecond)
+	for time.Now().Before(deadline) && ctrl.GetStatus("d-pre").State != "idle" {
+		time.Sleep(5 * time.Millisecond)
+	}
+	for _, c := range drv.snapshot() {
+		if c.kind == "single" {
+			t.Fatalf("bulb lit during preamble stop: %+v", drv.snapshot())
+		}
+	}
+	calls := drv.snapshot()
+	if len(calls) == 0 || calls[len(calls)-1].kind != "alloff" {
+		t.Fatalf("last call = %+v, want alloff", calls)
+	}
+}
+
+func TestCapture_defaultCue_dwellUnder500_rejected(t *testing.T) {
+	drv := &fakeDriver{}
+	dev := store.Device{ID: "d-short", LightCount: 2}
+	ctrl := capture.New(&fakeGetter{device: dev}, drv, nil, &capture.ControllerOpts{
+		Dwell: 100 * time.Millisecond,
+	})
+	_, err := ctrl.Start(context.Background(), "d-short")
+	if !errors.Is(err, capture.ErrCaptureDwellTooShort) {
+		t.Fatalf("err = %v, want ErrCaptureDwellTooShort", err)
+	}
+	if len(drv.snapshot()) != 0 {
+		t.Fatalf("driver called on rejected start: %+v", drv.snapshot())
+	}
+}
+
 func TestCapture_stopMidSweep_reportsStoppingThenIdle(t *testing.T) {
 	drv := &fakeDriver{}
 	dev := store.Device{ID: "d2", LightCount: 10}
 	// Use a longer dwell so we can stop mid-sweep reliably.
-	ctrl := capture.New(&fakeGetter{device: dev}, drv, nil, &capture.ControllerOpts{Dwell: 100 * time.Millisecond})
+	ctrl := capture.New(&fakeGetter{device: dev}, drv, nil, fastTiming(100*time.Millisecond))
 
 	if _, err := ctrl.Start(context.Background(), "d2"); err != nil {
 		t.Fatalf("Start: %v", err)
@@ -168,22 +244,12 @@ func TestCapture_stopMidSweep_reportsStoppingThenIdle(t *testing.T) {
 	if last.kind != "alloff" {
 		t.Fatalf("last call = %+v, want alloff", last)
 	}
-
-	// No further single calls after alloff.
-	for i := range calls {
-		if calls[i].kind == "alloff" {
-			if i < len(calls)-1 {
-				t.Fatalf("calls after alloff: %+v", calls[i+1:])
-			}
-			break
-		}
-	}
 }
 
 func TestCapture_startTwice_returnsConflict(t *testing.T) {
 	drv := &fakeDriver{}
 	dev := store.Device{ID: "d3", LightCount: 5}
-	ctrl := capture.New(&fakeGetter{device: dev}, drv, nil, &capture.ControllerOpts{Dwell: 200 * time.Millisecond})
+	ctrl := capture.New(&fakeGetter{device: dev}, drv, nil, fastTiming(200*time.Millisecond))
 
 	if _, err := ctrl.Start(context.Background(), "d3"); err != nil {
 		t.Fatalf("first Start: %v", err)
@@ -217,7 +283,7 @@ func TestCapture_stopIdleDevice_isNoop(t *testing.T) {
 func TestCapture_deviceNotFound(t *testing.T) {
 	drv := &fakeDriver{}
 	getter := &fakeGetter{err: store.ErrDeviceNotFound}
-	ctrl := capture.New(getter, drv, nil, &capture.ControllerOpts{Dwell: 20 * time.Millisecond})
+	ctrl := capture.New(getter, drv, nil, fastTiming(20*time.Millisecond))
 
 	_, err := ctrl.Start(context.Background(), "missing")
 	if !errors.Is(err, store.ErrDeviceNotFound) {
@@ -230,7 +296,7 @@ func TestCapture_routineCheckError_refusesStart(t *testing.T) {
 	modelID := "m1"
 	dev := store.Device{ID: "d6", LightCount: 3, ModelID: &modelID}
 	checker := &fakeRoutineChecker{err: errors.New("db unavailable")}
-	ctrl := capture.New(&fakeGetter{device: dev}, drv, checker, &capture.ControllerOpts{Dwell: 20 * time.Millisecond})
+	ctrl := capture.New(&fakeGetter{device: dev}, drv, checker, fastTiming(20*time.Millisecond))
 
 	_, err := ctrl.Start(context.Background(), "d6")
 	if !errors.Is(err, capture.ErrCaptureRoutineCheck) {
@@ -251,7 +317,7 @@ func TestCapture_activeRoutine_returnsConflict(t *testing.T) {
 	modelID := "m1"
 	dev := store.Device{ID: "d7", LightCount: 3, ModelID: &modelID}
 	checker := &fakeRoutineChecker{busy: true}
-	ctrl := capture.New(&fakeGetter{device: dev}, drv, checker, &capture.ControllerOpts{Dwell: 20 * time.Millisecond})
+	ctrl := capture.New(&fakeGetter{device: dev}, drv, checker, fastTiming(20*time.Millisecond))
 
 	_, err := ctrl.Start(context.Background(), "d7")
 	if !errors.Is(err, capture.ErrCaptureConflict) {
@@ -273,7 +339,7 @@ func TestCapture_completedSweepsDoNotRetainMapEntries(t *testing.T) {
 			"c": {ID: "c", LightCount: 2},
 		},
 	}
-	ctrl := capture.New(getter, drv, nil, &capture.ControllerOpts{Dwell: 10 * time.Millisecond})
+	ctrl := capture.New(getter, drv, nil, fastTiming(10*time.Millisecond))
 
 	for _, id := range []string{"a", "b", "c"} {
 		if _, err := ctrl.Start(context.Background(), id); err != nil {
@@ -281,7 +347,7 @@ func TestCapture_completedSweepsDoNotRetainMapEntries(t *testing.T) {
 		}
 	}
 
-	deadline := time.Now().Add(500 * time.Millisecond)
+	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
 		if ctrl.ActiveSweepCount() == 0 {
 			return
@@ -308,7 +374,7 @@ func TestCapture_noActiveRoutine_startsSweep(t *testing.T) {
 	modelID := "m1"
 	dev := store.Device{ID: "d8", LightCount: 2, ModelID: &modelID}
 	checker := &fakeRoutineChecker{busy: false}
-	ctrl := capture.New(&fakeGetter{device: dev}, drv, checker, &capture.ControllerOpts{Dwell: 20 * time.Millisecond})
+	ctrl := capture.New(&fakeGetter{device: dev}, drv, checker, fastTiming(20*time.Millisecond))
 
 	st, err := ctrl.Start(context.Background(), "d8")
 	if err != nil {
@@ -318,7 +384,7 @@ func TestCapture_noActiveRoutine_startsSweep(t *testing.T) {
 		t.Fatalf("state = %q want running", st.State)
 	}
 
-	deadline := time.Now().Add(300 * time.Millisecond)
+	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
 		if len(drv.snapshot()) >= 3 {
 			break

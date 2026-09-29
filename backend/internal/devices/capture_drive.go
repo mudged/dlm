@@ -27,6 +27,22 @@ func (p *Pusher) DriveSingleLED(ctx context.Context, d store.Device, litIdx, n i
 	return postJSONState(ctx, p.Client, d.BaseURL, d.WLEDPassword, payload)
 }
 
+// DriveAllColor paints all n LEDs the same RGB colour at full brightness.
+func (p *Pusher) DriveAllColor(ctx context.Context, d store.Device, n, r, g, b int) error {
+	leds := make([][]int, n)
+	for i := 0; i < n; i++ {
+		leds[i] = []int{i, r, g, b}
+	}
+	payload := map[string]any{
+		"on":  true,
+		"bri": 255,
+		"seg": []map[string]any{
+			{"id": 0, "i": leds},
+		},
+	}
+	return postJSONState(ctx, p.Client, d.BaseURL, d.WLEDPassword, payload)
+}
+
 // DriveAllOff sends a WLED frame with all n LEDs off.
 func (p *Pusher) DriveAllOff(ctx context.Context, d store.Device, n int) error {
 	leds := make([][]int, n)
