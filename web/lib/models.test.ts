@@ -5,6 +5,7 @@ import {
   createCaptureJob,
   discardCaptureJob,
   getCaptureJob,
+  parseOptionalCaptureLightCount,
 } from "./models";
 
 const MOCK_JOB = {
@@ -110,6 +111,42 @@ describe("createCaptureJob (REQ-049)", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("sets light_count on the form when it is an integer from 1 to 1000", async () => {
+    let captured: FormData | null = null;
+    globalThis.fetch = vi.fn(async (_url, init) => {
+      captured = init?.body as FormData;
+      return new Response(JSON.stringify(MOCK_JOB), {
+        status: 202,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as typeof globalThis.fetch;
+
+    const f1 = new File(["a"], "a.mp4", { type: "video/mp4" });
+    const f2 = new File(["b"], "b.mp4", { type: "video/mp4" });
+    await createCaptureJob([f1, f2], { light_count: 12 });
+
+    expect(captured).not.toBeNull();
+    expect((captured as FormData).get("light_count")).toBe("12");
+  });
+
+  it("omits the light_count form key when the param is not provided", async () => {
+    let captured: FormData | null = null;
+    globalThis.fetch = vi.fn(async (_url, init) => {
+      captured = init?.body as FormData;
+      return new Response(JSON.stringify(MOCK_JOB), {
+        status: 202,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as typeof globalThis.fetch;
+
+    const f1 = new File(["a"], "a.mp4", { type: "video/mp4" });
+    const f2 = new File(["b"], "b.mp4", { type: "video/mp4" });
+    await createCaptureJob([f1, f2]);
+
+    expect(captured).not.toBeNull();
+    expect((captured as FormData).has("light_count")).toBe(false);
+  });
+
   it("explains a dropped connection instead of Failed to fetch", async () => {
     globalThis.fetch = vi.fn(async () => {
       throw new TypeError("Failed to fetch");
@@ -120,6 +157,27 @@ describe("createCaptureJob (REQ-049)", () => {
     await expect(createCaptureJob([f1, f2])).rejects.toThrow(
       /stopped before the server could reply/,
     );
+  });
+});
+
+describe("parseOptionalCaptureLightCount", () => {
+  const rangeError = "Light count must be a whole number from 1 to 1000.";
+
+  it("returns undefined for empty input so the form can omit light_count", () => {
+    expect(parseOptionalCaptureLightCount("")).toBeUndefined();
+    expect(parseOptionalCaptureLightCount("   ")).toBeUndefined();
+  });
+
+  it("returns the integer when it is from 1 to 1000", () => {
+    expect(parseOptionalCaptureLightCount("1")).toBe(1);
+    expect(parseOptionalCaptureLightCount("12")).toBe(12);
+    expect(parseOptionalCaptureLightCount("1000")).toBe(1000);
+  });
+
+  it("rejects 0 and non-integers with the light-count range message", () => {
+    expect(() => parseOptionalCaptureLightCount("0")).toThrow(rangeError);
+    expect(() => parseOptionalCaptureLightCount("abc")).toThrow(rangeError);
+    expect(() => parseOptionalCaptureLightCount("1001")).toThrow(rangeError);
   });
 });
 
@@ -159,6 +217,31 @@ describe("getCaptureJob (REQ-049)", () => {
 
     await getCaptureJob("job/with spaces");
     expect(captured).toBe("/api/v1/models/capture/job%2Fwith%20spaces");
+  });
+
+  it("preserves rejected_feeds on a succeeded job", async () => {
+    globalThis.fetch = vi.fn(async () => {
+      return new Response(
+        JSON.stringify({
+          ...MOCK_JOB_SUCCEEDED,
+          result: {
+            ...MOCK_JOB_SUCCEEDED.result,
+            rejected_feeds: [
+              {
+                file: "side.mp4",
+                reason: "no start or end signal found",
+              },
+            ],
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    }) as typeof globalThis.fetch;
+
+    const job = await getCaptureJob("job-abc");
+    expect(job.result?.rejected_feeds).toEqual([
+      { file: "side.mp4", reason: "no start or end signal found" },
+    ]);
   });
 
   it("reads a string error from a failed reconstruction job", async () => {

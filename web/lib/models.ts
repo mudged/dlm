@@ -21,12 +21,32 @@ export type ModelDetail = ModelSummary & { lights: Light[] };
 
 export type CaptureJobLight = { id: number; x: number; y: number; z: number };
 
+export type CaptureJobRejectedFeed = { file: string; reason: string };
+
 export type CaptureJobResult = {
   light_count: number;
   lights: CaptureJobLight[];
   missing: number[];
   low_confidence: number[];
+  rejected_feeds?: CaptureJobRejectedFeed[];
 };
+
+export const captureLightCountRangeMessage =
+  "Light count must be a whole number from 1 to 1000.";
+
+/** Empty means omit light_count. Otherwise a whole number from 1 to 1000. */
+export function parseOptionalCaptureLightCount(raw: string): number | undefined {
+  const trimmed = raw.trim();
+  if (trimmed === "") return undefined;
+  if (!/^[0-9]+$/.test(trimmed)) {
+    throw new Error(captureLightCountRangeMessage);
+  }
+  const n = Number.parseInt(trimmed, 10);
+  if (n < 1 || n > 1000) {
+    throw new Error(captureLightCountRangeMessage);
+  }
+  return n;
+}
 
 export type CaptureJobStatus =
   | "pending"
@@ -87,7 +107,7 @@ function isConnectionFailure(err: unknown): boolean {
 /** POST /api/v1/models/capture — submit ≥ 2 video files, returns a new job. */
 export async function createCaptureJob(
   files: File[],
-  params?: { marker?: boolean; scale_hint?: number },
+  params?: { marker?: boolean; scale_hint?: number; light_count?: number },
 ): Promise<CaptureJob> {
   const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
   if (totalBytes > maxCaptureUploadBytes) {
@@ -100,6 +120,14 @@ export async function createCaptureJob(
   if (params?.marker) fd.set("marker", "true");
   if (params?.scale_hint !== undefined)
     fd.set("scale_hint", String(params.scale_hint));
+  if (
+    params?.light_count !== undefined &&
+    Number.isInteger(params.light_count) &&
+    params.light_count >= 1 &&
+    params.light_count <= 1000
+  ) {
+    fd.set("light_count", String(params.light_count));
+  }
   let res: Response;
   try {
     res = await fetch("/api/v1/models/capture", {

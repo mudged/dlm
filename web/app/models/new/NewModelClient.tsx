@@ -11,10 +11,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { ButtonLink } from "@/components/ui/ButtonLink";
 import {
+  captureLightCountRangeMessage,
   confirmCaptureJob,
   createCaptureJob,
   discardCaptureJob,
   getCaptureJob,
+  parseOptionalCaptureLightCount,
 } from "@/lib/models";
 import type { CaptureJob, CaptureJobLight, Light } from "@/lib/models";
 import {
@@ -187,6 +189,7 @@ function VideoPanel({
   );
   const [files, setFiles] = useState<File[]>([]);
   const [useMarker, setUseMarker] = useState(false);
+  const [lightCount, setLightCount] = useState("");
   const [uploadError, setUploadError] = useState<string | null>(null);
 
   const [confirmName, setConfirmName] = useState("");
@@ -258,9 +261,21 @@ function VideoPanel({
       setUploadError("Select at least 2 video files.");
       return;
     }
+    let parsedLightCount: number | undefined;
+    try {
+      parsedLightCount = parseOptionalCaptureLightCount(lightCount);
+    } catch (err) {
+      setUploadError(
+        err instanceof Error ? err.message : captureLightCountRangeMessage,
+      );
+      return;
+    }
     setPhase({ kind: "submitting" });
     try {
-      const job = await createCaptureJob(files, { marker: useMarker || undefined });
+      const job = await createCaptureJob(files, {
+        marker: useMarker || undefined,
+        light_count: parsedLightCount,
+      });
       setJobIdInUrl(job.job_id);
       if (job.status === "succeeded") {
         setPhase({ kind: "review", jobId: job.job_id, job });
@@ -316,6 +331,7 @@ function VideoPanel({
     setJobIdInUrl(null);
     setPhase({ kind: "idle" });
     setFiles([]);
+    setLightCount("");
     setConfirmName("");
     setConfirmError(null);
   }
@@ -383,6 +399,28 @@ function VideoPanel({
             </svg>
             Download printable marker
           </a>
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <label htmlFor="capture-light-count" className="text-sm font-medium">
+            Light count (optional)
+          </label>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Leave this empty when every clip includes the opening red, blue, and
+            green flash. If a clip only caught the closing flash, enter the same
+            light count you set on the device.
+          </p>
+          <input
+            id="capture-light-count"
+            name="light_count"
+            type="text"
+            inputMode="numeric"
+            autoComplete="off"
+            value={lightCount}
+            onChange={(e) => setLightCount(e.target.value)}
+            disabled={phase.kind === "submitting"}
+            className="min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-900"
+          />
         </div>
 
         {uploadError ? <ErrorBanner msg={uploadError} /> : null}
@@ -502,6 +540,20 @@ function VideoPanel({
             <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-400">
               All lights detected with high confidence.
             </p>
+          ) : null}
+          {result?.rejected_feeds && result.rejected_feeds.length > 0 ? (
+            <div className="mt-3">
+              <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                Clips set aside
+              </h2>
+              <ul className="mt-1.5 list-disc space-y-1 pl-5 text-xs text-slate-600 dark:text-slate-400">
+                {result.rejected_feeds.map((feed, i) => (
+                  <li key={`${feed.file}-${i}`}>
+                    {feed.file}: {feed.reason}
+                  </li>
+                ))}
+              </ul>
+            </div>
           ) : null}
           <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
             Job{" "}
