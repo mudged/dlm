@@ -200,8 +200,7 @@ def detect_blinks(
     ``[DWELL_MIN_FRAC, DWELL_MAX_FRAC] × dwell_ms`` or the blink is rejected
     (stray flashes / stuck-on segments).  Rejected on-durations, in seconds,
     are appended to *rejections* when that list is provided.  Each accepted
-    blink also records the
-    *time* (seconds from the start of the clip) at which it began, so that
+    blink also records the *time* (seconds from the start of the clip) at
     which it began, so that cross-feed correspondence (`align_detections`) can
     use the sweep cadence to recover light indices robustly even when a feed
     misses or adds a blink — rather than blindly trusting positional ordinals.
@@ -256,7 +255,12 @@ def analyse_feed(
 def _scan_feed(
     video_path: str,
 ) -> tuple[
-    list[Optional[tuple[float, float]]], list[Optional[str]], float, int, int, np.ndarray
+    list[Optional[tuple[float, float]]],
+    list[Optional[tuple[str, int]]],
+    float,
+    int,
+    int,
+    np.ndarray,
 ]:
     """
     Decodes *video_path* once for detection and returns, per frame, the
@@ -338,7 +342,7 @@ def _scan_feed(
             raise IOError(f"Cannot open video (detection pass): {video_path!r}")
 
         blobs: list[Optional[tuple[float, float]]] = []
-        colours: list[Optional[str]] = []
+        colours: list[Optional[tuple[str, int]]] = []
         while True:
             ret, frame = cap.read()
             if not ret:
@@ -453,6 +457,10 @@ def _cue_frames(
         peak = max(colours[i][1] for i in range(first, last + 1))
         for i in range(first, last + 1):
             if colours[i][1] < CUE_TAIL_FRAC * peak:
+                labels[i] = None
+    for _colour, first, last in _runs(labels):
+        if (last - first + 1) / fps < CUE_PULSE_MIN_S:
+            for i in range(first, last + 1):
                 labels[i] = None
     runs = _runs(labels)
 

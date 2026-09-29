@@ -32,10 +32,10 @@ var (
 )
 
 const (
-	defaultCueOn      = 200 * time.Millisecond
-	defaultCueGap     = 200 * time.Millisecond
-	defaultSettle     = 500 * time.Millisecond
-	minDefaultDwell   = 500 * time.Millisecond
+	defaultCueOn    = 200 * time.Millisecond
+	defaultCueGap   = 200 * time.Millisecond
+	defaultSettle   = 500 * time.Millisecond
+	minDefaultDwell = 500 * time.Millisecond
 )
 
 // driver drives raw LED frames on a WLED device.

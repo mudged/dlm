@@ -1367,6 +1367,27 @@ class TestBookends(unittest.TestCase):
         self.assertAlmostEqual(start, lead / self.FPS, delta=1.5 / self.FPS)
         self.assertAlmostEqual(end, (lead + 30) / self.FPS, delta=1.5 / self.FPS)
 
+    def test_find_cues_tolerates_one_frame_smear_in_dark_gaps(self):
+        lead = 15
+
+        def cue_with_gap_smears():
+            frames = []
+            for i, colour in enumerate((self.RED, self.BLUE, self.GREEN)):
+                if i:
+                    gap = self._dark(6)
+                    gap[len(gap) // 2] = self._frame(self.STRING, (255, 255, 255))
+                    frames += gap
+                frames += [self._frame(self.STRING, colour) for _ in range(6)]
+            return frames
+
+        frames = self._dark(lead) + cue_with_gap_smears() + self._dark(15)
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "cue_smear.avi"
+            self._write(path, frames)
+            cues = self.m.find_cues(str(path))
+
+        self.assertEqual(len(cues), 1, f"cues={cues}")
+
     def test_blinks_outside_both_cues_ignored_and_first_is_slot_zero(self):
         feed = self._feed(
             "a.mp4",
