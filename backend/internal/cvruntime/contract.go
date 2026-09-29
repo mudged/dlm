@@ -23,6 +23,9 @@ type JobSpec struct {
 	// DwellMS is the blink-detection window from REQ-047; forwarded to the child.
 	// When zero, reconstruct.Manager substitutes DefaultDwellMS before launch.
 	DwellMS int `json:"dwell_ms"`
+	// LightCount is the optional device light count (1…1000) so a closing-only
+	// clip can number backward from the last bulb (REQ-050).
+	LightCount *int `json:"light_count,omitempty"`
 }
 
 // DefaultDwellMS matches the capture sweep default (REQ-047) and reconstruct.py.
@@ -42,12 +45,19 @@ type Marker struct {
 // Result is the JSON payload the CV child writes to stdout.
 // Status is "succeeded" or "failed"; when "failed", Error is non-nil.
 type Result struct {
-	Status        string       `json:"status"`
-	LightCount    int          `json:"light_count"`
-	Lights        []LightPoint `json:"lights"`
-	Missing       []int        `json:"missing"`
-	LowConfidence []int        `json:"low_confidence"`
-	Error         *string      `json:"error"`
+	Status        string         `json:"status"`
+	LightCount    int            `json:"light_count"`
+	Lights        []LightPoint   `json:"lights"`
+	Missing       []int          `json:"missing"`
+	LowConfidence []int          `json:"low_confidence"`
+	Error         *string        `json:"error"`
+	RejectedFeeds []RejectedFeed `json:"rejected_feeds"`
+}
+
+// RejectedFeed names a clip the bookend path dropped, using the upload base name.
+type RejectedFeed struct {
+	File   string `json:"file"`
+	Reason string `json:"reason"`
 }
 
 // LightPoint is a reconstructed light position in SI metres, 0-based ID.

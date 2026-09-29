@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -87,9 +88,10 @@ type Job struct {
 
 // CreateParams holds optional parameters forwarded to the CV pipeline.
 type CreateParams struct {
-	Marker    *cvruntime.Marker
-	ScaleHint *float64
-	DwellMS   int
+	Marker     *cvruntime.Marker
+	ScaleHint  *float64
+	DwellMS    int
+	LightCount *int
 }
 
 // Option configures a Manager. Use WithNow and WithMaxRetainedJobs in tests.
@@ -104,6 +106,11 @@ func WithNow(fn func() time.Time) Option {
 // Primarily for tests that want to exercise eviction without creating 20+ jobs.
 func WithMaxRetainedJobs(n int) Option {
 	return func(m *Manager) { m.maxRetained = n }
+}
+
+// WithLogger sets the logger used when a reconstruction job fails.
+func WithLogger(log *slog.Logger) Option {
+	return func(m *Manager) { m.log = log }
 }
 
 // Manager orchestrates async reconstruction jobs.
@@ -124,6 +131,7 @@ type Manager struct {
 	now         func() time.Time
 	maxRetained int
 	jobTTL      time.Duration
+	log         *slog.Logger
 }
 
 // New creates a Manager. baseDir is used as the root for per-job work
@@ -224,10 +232,11 @@ func (m *Manager) Create(ctx context.Context, files []io.Reader, names []string,
 		dwellMS = cvruntime.DefaultDwellMS
 	}
 	go m.runJob(jobCtx, job, cvruntime.JobSpec{
-		Feeds:     feeds,
-		Marker:    params.Marker,
-		ScaleHint: params.ScaleHint,
-		DwellMS:   dwellMS,
+		Feeds:      feeds,
+		Marker:     params.Marker,
+		ScaleHint:  params.ScaleHint,
+		DwellMS:    dwellMS,
+		LightCount: params.LightCount,
 	})
 
 	return id, nil
@@ -257,7 +266,14 @@ func (m *Manager) runJob(ctx context.Context, job *Job, spec cvruntime.JobSpec) 
 		job.Progress = progressComplete
 		job.Result = &result
 	}
+	failed := job.Status == StatusFailed
+	failedErr := job.Err
+	jobID := job.ID
 	m.mu.Unlock()
+
+	if failed && m.log != nil {
+		m.log.Error("reconstruction failed", "job_id", jobID, "err", failedErr)
+	}
 
 	// Release the concurrency slot so new jobs can be submitted.
 	<-m.sem
