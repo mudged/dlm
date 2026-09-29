@@ -442,8 +442,9 @@ def _scan_with_room(video_path, meta, colours, cues, problems):
         )
     interval2, reason2 = _quiet_interval(cues2, len(measured), meta["fps"])
     if interval2 is None:
-        if reason2 and problems is not None:
-            problems.append(reason2)
+        if reason2:
+            if problems is not None:
+                problems.append(reason2)
             return (
                 [None] * len(measured),
                 measured,

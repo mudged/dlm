@@ -1740,6 +1740,37 @@ class TestQuietRoom(unittest.TestCase):
         self.assertEqual(len(cues), 2)
         self.assertEqual(len(found), 2)
 
+    def test_rebuilt_short_quiet_room_drops_bulbs_without_a_problems_list(self):
+        # A lamp on the opening red spot for most of the quiet frames hides that
+        # red pulse from the room picture, so the rebuild finds only the closing
+        # bookend, whose 3-frame tail is too short.
+        lamp = (120, 90)
+        lit = self._frame()
+        cv2.circle(lit, lamp, 12, (255, 255, 255), -1)
+        frames = [lit.copy() for _ in range(6)]
+        frames += [self._frame() for _ in range(4)]
+        for i, (spot, colour) in enumerate(
+            ((lamp, self.RED), ((140, 90), self.BLUE), ((120, 110), self.GREEN))
+        ):
+            if i:
+                frames += [self._frame() for _ in range(6)]
+            frames += [self._frame([spot], colour) for _ in range(6)]
+        frames += (
+            [self._frame() for _ in range(6)]
+            + self._sweep()
+            + self._cue()
+            + [self._frame() for _ in range(3)]
+        )
+        with tempfile.TemporaryDirectory() as d:
+            path = str(Path(d) / "rebuild.avi")
+            self._write(path, frames)
+            meta, colours, _tail = self.m._classify_against_head(path)
+            first_cues = self.m._cue_frames(colours, meta["fps"])
+            blinks, cues, *_ = self.m.analyse_feed(path, 500)
+        self.assertEqual(len(first_cues), 2, first_cues)
+        self.assertEqual(len(cues), 1, cues)
+        self.assertEqual(blinks, [])
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Entry point
