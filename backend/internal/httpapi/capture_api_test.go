@@ -182,6 +182,91 @@ func TestAPIv1Capture_unknownDevice_returns404(t *testing.T) {
 	}
 }
 
+func TestAPIv1Capture_startRunning_includesPhaseNotCurrentIndex(t *testing.T) {
+	st := newCaptureStore(t)
+	d, err := st.CreateDevice(context.Background(), store.DeviceCreate{
+		Name:       "three-lights",
+		BaseURL:    "http://wled.test",
+		LightCount: 3,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	srv := newCaptureTestServer(t, st)
+	res, err := http.Post(srv.URL+"/api/v1/devices/"+d.ID+"/capture/start", "application/json", strings.NewReader(""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	b, _ := io.ReadAll(res.Body)
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("status=%d want 200, body=%s", res.StatusCode, b)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(b, &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body["phase"] != "preamble" {
+		t.Fatalf("phase = %v want preamble", body["phase"])
+	}
+	if _, ok := body["current_index"]; ok {
+		t.Fatalf("current_index should be absent during preamble, got %v", body["current_index"])
+	}
+}
+
+func TestAPIv1Capture_startDwellTooShort_returns422(t *testing.T) {
+	st := newCaptureStore(t)
+	d, err := st.CreateDevice(context.Background(), store.DeviceCreate{
+		Name:       "dwell-test",
+		BaseURL:    "http://wled.test",
+		LightCount: 10,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := &config.Config{
+		HTTPListen:   ":8080",
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		DBPath:       filepath.Join(t.TempDir(), "unused.db"),
+	}
+	ctrl := capture.New(st, &noopDriver{}, nil, &capture.ControllerOpts{
+		Dwell: 100 * time.Millisecond,
+	})
+	t.Cleanup(ctrl.Shutdown)
+
+	log := noopLogger()
+	deps := &apiDeps{
+		store:   st,
+		rev:     NewRevisionHubWithLogger(log),
+		capture: ctrl,
+	}
+	h := buildSiteHandler(cfg, nil, deps, log)
+	srv := httptest.NewServer(h)
+	t.Cleanup(srv.Close)
+
+	res, err := http.Post(srv.URL+"/api/v1/devices/"+d.ID+"/capture/start", "application/json", strings.NewReader(""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusUnprocessableEntity {
+		b, _ := io.ReadAll(res.Body)
+		t.Fatalf("status=%d want 422, body=%s", res.StatusCode, b)
+	}
+	var env struct {
+		Error struct{ Code string `json:"code"` } `json:"error"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&env); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if env.Error.Code != "capture_dwell_too_short" {
+		t.Fatalf("code = %q want capture_dwell_too_short", env.Error.Code)
+	}
+}
+
 func TestAPIv1Capture_zeroLightCount_returns422(t *testing.T) {
 	st := newCaptureStore(t)
 	d, err := st.CreateDevice(context.Background(), store.DeviceCreate{

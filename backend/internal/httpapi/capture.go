@@ -8,6 +8,23 @@ import (
 	"example.com/dlm/backend/internal/store"
 )
 
+func captureStatusJSON(deviceID string, st capture.Status, includeDeviceID bool) map[string]any {
+	body := map[string]any{
+		"state":       st.State,
+		"light_count": st.LightCount,
+	}
+	if includeDeviceID {
+		body["device_id"] = deviceID
+	}
+	if st.State == "running" && st.Phase != "" {
+		body["phase"] = st.Phase
+	}
+	if st.Phase == "sweep" {
+		body["current_index"] = st.CurrentIndex
+	}
+	return body
+}
+
 func (a *apiDeps) postCaptureStart(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
@@ -32,6 +49,10 @@ func (a *apiDeps) postCaptureStart(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusUnprocessableEntity, "capture_no_lights", "device has no lights configured")
 		return
 	}
+	if errors.Is(err, capture.ErrCaptureDwellTooShort) {
+		writeAPIError(w, http.StatusUnprocessableEntity, "capture_dwell_too_short", "capture dwell must be at least 500ms when using the standard bookend flashes")
+		return
+	}
 	if errors.Is(err, capture.ErrCaptureConflict) {
 		writeAPIError(w, http.StatusConflict, "capture_conflict", "a capture sweep is already running for this device")
 		return
@@ -44,12 +65,7 @@ func (a *apiDeps) postCaptureStart(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusInternalServerError, "internal_error", "could not start capture")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"device_id":     id,
-		"state":         st.State,
-		"light_count":   st.LightCount,
-		"current_index": st.CurrentIndex,
-	})
+	writeJSON(w, http.StatusOK, captureStatusJSON(id, st, true))
 }
 
 func (a *apiDeps) postCaptureStop(w http.ResponseWriter, r *http.Request) {
@@ -79,12 +95,7 @@ func (a *apiDeps) postCaptureStop(w http.ResponseWriter, r *http.Request) {
 			st.LightCount = d.LightCount
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"device_id":     id,
-		"state":         st.State,
-		"light_count":   st.LightCount,
-		"current_index": st.CurrentIndex,
-	})
+	writeJSON(w, http.StatusOK, captureStatusJSON(id, st, true))
 }
 
 func (a *apiDeps) getCaptureStatus(w http.ResponseWriter, r *http.Request) {
@@ -120,9 +131,5 @@ func (a *apiDeps) getCaptureStatus(w http.ResponseWriter, r *http.Request) {
 		st.LightCount = d.LightCount
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
-		"state":         st.State,
-		"light_count":   st.LightCount,
-		"current_index": st.CurrentIndex,
-	})
+	writeJSON(w, http.StatusOK, captureStatusJSON("", st, false))
 }
