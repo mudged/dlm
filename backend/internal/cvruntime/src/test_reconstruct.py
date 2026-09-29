@@ -1290,6 +1290,8 @@ class TestPythonRobustnessMisc(unittest.TestCase):
                 self.read_calls += 1
                 if self.instance_id >= 1 and self.read_calls == 1:
                     raise RuntimeError("simulated decode failure")
+                if self.read_calls > 120:
+                    return False, None
                 frame = np.zeros((120, 160, 3), dtype=np.uint8)
                 return True, frame
 
@@ -1303,8 +1305,8 @@ class TestPythonRobustnessMisc(unittest.TestCase):
 
         self.assertEqual(
             len(released),
-            2,
-            f"expected both captures released, got {len(released)} release(s)",
+            FakeCap._seq,
+            f"expected every capture released, got {len(released)} release(s)",
         )
 
 
@@ -1483,8 +1485,13 @@ class TestBookends(unittest.TestCase):
             self._write(path, frames)
             blinks, cues, _fw, _fh, _K = self.m.analyse_feed(str(path), 1000)
 
+        # A pre-cue flash is not a bulb: the quiet-room picture may absorb it, and numbering still drops anything before the opening cue.
         self.assertEqual(len(cues), 2, f"cues={cues}")
-        self.assertEqual(len(blinks), 4, f"blinks={blinks}")
+        inside = [b for b in blinks if cues[0][1] <= b[0] < cues[1][0]]
+        self.assertEqual(len(inside), 3, f"blinks={blinks}")
+        for k, (_t, cx, cy) in enumerate(inside):
+            self.assertAlmostEqual(cx, spots[k][0], delta=4)
+            self.assertAlmostEqual(cy, spots[k][1], delta=4)
         by_light, rejected = self.m.number_from_bookends(
             [{"name": "flash.avi", "blinks": blinks, "cues": cues}], None
         )
@@ -1494,6 +1501,9 @@ class TestBookends(unittest.TestCase):
             (_fi, cx, cy), = by_light[k]
             self.assertAlmostEqual(cx, spots[k][0], delta=4)
             self.assertAlmostEqual(cy, spots[k][1], delta=4)
+            self.assertGreater(
+                math.hypot(cx - flash_spot[0], cy - flash_spot[1]), 4
+            )
 
     def test_job_fails_when_clips_have_no_signal(self):
         with tempfile.TemporaryDirectory() as d:
@@ -1608,6 +1618,127 @@ class TestQuietRoomHelpers(unittest.TestCase):
         self.assertEqual(len(indexes), 15)
         self.assertEqual(len(set(indexes)), 15)
         self.assertTrue(all(5 <= i < 35 for i in indexes))
+
+
+class TestQuietRoom(unittest.TestCase):
+    """REQ-051: a steady bright patch in a dim room is not a bulb."""
+
+    FPS = 30
+    W, H = 160, 120
+    BULBS = [(40, 60), (80, 60), (40, 100)]
+    RED, BLUE, GREEN = (0, 0, 255), (255, 0, 0), (0, 255, 0)
+
+    @classmethod
+    def setUpClass(cls):
+        cls.m = _load_reconstruct_module()
+
+    def _frame(self, spots=(), colour=(255, 255, 255), lift=0):
+        f = np.zeros((self.H, self.W, 3), dtype=np.uint8)
+        f[0:24, 110:150] = 180
+        for cx, cy in spots:
+            cv2.circle(f, (cx, cy), 6, colour, -1)
+        if lift:
+            f = np.clip(f.astype(np.int16) + lift, 0, 255).astype(np.uint8)
+        return f
+
+    def _cue(self):
+        frames = []
+        for i, colour in enumerate((self.RED, self.BLUE, self.GREEN)):
+            if i:
+                frames += [self._frame() for _ in range(6)]
+            frames += [self._frame(self.BULBS, colour) for _ in range(6)]
+        return frames
+
+    def _sweep(self, lift=0):
+        frames = []
+        for i, bulb in enumerate(self.BULBS):
+            frames += [self._frame([bulb], lift=lift) for _ in range(15)]
+            if i != len(self.BULBS) - 1:
+                frames += [self._frame(lift=lift) for _ in range(6)]
+        return frames
+
+    def _write(self, path, frames):
+        out = cv2.VideoWriter(
+            str(path), cv2.VideoWriter_fourcc(*"XVID"), self.FPS, (self.W, self.H)
+        )
+        for f in frames:
+            out.write(f)
+        out.release()
+
+    def _assert_on_bulbs(self, blinks):
+        self.assertEqual(len(blinks), len(self.BULBS), blinks)
+        for _t, cx, cy in blinks:
+            bx, by = min(
+                self.BULBS, key=lambda p: (p[0] - cx) ** 2 + (p[1] - cy) ** 2
+            )
+            self.assertLess(
+                math.hypot(cx - bx, cy - by), math.hypot(cx - 130, cy - 12)
+            )
+
+    def test_window_present_before_opening_is_not_a_bulb(self):
+        frames = (
+            [self._frame() for _ in range(15)]
+            + self._cue()
+            + [self._frame() for _ in range(6)]
+            + self._sweep()
+            + self._cue()
+            + [self._frame() for _ in range(15)]
+        )
+        with tempfile.TemporaryDirectory() as d:
+            path = str(Path(d) / "window.avi")
+            self._write(path, frames)
+            rejections: list[float] = []
+            blinks, cues, *_ = self.m.analyse_feed(path, 500, rejections)
+        self.assertEqual(len(cues), 2, cues)
+        self._assert_on_bulbs(blinks)
+        self.assertFalse(any(d >= 1.5 for d in rejections), rejections)
+
+    def test_frame_wide_lift_during_the_sweep_is_not_a_bulb(self):
+        frames = (
+            [self._frame() for _ in range(15)]
+            + self._cue()
+            + [self._frame() for _ in range(6)]
+            + self._sweep(lift=40)
+            + self._cue()
+            + [self._frame() for _ in range(15)]
+        )
+        with tempfile.TemporaryDirectory() as d:
+            path = str(Path(d) / "lift.avi")
+            self._write(path, frames)
+            rejections: list[float] = []
+            blinks, cues, *_ = self.m.analyse_feed(path, 500, rejections)
+        self.assertEqual(len(cues), 2, cues)
+        self._assert_on_bulbs(blinks)
+        self.assertFalse(any(d >= 1.5 for d in rejections), rejections)
+
+    def test_closing_only_uses_the_tail_with_a_window(self):
+        frames = self._sweep() + self._cue() + [self._frame() for _ in range(15)]
+        with tempfile.TemporaryDirectory() as d:
+            path = str(Path(d) / "closing.avi")
+            self._write(path, frames)
+            blinks, cues, *_ = self.m.analyse_feed(path, 500, [])
+        self.assertEqual(len(cues), 1, cues)
+        self._assert_on_bulbs(blinks)
+        self.assertTrue(all(t < cues[0][0] for t, _cx, _cy in blinks))
+
+    def test_short_quiet_room_sets_the_reason_and_keeps_the_bookends(self):
+        frames = (
+            [self._frame() for _ in range(3)]
+            + self._cue()
+            + self._sweep()
+            + self._cue()
+            + [self._frame() for _ in range(3)]
+        )
+        with tempfile.TemporaryDirectory() as d:
+            path = str(Path(d) / "short.avi")
+            self._write(path, frames)
+            problems: list[str] = []
+            blinks, cues, *_ = self.m.analyse_feed(path, 500, None, problems)
+            found = self.m.find_cues(path)
+        self.assertEqual(blinks, [])
+        self.assertEqual(problems, [self.m.QUIET_ROOM_REASON])
+        self.assertEqual(len(cues), 2)
+        self.assertEqual(len(found), 2)
 
 
 # ──────────────────────────────────────────────────────────────────────────────

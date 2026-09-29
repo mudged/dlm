@@ -39,7 +39,7 @@ import math
 import os
 import sys
 import traceback
-from collections import Counter
+from collections import Counter, deque
 from typing import Optional
 
 import cv2
@@ -242,6 +242,7 @@ def analyse_feed(
     video_path: str,
     dwell_ms: int,
     rejections: Optional[list[float]] = None,
+    problems: Optional[list[str]] = None,
 ) -> tuple[
     list[tuple[float, float, float]], list[tuple[float, float]], int, int, np.ndarray
 ]:
@@ -249,9 +250,11 @@ def analyse_feed(
     Detects blinks and red-blue-green cues in one decode of *video_path*.
 
     Returns ``(blinks, cues, frame_w, frame_h, K)``; see `detect_blinks` for
-    *blinks* and `find_cues` for *cues*.
+    *blinks* and `find_cues` for *cues*. A too-short quiet side appends
+    `QUIET_ROOM_REASON` to *problems* when that list is passed, returns the
+    bookends, and returns no blinks.
     """
-    blobs, colours, fps, frame_w, frame_h, K = _scan_feed(video_path)
+    blobs, colours, fps, frame_w, frame_h, K = _scan_feed(video_path, problems)
     cue_frames = _cue_frames(colours, fps)
     for first, last in cue_frames:
         for i in range(first, last + 1):
@@ -262,7 +265,219 @@ def analyse_feed(
     return blinks, cues, frame_w, frame_h, K
 
 
-def _scan_feed(
+def _video_meta(cap: cv2.VideoCapture, video_path: str) -> dict:
+    """Width, height, fps, intrinsics, and process resolution for an open capture."""
+    frame_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    frame_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    if frame_w == 0 or frame_h == 0:
+        raise IOError(f"Video reports zero dimensions: {video_path!r}")
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    if not fps or fps <= 0 or math.isnan(fps):
+        fps = 30.0
+    scale = _downscale_factor(frame_h, frame_w)
+    return {
+        "frame_w": frame_w,
+        "frame_h": frame_h,
+        "fps": float(fps),
+        "K": _estimate_K(frame_w, frame_h),
+        "scale": scale,
+        "proc_w": max(1, int(frame_w * scale)),
+        "proc_h": max(1, int(frame_h * scale)),
+    }
+
+
+def _median_u8(frames: list[np.ndarray]) -> np.ndarray:
+    return np.median(np.stack(frames, axis=0), axis=0).astype(np.uint8)
+
+
+def _median_baselines(frames: list[np.ndarray]) -> tuple[np.ndarray, np.ndarray]:
+    grays = [cv2.cvtColor(f, cv2.COLOR_BGR2GRAY) for f in frames]
+    maxes = [f.max(axis=2) for f in frames]
+    return _median_u8(grays), _median_u8(maxes)
+
+
+def _resize_small(frame: np.ndarray, meta: dict) -> np.ndarray:
+    return cv2.resize(
+        frame, (meta["proc_w"], meta["proc_h"]), interpolation=cv2.INTER_AREA
+    )
+
+
+def _colour_of(small_bgr: np.ndarray, baseline_gray, baseline_max):
+    excess_max = _positive_excess(small_bgr.max(axis=2), baseline_max)
+    return _frame_colour(small_bgr, excess_max)
+
+
+def _classify_against_head(video_path: str) -> tuple[dict, list, list]:
+    """
+    One straight read. Returns ``(meta, colours, tail_frames)``.
+
+    *tail_frames* is the last ``PROVISIONAL_S`` of small BGR frames, used only
+    when this pass finds no bookend.
+    """
+    head: list[np.ndarray] = []
+    tail: deque = deque()
+    colours: list = []
+    baseline = None
+    cap = cv2.VideoCapture(video_path)
+    try:
+        if not cap.isOpened():
+            raise IOError(f"Cannot open video: {video_path!r}")
+        meta = _video_meta(cap, video_path)
+        n_prov = max(1, int(round(meta["fps"] * PROVISIONAL_S)))
+        tail = deque(maxlen=n_prov)
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+            small = _resize_small(frame, meta)
+            tail.append(small)
+            if baseline is None:
+                head.append(small)
+                if len(head) < n_prov:
+                    continue
+                baseline = _median_baselines(head)
+                colours.extend(_colour_of(stored, *baseline) for stored in head)
+                continue
+            colours.append(_colour_of(small, *baseline))
+        if baseline is None and head:
+            baseline = _median_baselines(head)
+            colours = [_colour_of(stored, *baseline) for stored in head]
+    finally:
+        cap.release()
+    return meta, colours, list(tail)
+
+
+def _classify_against_stored(video_path: str, meta: dict, stored: list) -> list:
+    """One straight read. Colours of every frame against the median of *stored*."""
+    baseline_gray, baseline_max = _median_baselines(stored)
+    colours: list = []
+    cap = cv2.VideoCapture(video_path)
+    try:
+        if not cap.isOpened():
+            raise IOError(f"Cannot open video: {video_path!r}")
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+            colours.append(
+                _colour_of(_resize_small(frame, meta), baseline_gray, baseline_max)
+            )
+    finally:
+        cap.release()
+    return colours
+
+
+def _room_baselines(video_path: str, meta: dict, start: int, end: int):
+    """One straight read. Median grey and max-channel of samples in ``[start, end)``."""
+    wanted = set(_sample_indexes(start, end, QUIET_SAMPLE_FRAMES))
+    grays: list[np.ndarray] = []
+    maxes: list[np.ndarray] = []
+    fi = 0
+    cap = cv2.VideoCapture(video_path)
+    try:
+        if not cap.isOpened():
+            raise IOError(f"Cannot open video: {video_path!r}")
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+            if fi in wanted:
+                small = _resize_small(frame, meta)
+                grays.append(cv2.cvtColor(small, cv2.COLOR_BGR2GRAY))
+                maxes.append(small.max(axis=2))
+            fi += 1
+            if fi >= end and len(grays) == len(wanted):
+                break
+    finally:
+        cap.release()
+    if not grays:
+        raise IOError(f"No quiet frames in {video_path!r}")
+    return _median_u8(grays), _median_u8(maxes)
+
+
+def _measure_feed(video_path: str, meta: dict, baseline_gray, baseline_max):
+    """One straight read. Blobs and colours against the real room picture."""
+    blobs: list = []
+    colours: list = []
+    scale = meta["scale"]
+    cap = cv2.VideoCapture(video_path)
+    try:
+        if not cap.isOpened():
+            raise IOError(f"Cannot open video (detection pass): {video_path!r}")
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+            small = _resize_small(frame, meta)
+            gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
+            blob = _find_bright_blob(_positive_excess(gray, baseline_gray))
+            blobs.append(None if blob is None else (blob[0] / scale, blob[1] / scale))
+            colours.append(
+                _frame_colour(
+                    small, _positive_excess(small.max(axis=2), baseline_max)
+                )
+            )
+    finally:
+        cap.release()
+    return blobs, colours
+
+
+def _scan_with_room(video_path, meta, colours, cues, problems):
+    """Blobs from the quiet-room picture. Appends QUIET_ROOM_REASON when needed."""
+    n = len(colours)
+    interval, reason = _quiet_interval(cues, n, meta["fps"])
+    if reason:
+        if problems is not None:
+            problems.append(reason)
+        return (
+            [None] * n, colours, meta["fps"], meta["frame_w"], meta["frame_h"], meta["K"]
+        )
+    side, start, end = interval
+    baseline_gray, baseline_max = _room_baselines(video_path, meta, start, end)
+    blobs, measured = _measure_feed(video_path, meta, baseline_gray, baseline_max)
+    cues2 = _cue_frames(measured, meta["fps"])
+    if not _boundary_moved(cues, cues2, side):
+        return (
+            blobs, measured, meta["fps"], meta["frame_w"], meta["frame_h"], meta["K"]
+        )
+    interval2, reason2 = _quiet_interval(cues2, len(measured), meta["fps"])
+    if interval2 is None:
+        if reason2 and problems is not None:
+            problems.append(reason2)
+            return (
+                [None] * len(measured),
+                measured,
+                meta["fps"],
+                meta["frame_w"],
+                meta["frame_h"],
+                meta["K"],
+            )
+        return (
+            blobs, measured, meta["fps"], meta["frame_w"], meta["frame_h"], meta["K"]
+        )
+    _side2, start2, end2 = interval2
+    baseline_gray, baseline_max = _room_baselines(video_path, meta, start2, end2)
+    blobs, measured = _measure_feed(video_path, meta, baseline_gray, baseline_max)
+    return blobs, measured, meta["fps"], meta["frame_w"], meta["frame_h"], meta["K"]
+
+
+def _scan_feed(video_path: str, problems: Optional[list[str]] = None):
+    """
+    Blobs and flash colours for one clip (REQ-051).
+
+    A bookend selects the quiet-room picture. No bookend uses `_scan_feed_legacy`.
+    """
+    meta, colours, tail = _classify_against_head(video_path)
+    cues = _cue_frames(colours, meta["fps"])
+    if not cues and tail:
+        colours = _classify_against_stored(video_path, meta, tail)
+        cues = _cue_frames(colours, meta["fps"])
+    if not cues:
+        return _scan_feed_legacy(video_path)
+    return _scan_with_room(video_path, meta, colours, cues, problems)
+
+
+def _scan_feed_legacy(
     video_path: str,
 ) -> tuple[
     list[Optional[tuple[float, float]]],

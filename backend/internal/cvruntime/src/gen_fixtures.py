@@ -19,7 +19,7 @@ Usage
         [--height H]               # frame height pixels, default: 240
         [--seed SEED]              # RNG seed, default: 42
         [--occlude-in-feed FEED_IDX LIGHT_IDX]  # suppress a light in one feed
-        [--leading-gap-ms MS]      # dark before the opening bookend, default: 50
+        [--leading-gap-ms MS]      # dark before the opening bookend, default: 300
         [--no-bookend]             # omit the red-blue-green start/end flashes
 
 Outputs
@@ -79,8 +79,8 @@ def _parse_args(argv=None):
     p.add_argument(
         "--leading-gap-ms",
         type=int,
-        default=50,
-        help="Dark gap before the opening bookend (ms)",
+        default=300,
+        help="Dark gap before the opening bookend (ms); default 300",
     )
     p.add_argument(
         "--no-bookend",
@@ -302,7 +302,7 @@ def generate(args) -> Path:
                         _draw_blob(f, pt2d, radius=blob_radius, colour=colour)
                     frames.append(f)
 
-        # Leading dark gap (configurable; default 50 ms).
+        # Leading dark gap (configurable; default 300 ms).
         for _ in range(leading_gap_frames):
             frames.append(_base_frame())
 
@@ -328,7 +328,8 @@ def generate(args) -> Path:
         if bookend:
             frames.extend(_base_frame() for _ in range(settle_frames))
             _bookend()
-            frames.extend(_base_frame() for _ in range(cue_frames))
+            # REQ-051: at least 0.3 s of room after the closing bookend.
+            frames.extend(_base_frame() for _ in range(round(0.3 * FPS)))
 
         # Write video.
         path = out_dir / f"feed_{cam_idx}.avi"
