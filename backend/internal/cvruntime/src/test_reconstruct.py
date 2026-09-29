@@ -1223,6 +1223,7 @@ class TestPythonRobustnessMisc(unittest.TestCase):
         err = res["error"].lower()
         self.assertIn("stays bright", err)
         self.assertIn("capture sweep", err)
+        self.assertNotIn("window", err)
 
     def test_short_flash_rejected_by_dwell_validation(self):
         """A one-frame flash must not count as a blink when dwell_ms is set."""
@@ -1770,6 +1771,55 @@ class TestQuietRoom(unittest.TestCase):
         self.assertEqual(len(first_cues), 2, first_cues)
         self.assertEqual(len(cues), 1, cues)
         self.assertEqual(blinks, [])
+
+    def _short_clip(self, path: str) -> None:
+        frames = (
+            [self._frame() for _ in range(3)]
+            + self._cue()
+            + self._sweep()
+            + self._cue()
+            + [self._frame() for _ in range(3)]
+        )
+        self._write(path, frames)
+
+    def test_two_short_clips_do_not_claim_the_flashes_were_missed(self):
+        with tempfile.TemporaryDirectory() as d:
+            a = str(Path(d) / "a.avi")
+            b = str(Path(d) / "b.avi")
+            self._short_clip(a)
+            self._short_clip(b)
+            spec = {
+                "feeds": [{"path": a, "name": "a.avi"}, {"path": b, "name": "b.avi"}],
+                "dwell_ms": 500,
+            }
+            res, code = _reconstruct_with_exit(spec)
+        self.assertEqual(code, 1)
+        self.assertEqual(res["status"], "failed")
+        self.assertTrue(
+            res["error"].startswith("Fewer than two clips could be used.")
+        )
+        self.assertNotIn("missed the start and end flashes", res["error"])
+        self.assertEqual(
+            res["rejected_feeds"],
+            [
+                {"file": "a.avi", "reason": self.m.QUIET_ROOM_REASON},
+                {"file": "b.avi", "reason": self.m.QUIET_ROOM_REASON},
+            ],
+        )
+
+    def test_good_feeds_still_succeed_when_one_clip_is_short(self):
+        with tempfile.TemporaryDirectory() as d:
+            gt = _gen(d, n_lights=4, seed=7)
+            short = str(Path(d) / "short.avi")
+            self._short_clip(short)
+            spec = _spec(d, gt)
+            spec["feeds"].append({"path": short, "name": "short.avi"})
+            res = _reconstruct(spec)
+        self.assertEqual(res["status"], "succeeded", res.get("error"))
+        self.assertEqual(
+            res["rejected_feeds"],
+            [{"file": "short.avi", "reason": self.m.QUIET_ROOM_REASON}],
+        )
 
 
 # ──────────────────────────────────────────────────────────────────────────────

@@ -1714,7 +1714,7 @@ def _no_blinks_message(rejected_s: list[float], dwell_ms: int) -> str:
     """Explain a clip that produced no accepted blinks.
 
     A capture sweep lights one bulb for about *dwell_ms*. A segment that stays
-    bright for many seconds is the string (or a window) left on, not that sweep.
+    bright for many seconds is the string left on, not that sweep.
     """
     dwell_s = max(dwell_ms, 1) / 1000.0
     if rejected_s and max(rejected_s) >= 3 * dwell_s:
@@ -1723,8 +1723,7 @@ def _no_blinks_message(rejected_s: list[float], dwell_ms: int) -> str:
             f"about {max(rejected_s):.0f} seconds, so each light turning on by "
             "itself was not visible. Record a capture sweep: start filming, "
             "press Start capture, and let each bulb light on its own for about "
-            f"{dwell_s:.0f} second. Keep the camera still, and avoid a bright "
-            "window behind the lights."
+            f"{dwell_s:.0f} second. Keep the camera still."
         )
     if rejected_s:
         return (
@@ -1751,6 +1750,8 @@ def _parse_light_count(value) -> tuple[Optional[int], Optional[str]]:
 
 def _missed_flashes_message(rejected_feeds: list[dict]) -> str:
     dropped = "; ".join(f"{r['file']} ({r['reason']})" for r in rejected_feeds)
+    if any(r["reason"] == QUIET_ROOM_REASON for r in rejected_feeds):
+        return f"Fewer than two clips could be used. Dropped: {dropped}."
     return (
         "The recordings missed the start and end flashes, so fewer than two "
         f"clips could be used. Dropped: {dropped}."
@@ -1810,17 +1811,25 @@ def main() -> None:
         scans: list[dict] = []
         all_Ks: list[np.ndarray] = []
         rejections: list[float] = []
+        quiet_reasons: dict[int, str] = {}
         for feed in feeds:
-            blinks, cues, _fw, _fh, K = analyse_feed(feed["path"], dwell_ms, rejections)
+            problems: list[str] = []
+            blinks, cues, _fw, _fh, K = analyse_feed(
+                feed["path"], dwell_ms, rejections, problems
+            )
             name = feed.get("name") or os.path.basename(feed["path"])
+            if problems:
+                quiet_reasons[len(scans)] = problems[0]
             scans.append({"name": name, "blinks": blinks, "cues": cues})
             all_Ks.append(K)
 
-        if not any(s["blinks"] for s in scans):
+        if not any(s["blinks"] for s in scans) and not quiet_reasons:
             _emit_failure(_no_blinks_message(rejections, dwell_ms))
 
         # Stage 2 — number each feed from its bookend, then keep usable feeds.
         numbered, rejected = _number_from_bookends(scans, light_count)
+        for fi, reason in quiet_reasons.items():
+            rejected[fi] = reason
         rejected_feeds = _rejected_feeds(scans, rejected)
         usable = [fi for fi in range(len(scans)) if fi not in rejected]
         if len(usable) < 2:
