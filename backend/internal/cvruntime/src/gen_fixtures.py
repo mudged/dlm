@@ -3,7 +3,8 @@
 gen_fixtures.py — Generate synthetic video fixtures for reconstruct.py tests.
 
 Creates two MP4 clips where known 3D light positions are swept in order (one
-at a time) against a dark background.  Optionally embeds a perspective-correct
+at a time) against a dark background, bracketed by the red-blue-green capture
+bookend unless --no-bookend is given.  Optionally embeds a perspective-correct
 ArUco marker into each frame.
 
 Usage
@@ -18,6 +19,8 @@ Usage
         [--height H]               # frame height pixels, default: 240
         [--seed SEED]              # RNG seed, default: 42
         [--occlude-in-feed FEED_IDX LIGHT_IDX]  # suppress a light in one feed
+        [--leading-gap-ms MS]      # dark before the opening bookend, default: 50
+        [--no-bookend]             # omit the red-blue-green start/end flashes
 
 Outputs
 -------
@@ -77,7 +80,12 @@ def _parse_args(argv=None):
         "--leading-gap-ms",
         type=int,
         default=50,
-        help="Dark gap before the first blink (ms); set to 0 to start light 0 at frame 0",
+        help="Dark gap before the opening bookend (ms)",
+    )
+    p.add_argument(
+        "--no-bookend",
+        action="store_true",
+        help="Omit the red-blue-green flashes before light 0 and after the last light",
     )
     return p.parse_args(argv)
 
@@ -117,13 +125,13 @@ def _blank_frame(w: int, h: int) -> np.ndarray:
     return np.zeros((h, w, 3), dtype=np.uint8)
 
 
-def _draw_blob(frame: np.ndarray, pt2d, radius: int = 6) -> None:
+def _draw_blob(frame: np.ndarray, pt2d, radius: int = 6, colour=(255, 255, 255)) -> None:
     if pt2d is None:
         return
     cx, cy = int(round(pt2d[0])), int(round(pt2d[1]))
     h, w = frame.shape[:2]
     if 0 <= cx < w and 0 <= cy < h:
-        cv2.circle(frame, (cx, cy), radius, (255, 255, 255), -1)
+        cv2.circle(frame, (cx, cy), radius, colour, -1)
 
 
 def _draw_marker_billboard(
@@ -238,6 +246,11 @@ def generate(args) -> Path:
     dwell_frames        = max(1, round(dwell_ms * FPS / 1000))
     gap_frames          = max(1, round(50 * FPS / 1000))   # 50 ms between lights
     leading_gap_frames  = max(0, round(args.leading_gap_ms * FPS / 1000))
+    # Capture bookend (REQ-050): 200 ms per colour, 200 ms dark between colours,
+    # 500 ms dark settle between the flash and the sweep.
+    cue_frames          = round(200 * FPS / 1000)
+    settle_frames       = round(500 * FPS / 1000)
+    bookend             = not args.no_bookend
 
     # ── Occlusion spec ────────────────────────────────────────────────────────
     occlude_feed, occlude_light = (args.occlude_in_feed or (None, None))
@@ -273,9 +286,29 @@ def generate(args) -> Path:
         # feeds use different frame sizes (WI-28 mixed-intrinsics fixtures).
         blob_radius = max(4, round(6 * max(W, H) / 320))
 
+        visible = [
+            _project(pt3d, K, R, t)
+            for light_idx, pt3d in enumerate(lights_3d)
+            if not (cam_idx == occlude_feed and light_idx == occlude_light)
+        ]
+
+        def _bookend() -> None:
+            for i, colour in enumerate(((0, 0, 255), (255, 0, 0), (0, 255, 0))):
+                if i:
+                    frames.extend(_base_frame() for _ in range(cue_frames))
+                for _ in range(cue_frames):
+                    f = _base_frame()
+                    for pt2d in visible:
+                        _draw_blob(f, pt2d, radius=blob_radius, colour=colour)
+                    frames.append(f)
+
         # Leading dark gap (configurable; default 50 ms).
         for _ in range(leading_gap_frames):
             frames.append(_base_frame())
+
+        if bookend:
+            _bookend()
+            frames.extend(_base_frame() for _ in range(settle_frames))
 
         for light_idx, pt3d in enumerate(lights_3d):
             pt2d = _project(pt3d, K, R, t)
@@ -287,9 +320,15 @@ def generate(args) -> Path:
                     _draw_blob(f, pt2d, radius=blob_radius)
                 frames.append(f)
 
-            # Dark gap between lights.
-            for _ in range(gap_frames):
-                frames.append(_base_frame())
+            # Dark gap between lights; the settle replaces it after the last.
+            if not (bookend and light_idx == n_lights - 1):
+                for _ in range(gap_frames):
+                    frames.append(_base_frame())
+
+        if bookend:
+            frames.extend(_base_frame() for _ in range(settle_frames))
+            _bookend()
+            frames.extend(_base_frame() for _ in range(cue_frames))
 
         # Write video.
         path = out_dir / f"feed_{cam_idx}.avi"
@@ -304,6 +343,7 @@ def generate(args) -> Path:
         ],
         "dwell_ms": dwell_ms,
         "leading_gap_ms": args.leading_gap_ms,
+        "bookend": bookend,
         "marker": marker_spec,
         "cameras": [
             {"R": R.tolist(), "t": t.tolist(), "K": K.tolist()}

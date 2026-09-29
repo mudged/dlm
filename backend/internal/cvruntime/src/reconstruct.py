@@ -15,8 +15,12 @@ JobSpec (stdin/temp file):
         "feeds":        [{"path": "..."}, ...],
         "marker":       {"dictionary": "DICT_4X4_50", "edge_length_m": 0.05},  # optional
         "scale_hint_m": 0.30,   # optional — actual camera baseline in metres
-        "dwell_ms":     1000
+        "dwell_ms":     1000,
+        "light_count":  50      # optional — integer 1 … 1000
     }
+
+    Each feed may carry an optional "name" (upload base name); otherwise the
+    base name of "path" is used in rejected_feeds.
 
 Result (stdout):
     {
@@ -25,12 +29,14 @@ Result (stdout):
         "lights":         [{"id": <int>, "x": <m>, "y": <m>, "z": <m>}, ...],
         "missing":        [<int>, ...],
         "low_confidence": [<int>, ...],
+        "rejected_feeds": [{"file": <str>, "reason": <str>}, ...],
         "error":          <str> | null
     }
 """
 
 import json
 import math
+import os
 import sys
 import traceback
 from collections import Counter
@@ -90,6 +96,24 @@ MARKER_SCAN_SECS = 5.0
 # segments outside the REQ-047 sweep window.
 DWELL_MIN_FRAC = 0.4
 DWELL_MAX_FRAC = 2.5
+
+# Capture bookend (REQ-050): every light flashes red, blue, then green before
+# light 0 and again after the last light.  A pulse is one colour lasting
+# CUE_PULSE_*; the dark gap between pulses lasts CUE_GAP_*.  A frame's colour is
+# the channel, averaged over its bright pixels, that is at least CUE_DOMINANCE ×
+# each of the other two.
+CUE_PULSE_MIN_S = 0.100
+CUE_PULSE_MAX_S = 0.350
+CUE_GAP_MIN_S = 0.080
+CUE_GAP_MAX_S = 0.450
+CUE_DOMINANCE = 1.5
+CUE_SEQUENCE = ("r", "b", "g")
+# A frame whose bright area is under this fraction of its pulse's peak area is
+# treated as dark: compression and sensor lag leave a faint smear after a flash.
+CUE_TAIL_FRAC = 0.25
+
+LIGHT_COUNT_MAX = 1000
+LIGHT_COUNT_ERROR = "light_count must be a whole number from 1 to 1000"
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -164,6 +188,7 @@ def _blink_duration_s(start_frame: int, end_frame_inclusive: int, fps: float) ->
 def detect_blinks(
     video_path: str,
     dwell_ms: int,
+    rejections: Optional[list[float]] = None,
 ) -> tuple[list[tuple[float, float, float]], int, int, np.ndarray]:
     """
     Opens *video_path* and detects blink events via an on/off state machine.
@@ -173,11 +198,15 @@ def detect_blinks(
     starting/stopping at different times all align correctly (REQ-048 BR 2).
     When *dwell_ms* > 0, on-duration must fall within
     ``[DWELL_MIN_FRAC, DWELL_MAX_FRAC] × dwell_ms`` or the blink is rejected
-    (stray flashes / stuck-on segments).  Each accepted blink also records the
+    (stray flashes / stuck-on segments).  Rejected on-durations, in seconds,
+    are appended to *rejections* when that list is provided.  Each accepted
+    blink also records the
     *time* (seconds from the start of the clip) at which it began, so that
     which it began, so that cross-feed correspondence (`align_detections`) can
     use the sweep cadence to recover light indices robustly even when a feed
     misses or adds a blink — rather than blindly trusting positional ordinals.
+    Frames inside a red-blue-green cue (REQ-050) are treated as dark, so a
+    colour flash never counts as a bulb.
 
     Returns
     -------
@@ -189,6 +218,50 @@ def detect_blinks(
         Full-resolution frame dimensions.
     K : np.ndarray
         Estimated 3×3 camera intrinsic matrix.
+    """
+    blinks, _cues, frame_w, frame_h, K = analyse_feed(video_path, dwell_ms, rejections)
+    return blinks, frame_w, frame_h, K
+
+
+def find_cues(video_path: str) -> list[tuple[float, float]]:
+    """Returns each red-blue-green cue in the clip as ``(red_on_s, green_off_s)``."""
+    _blobs, colours, fps, _fw, _fh, _K = _scan_feed(video_path)
+    return [(a / fps, (b + 1) / fps) for a, b in _cue_frames(colours, fps)]
+
+
+def analyse_feed(
+    video_path: str,
+    dwell_ms: int,
+    rejections: Optional[list[float]] = None,
+) -> tuple[
+    list[tuple[float, float, float]], list[tuple[float, float]], int, int, np.ndarray
+]:
+    """
+    Detects blinks and red-blue-green cues in one decode of *video_path*.
+
+    Returns ``(blinks, cues, frame_w, frame_h, K)``; see `detect_blinks` for
+    *blinks* and `find_cues` for *cues*.
+    """
+    blobs, colours, fps, frame_w, frame_h, K = _scan_feed(video_path)
+    cue_frames = _cue_frames(colours, fps)
+    for first, last in cue_frames:
+        for i in range(first, last + 1):
+            blobs[i] = None
+    blinks = _blinks_from_blobs(blobs, fps, dwell_ms, rejections)
+    cues = [(a / fps, (b + 1) / fps) for a, b in cue_frames]
+    _log(f"    → {len(blinks)} blink(s), {len(cues)} cue(s) detected")
+    return blinks, cues, frame_w, frame_h, K
+
+
+def _scan_feed(
+    video_path: str,
+) -> tuple[
+    list[Optional[tuple[float, float]]], list[Optional[str]], float, int, int, np.ndarray
+]:
+    """
+    Decodes *video_path* once for detection and returns, per frame, the
+    full-resolution centroid of the brightest blob (or None) and the frame's
+    flash colour (`_frame_colour`), plus ``fps, frame_w, frame_h, K``.
     """
     # ── Pass 1: metadata + background ────────────────────────────────────────
     # The background is built by sampling BG_FRAMES frames spread across the
@@ -231,6 +304,7 @@ def detect_blinks(
         stride = max(1, scan_limit // BG_FRAMES)
 
         bg_acc: list[np.ndarray] = []
+        bg_max_acc: list[np.ndarray] = []
         fi = 0
         while len(bg_acc) < BG_FRAMES:
             ret, frame = cap_bg.read()
@@ -239,14 +313,19 @@ def detect_blinks(
             if fi % stride == 0:
                 small = cv2.resize(frame, (proc_w, proc_h), interpolation=cv2.INTER_AREA)
                 bg_acc.append(cv2.cvtColor(small, cv2.COLOR_BGR2GRAY))
+                bg_max_acc.append(small.max(axis=2))
             fi += 1
     finally:
         cap_bg.release()
 
+    # Colour flashes use the brightest channel rather than grey: full blue is
+    # only ~29 grey levels, below BLOB_THRESHOLD.
     if bg_acc:
         background = np.min(np.stack(bg_acc, axis=0), axis=0)
+        background_max = np.min(np.stack(bg_max_acc, axis=0), axis=0)
     else:
         background = np.zeros((proc_h, proc_w), dtype=np.uint8)
+        background_max = background
 
     # ── Pass 2: blink detection ───────────────────────────────────────────────
     # A fresh VideoCapture open restarts from frame 0 deterministically across
@@ -258,67 +337,149 @@ def detect_blinks(
         if not cap.isOpened():
             raise IOError(f"Cannot open video (detection pass): {video_path!r}")
 
-        blinks: list[tuple[float, float, float]] = []
-        frame_idx = -1
-        blink_start_frame = 0
-        in_blink = False
-        accum: list[tuple[float, float]] = []
-
+        blobs: list[Optional[tuple[float, float]]] = []
+        colours: list[Optional[str]] = []
         while True:
             ret, frame = cap.read()
             if not ret:
                 break
-            frame_idx += 1
 
             small = cv2.resize(frame, (proc_w, proc_h), interpolation=cv2.INTER_AREA)
             gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
-            diff = cv2.absdiff(gray, background)
+            blob = _find_bright_blob(cv2.absdiff(gray, background))
+            # Scale centroid back to full-resolution coordinates.
+            blobs.append(None if blob is None else (blob[0] / scale, blob[1] / scale))
+            colours.append(
+                _frame_colour(small, cv2.absdiff(small.max(axis=2), background_max))
+            )
+    finally:
+        cap.release()
+    return blobs, colours, fps, frame_w, frame_h, K
 
-            blob = _find_bright_blob(diff)
 
-            if blob is not None:
-                # Scale centroid back to full-resolution coordinates.
-                cx_full = blob[0] / scale
-                cy_full = blob[1] / scale
-                if not in_blink:
-                    in_blink = True
-                    blink_start_frame = frame_idx
-                    accum = [(cx_full, cy_full)]
-                else:
-                    accum.append((cx_full, cy_full))
+def _blinks_from_blobs(
+    blobs: list[Optional[tuple[float, float]]],
+    fps: float,
+    dwell_ms: int,
+    rejections: Optional[list[float]],
+) -> list[tuple[float, float, float]]:
+    """On/off state machine over per-frame blob centroids (see `detect_blinks`)."""
+    blinks: list[tuple[float, float, float]] = []
+    blink_start_frame = 0
+    in_blink = False
+    accum: list[tuple[float, float]] = []
+
+    for frame_idx, blob in enumerate(blobs):
+        if blob is not None:
+            if not in_blink:
+                in_blink = True
+                blink_start_frame = frame_idx
+                accum = [blob]
             else:
-                if in_blink:
-                    duration_s = _blink_duration_s(
-                        blink_start_frame, frame_idx - 1, fps
-                    )
-                    if _accept_blink_duration(duration_s, dwell_ms):
-                        _finalise_blink(
-                            blinks, blink_start_frame / fps, accum
-                        )
-                    else:
-                        _log(
-                            f"    rejected blink at frame {blink_start_frame}: "
-                            f"duration {duration_s * 1000:.0f} ms outside "
-                            f"dwell window ({dwell_ms} ms)"
-                        )
-                    accum = []
-                    in_blink = False
-
-        # Handle clip ending while still inside a blink.
-        if in_blink and accum:
-            duration_s = _blink_duration_s(blink_start_frame, frame_idx, fps)
+                accum.append(blob)
+        elif in_blink:
+            duration_s = _blink_duration_s(blink_start_frame, frame_idx - 1, fps)
             if _accept_blink_duration(duration_s, dwell_ms):
                 _finalise_blink(blinks, blink_start_frame / fps, accum)
             else:
                 _log(
-                    f"    rejected trailing blink at frame {blink_start_frame}: "
+                    f"    rejected blink at frame {blink_start_frame}: "
                     f"duration {duration_s * 1000:.0f} ms outside "
                     f"dwell window ({dwell_ms} ms)"
                 )
-    finally:
-        cap.release()
-    _log(f"    → {len(blinks)} blink(s) detected")
-    return blinks, frame_w, frame_h, K
+                if rejections is not None:
+                    rejections.append(duration_s)
+            accum = []
+            in_blink = False
+
+    # Handle clip ending while still inside a blink.
+    if in_blink and accum:
+        duration_s = _blink_duration_s(blink_start_frame, len(blobs) - 1, fps)
+        if _accept_blink_duration(duration_s, dwell_ms):
+            _finalise_blink(blinks, blink_start_frame / fps, accum)
+        else:
+            _log(
+                f"    rejected trailing blink at frame {blink_start_frame}: "
+                f"duration {duration_s * 1000:.0f} ms outside "
+                f"dwell window ({dwell_ms} ms)"
+            )
+            if rejections is not None:
+                rejections.append(duration_s)
+    return blinks
+
+
+def _frame_colour(
+    small_bgr: np.ndarray, diff_max: np.ndarray
+) -> Optional[tuple[str, int]]:
+    """
+    Classifies a frame as ``None`` (dark) or ``(colour, bright_area)``, where
+    *colour* is ``"r"``, ``"g"``, ``"b"`` (one channel ≥ CUE_DOMINANCE × each
+    other channel over the bright pixels) or ``"w"`` (bright but no dominant
+    channel, e.g. a white bulb).
+    """
+    mask = diff_max > BLOB_THRESHOLD
+    area = int(np.count_nonzero(mask))
+    if area < MIN_BLOB_AREA:
+        return None
+    b, g, r = (float(v) for v in small_bgr[mask].mean(axis=0))
+    for name, v, o1, o2 in (("r", r, g, b), ("g", g, r, b), ("b", b, r, g)):
+        if v >= CUE_DOMINANCE * o1 and v >= CUE_DOMINANCE * o2:
+            return name, area
+    return "w", area
+
+
+def _runs(labels: list) -> list[list]:
+    """Groups consecutive equal *labels* into ``[label, first, last]`` runs."""
+    runs: list[list] = []
+    for i, c in enumerate(labels):
+        if runs and runs[-1][0] == c:
+            runs[-1][2] = i
+        else:
+            runs.append([c, i, i])
+    return runs
+
+
+def _cue_frames(
+    colours: list[Optional[tuple[str, int]]], fps: float
+) -> list[tuple[int, int]]:
+    """
+    Finds red-blue-green cues in per-frame colours (`_frame_colour`).  Returns
+    each cue as ``(first_red_frame, last_green_frame)``, inclusive.
+    """
+    labels = [None if c is None else c[0] for c in colours]
+    for colour, first, last in _runs(labels):
+        if colour not in CUE_SEQUENCE:
+            continue
+        peak = max(colours[i][1] for i in range(first, last + 1))
+        for i in range(first, last + 1):
+            if colours[i][1] < CUE_TAIL_FRAC * peak:
+                labels[i] = None
+    runs = _runs(labels)
+
+    def lasts(run, lo: float, hi: float) -> bool:
+        d = (run[2] - run[1] + 1) / fps
+        return lo - 1e-9 <= d <= hi + 1e-9
+
+    cues: list[tuple[int, int]] = []
+    i = 0
+    while i + 4 < len(runs):
+        w = runs[i:i + 5]
+        pulses_ok = all(
+            w[2 * k][0] == CUE_SEQUENCE[k]
+            and lasts(w[2 * k], CUE_PULSE_MIN_S, CUE_PULSE_MAX_S)
+            for k in range(3)
+        )
+        gaps_ok = all(
+            w[2 * k + 1][0] is None
+            and lasts(w[2 * k + 1], CUE_GAP_MIN_S, CUE_GAP_MAX_S)
+            for k in range(2)
+        )
+        if pulses_ok and gaps_ok:
+            cues.append((w[0][1], w[4][2]))
+            i += 5
+        else:
+            i += 1
+    return cues
 
 
 def _find_bright_blob(
@@ -392,19 +553,7 @@ def align_detections(
             continue
 
         slots = _assign_slots([b[0] for b in blinks], period)
-
-        # A feed must not contribute two blinks to the same slot; if it does
-        # (e.g. a spurious blink collided with a real one) the slot is ambiguous
-        # for this feed and is excluded — better one fewer view than a wrong one.
-        ambiguous = {s for s, c in Counter(slots).items() if c > 1}
-
-        for (_t, cx, cy), slot in zip(blinks, slots):
-            if slot in ambiguous:
-                continue
-            by_light.setdefault(slot, []).append((feed_idx, cx, cy))
-
-        note = f" (ambiguous slots dropped: {sorted(ambiguous)})" if ambiguous else ""
-        _log(f"  feed {feed_idx}: {len(blinks)} blink(s) → slots {slots}{note}")
+        _add_feed_slots(by_light, feed_idx, blinks, slots)
 
     if len(set(counts)) > 1:
         _log(
@@ -413,6 +562,32 @@ def align_detections(
             f"missed/spurious blink does not shift other light indices"
         )
     return by_light
+
+
+def _add_feed_slots(
+    by_light: dict[int, list[tuple[int, float, float]]],
+    feed_idx: int,
+    blinks: list[tuple[float, float, float]],
+    slots: list[Optional[int]],
+) -> None:
+    """
+    Adds each of one feed's *blinks* to *by_light* under its slot.  A ``None``
+    slot means the blink was discarded upstream.
+    """
+    # A feed must not contribute two blinks to the same slot; if it does
+    # (e.g. a spurious blink collided with a real one) the slot is ambiguous
+    # for this feed and is excluded — better one fewer view than a wrong one.
+    ambiguous = {
+        s for s, c in Counter(s for s in slots if s is not None).items() if c > 1
+    }
+
+    for (_t, cx, cy), slot in zip(blinks, slots):
+        if slot is None or slot in ambiguous:
+            continue
+        by_light.setdefault(slot, []).append((feed_idx, cx, cy))
+
+    note = f" (ambiguous slots dropped: {sorted(ambiguous)})" if ambiguous else ""
+    _log(f"  feed {feed_idx}: {len(blinks)} blink(s) → slots {slots}{note}")
 
 
 def _estimate_period(
@@ -482,6 +657,159 @@ def _assign_slots(times: list[float], period: float) -> list[int]:
         slots.append(slot)
         anchor = t
     return slots
+
+
+NO_SIGNAL_REASON = "no start or end signal found"
+AMBIGUOUS_REASON = "ambiguous start or end signal"
+NO_SPAN_BLINKS_REASON = "no light blinks found next to the start or end signal"
+NEED_COUNT_REASON = (
+    "the opening flash is missing and the light count is needed to count "
+    "backward from the closing flash"
+)
+
+
+def number_from_bookends(
+    feeds: list[dict],
+    light_count: Optional[int],
+) -> tuple[dict[int, list[tuple[int, float, float]]], list[dict]]:
+    """
+    Numbers each feed's blinks from its red-blue-green cues (REQ-050).
+
+    Each feed is ``{"name", "blinks", "cues"}`` as returned by `analyse_feed`.
+    Two cues are the opening and closing signals; one cue is the opening when
+    blinks follow it and the closing when blinks precede it.  Only blinks
+    between the signals count.  The first counted blink after the opening is
+    light 0; the last counted blink before a closing-only signal is the last
+    light (``light_count − 1``, or else the last index of a clip that has the
+    opening signal).  With both signals a blink is numbered forward and
+    backward and discarded when the two disagree.  Indexes outside
+    ``0 … light_count−1`` are discarded.
+
+    Returns ``(by_light, rejected_feeds)`` where *by_light* is keyed by light
+    index with the original feed indices, and *rejected_feeds* is
+    ``[{"file", "reason"}]`` in feed order.
+    """
+    by_light, rejected = _number_from_bookends(feeds, light_count)
+    return by_light, _rejected_feeds(feeds, rejected)
+
+
+def _rejected_feeds(feeds: list[dict], rejected: dict[int, str]) -> list[dict]:
+    return [
+        {"file": feeds[fi]["name"], "reason": rejected[fi]} for fi in sorted(rejected)
+    ]
+
+
+def _number_from_bookends(
+    feeds: list[dict],
+    light_count: Optional[int],
+) -> tuple[dict[int, list[tuple[int, float, float]]], dict[int, str]]:
+    """`number_from_bookends`, with rejections keyed by feed index."""
+    rejected: dict[int, str] = {}
+    spans: dict[int, tuple[str, list[tuple[float, float, float]]]] = {}
+    for fi, feed in enumerate(feeds):
+        kind, span, reason = _bookend_span(feed["blinks"], feed["cues"])
+        if reason:
+            rejected[fi] = reason
+        else:
+            spans[fi] = (kind, span)
+
+    period = _estimate_period([span for _kind, span in spans.values()])
+
+    slots_by_feed: dict[int, list[Optional[int]]] = {}
+    for fi, (kind, span) in spans.items():
+        times = [b[0] for b in span]
+        if kind == "opening":
+            slots_by_feed[fi] = list(_assign_slots(times, period))
+        elif kind == "both":
+            forward = _assign_slots(times, period)
+            last = (
+                int(round((times[-1] - times[0]) / period))
+                if period > 0 else len(times) - 1
+            )
+            backward = _backward_slots(times, period, last)
+            slots_by_feed[fi] = [
+                f if f == b else None for f, b in zip(forward, backward)
+            ]
+
+    closing = [fi for fi, (kind, _span) in spans.items() if kind == "closing"]
+    if closing:
+        last_index = (
+            light_count - 1 if light_count is not None
+            else _borrowed_last_index(spans, slots_by_feed)
+        )
+        for fi in closing:
+            if last_index is None:
+                rejected[fi] = NEED_COUNT_REASON
+                del spans[fi]
+                continue
+            times = [b[0] for b in spans[fi][1]]
+            slots_by_feed[fi] = _backward_slots(times, period, last_index)
+
+    by_light: dict[int, list[tuple[int, float, float]]] = {}
+    for fi in sorted(spans):
+        slots = [
+            s if s is not None and s >= 0
+            and (light_count is None or s < light_count) else None
+            for s in slots_by_feed[fi]
+        ]
+        _add_feed_slots(by_light, fi, spans[fi][1], slots)
+
+    for fi in sorted(rejected):
+        _log(f"  rejected {feeds[fi]['name']!r}: {rejected[fi]}")
+    return by_light, rejected
+
+
+def _bookend_span(
+    blinks: list[tuple[float, float, float]],
+    cues: list[tuple[float, float]],
+) -> tuple[str, list[tuple[float, float, float]], Optional[str]]:
+    """
+    Returns ``(kind, span_blinks, reject_reason)`` for one feed, where *kind* is
+    ``"both"``, ``"opening"`` or ``"closing"``.
+    """
+    if not cues:
+        return "", [], NO_SIGNAL_REASON
+    if len(cues) > 2:
+        return "", [], AMBIGUOUS_REASON
+    if len(cues) == 2:
+        (_, opening_off), (closing_on, _) = cues
+        span = [b for b in blinks if opening_off <= b[0] < closing_on]
+        return "both", span, None if span else NO_SPAN_BLINKS_REASON
+    cue_on, cue_off = cues[0]
+    before = [b for b in blinks if b[0] < cue_on]
+    after = [b for b in blinks if b[0] >= cue_off]
+    if before and after:
+        return "", [], AMBIGUOUS_REASON
+    if after:
+        return "opening", after, None
+    if before:
+        return "closing", before, None
+    return "", [], NO_SPAN_BLINKS_REASON
+
+
+def _backward_slots(times: list[float], period: float, last_index: int) -> list[int]:
+    """Like `_assign_slots`, but the last blink anchors *last_index*."""
+    back = _assign_slots([-t for t in reversed(times)], period)
+    return [last_index - s for s in reversed(back)]
+
+
+def _borrowed_last_index(
+    spans: dict[int, tuple[str, list]],
+    slots_by_feed: dict[int, list[Optional[int]]],
+) -> Optional[int]:
+    """
+    Last light index seen by a clip with the opening signal.  A clip that also
+    has the closing signal saw the whole sweep, so it is preferred over one
+    that may have stopped early.
+    """
+    for kinds in (("both",), ("opening",)):
+        seen = [
+            s for fi, (kind, _span) in spans.items() if kind in kinds
+            for s in slots_by_feed[fi] if s is not None
+        ]
+        if seen:
+            return max(seen)
+    return None
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -1031,8 +1359,11 @@ def _make_result(
     missing: list[int],
     low_conf: list[int],
     all_ids: set[int],
+    rejected_feeds: Optional[list[dict]] = None,
+    light_count: Optional[int] = None,
 ) -> dict:
-    light_count = max(all_ids) + 1 if all_ids else 0
+    if light_count is None:
+        light_count = max(all_ids) + 1 if all_ids else 0
     return {
         "status":         "succeeded",
         "light_count":    light_count,
@@ -1042,17 +1373,19 @@ def _make_result(
         ],
         "missing":        sorted(missing),
         "low_confidence": sorted(set(low_conf)),
+        "rejected_feeds": list(rejected_feeds or []),
         "error":          None,
     }
 
 
-def _make_error(message: str) -> dict:
+def _make_error(message: str, rejected_feeds: Optional[list[dict]] = None) -> dict:
     return {
         "status":         "failed",
         "light_count":    0,
         "lights":         [],
         "missing":        [],
         "low_confidence": [],
+        "rejected_feeds": list(rejected_feeds or []),
         "error":          message,
     }
 
@@ -1077,13 +1410,60 @@ def _serialise_result(result: dict) -> str:
         )
 
 
+def _no_blinks_message(rejected_s: list[float], dwell_ms: int) -> str:
+    """Explain a clip that produced no accepted blinks.
+
+    A capture sweep lights one bulb for about *dwell_ms*. A segment that stays
+    bright for many seconds is the string (or a window) left on, not that sweep.
+    """
+    dwell_s = max(dwell_ms, 1) / 1000.0
+    if rejected_s and max(rejected_s) >= 3 * dwell_s:
+        return (
+            "No individual light blinks were found. The clip stays bright for "
+            f"about {max(rejected_s):.0f} seconds, so each light turning on by "
+            "itself was not visible. Record a capture sweep: start filming, "
+            "press Start capture, and let each bulb light on its own for about "
+            f"{dwell_s:.0f} second. Keep the camera still, and avoid a bright "
+            "window behind the lights."
+        )
+    if rejected_s:
+        return (
+            "No individual light blinks were found. Bright flashes were the "
+            f"wrong length for a capture sweep (each bulb should stay on for "
+            f"about {dwell_s:.0f} second)."
+        )
+    return "no blink events detected in any feed"
+
+
+def _parse_light_count(value) -> tuple[Optional[int], Optional[str]]:
+    """Returns ``(light_count, error)``; an absent (None) value is unknown."""
+    if value is None:
+        return None, None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None, LIGHT_COUNT_ERROR
+    if isinstance(value, float) and not value.is_integer():
+        return None, LIGHT_COUNT_ERROR
+    n = int(value)
+    if not 1 <= n <= LIGHT_COUNT_MAX:
+        return None, LIGHT_COUNT_ERROR
+    return n, None
+
+
+def _missed_flashes_message(rejected_feeds: list[dict]) -> str:
+    dropped = "; ".join(f"{r['file']} ({r['reason']})" for r in rejected_feeds)
+    return (
+        "The recordings missed the start and end flashes, so fewer than two "
+        f"clips could be used. Dropped: {dropped}."
+    )
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Entry point
 # ──────────────────────────────────────────────────────────────────────────────
 
-def _emit_failure(message: str) -> None:
+def _emit_failure(message: str, rejected_feeds: Optional[list[dict]] = None) -> None:
     """Write a failed Result JSON to stdout and exit non-zero."""
-    print(json.dumps(_make_error(message)))
+    print(json.dumps(_make_error(message, rejected_feeds)))
     sys.exit(1)
 
 
@@ -1119,28 +1499,48 @@ def main() -> None:
         if edge_err:
             _emit_failure(edge_err)
 
+    light_count, count_err = _parse_light_count(spec.get("light_count"))
+    if count_err:
+        _emit_failure(count_err)
+
     try:
         _log(f"DLM reconstruct: {len(feeds)} feed(s), dwell={dwell_ms} ms")
 
-        # Stage 1 — blink detection.
-        feed_blinks: list[list[tuple[float, float, float]]] = []
-        Ks: list[np.ndarray] = []
+        # Stage 1 — blink and bookend detection.
+        scans: list[dict] = []
+        all_Ks: list[np.ndarray] = []
+        rejections: list[float] = []
         for feed in feeds:
-            blinks, _fw, _fh, K = detect_blinks(feed["path"], dwell_ms)
-            feed_blinks.append(blinks)
-            Ks.append(K)
+            blinks, cues, _fw, _fh, K = analyse_feed(feed["path"], dwell_ms, rejections)
+            name = feed.get("name") or os.path.basename(feed["path"])
+            scans.append({"name": name, "blinks": blinks, "cues": cues})
+            all_Ks.append(K)
 
-        # Stage 2 — align across feeds.
-        by_light = align_detections(feed_blinks)
+        if not any(s["blinks"] for s in scans):
+            _emit_failure(_no_blinks_message(rejections, dwell_ms))
+
+        # Stage 2 — number each feed from its bookend, then keep usable feeds.
+        numbered, rejected = _number_from_bookends(scans, light_count)
+        rejected_feeds = _rejected_feeds(scans, rejected)
+        usable = [fi for fi in range(len(scans)) if fi not in rejected]
+        if len(usable) < 2:
+            _emit_failure(_missed_flashes_message(rejected_feeds), rejected_feeds)
+
+        compact = {fi: i for i, fi in enumerate(usable)}
+        by_light = {
+            lid: [(compact[fi], cx, cy) for fi, cx, cy in dets]
+            for lid, dets in numbered.items()
+        }
+        Ks = [all_Ks[fi] for fi in usable]
         all_ids  = set(by_light.keys())
         _log(f"  detected light indices: {sorted(all_ids) if all_ids else '(none)'}")
 
         if not all_ids:
-            _emit_failure("no blink events detected in any feed")
+            _emit_failure(_no_blinks_message(rejections, dwell_ms), rejected_feeds)
 
         # Stage 3 — camera pose.
         poses, metric_scale = estimate_poses(
-            [f["path"] for f in feeds],
+            [feeds[fi]["path"] for fi in usable],
             Ks,
             marker_spec,
             by_light,
@@ -1152,13 +1552,16 @@ def main() -> None:
             by_light, poses, Ks, metric_scale
         )
 
-        # Any integer in [0, max_id] that was never seen in any feed is missing.
-        max_id = max(all_ids)
-        for lid in range(max_id + 1):
+        # Any id in [0, light_count) — or [0, max_id] when the count is
+        # unknown — that was never seen in any feed is missing.
+        span = light_count if light_count is not None else max(all_ids) + 1
+        for lid in range(span):
             if lid not in all_ids and lid not in missing:
                 missing.append(lid)
 
-        result = _make_result(lights_3d, missing, low_conf, all_ids)
+        result = _make_result(
+            lights_3d, missing, low_conf, all_ids, rejected_feeds, light_count
+        )
         _log(
             f"  done: {len(lights_3d)} triangulated, "
             f"{len(missing)} missing, {len(low_conf)} low_confidence"

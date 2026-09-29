@@ -1196,6 +1196,34 @@ class TestPythonRobustnessMisc(unittest.TestCase):
         self.assertEqual(res["status"], "failed")
         self.assertIn("no blink", res["error"].lower())
 
+    def test_continuously_bright_clip_explains_missing_sweep(self):
+        """A clip that stays bright for the whole recording must say so.
+
+        A capture sweep turns one bulb on for about a second. If the string
+        stays lit, the detector sees one long flash and must tell the operator
+        to film the sweep instead of the generic "no blink events" line.
+        """
+        with tempfile.TemporaryDirectory() as d:
+            gt = {"dwell_ms": 1000}
+            for i in range(2):
+                path = Path(d) / f"feed_{i}.avi"
+                fourcc = cv2.VideoWriter_fourcc(*"XVID")
+                out = cv2.VideoWriter(str(path), fourcc, 30, (160, 120))
+                dark = np.zeros((120, 160, 3), dtype=np.uint8)
+                bright = np.full((120, 160, 3), 200, dtype=np.uint8)
+                out.write(dark)
+                for _ in range(149):
+                    out.write(bright)
+                out.release()
+
+            res, code = _reconstruct_with_exit(_spec(d, gt))
+
+        self.assertEqual(code, 1)
+        self.assertEqual(res["status"], "failed")
+        err = res["error"].lower()
+        self.assertIn("stays bright", err)
+        self.assertIn("capture sweep", err)
+
     def test_short_flash_rejected_by_dwell_validation(self):
         """A one-frame flash must not count as a blink when dwell_ms is set."""
         m = self.m
@@ -1278,6 +1306,213 @@ class TestPythonRobustnessMisc(unittest.TestCase):
             2,
             f"expected both captures released, got {len(released)} release(s)",
         )
+
+
+class TestBookends(unittest.TestCase):
+    """Red-blue-green start and end flashes anchor light numbering."""
+
+    FPS = 30
+    W, H = 160, 120
+    # BGR colours of every LED during a flash.
+    RED, BLUE, GREEN = (0, 0, 255), (255, 0, 0), (0, 255, 0)
+    STRING = [(30, 40), (80, 40), (130, 40), (30, 90), (80, 90), (130, 90)]
+
+    @classmethod
+    def setUpClass(cls):
+        cls.m = _load_reconstruct_module()
+
+    def _frame(self, spots=(), colour=(255, 255, 255)):
+        f = np.zeros((self.H, self.W, 3), dtype=np.uint8)
+        for cx, cy in spots:
+            cv2.circle(f, (cx, cy), 6, colour, -1)
+        return f
+
+    def _dark(self, n):
+        return [self._frame() for _ in range(n)]
+
+    def _cue(self, per_colour=6, gap=6):
+        frames = []
+        for i, colour in enumerate((self.RED, self.BLUE, self.GREEN)):
+            if i:
+                frames += self._dark(gap)
+            frames += [self._frame(self.STRING, colour) for _ in range(per_colour)]
+        return frames
+
+    def _write(self, path, frames):
+        out = cv2.VideoWriter(
+            str(path), cv2.VideoWriter_fourcc(*"XVID"), self.FPS, (self.W, self.H)
+        )
+        for f in frames:
+            out.write(f)
+        out.release()
+
+    @staticmethod
+    def _feed(name, blinks, cues):
+        return {
+            "name": name,
+            "blinks": [(float(t), float(cx), 0.0) for t, cx in blinks],
+            "cues": [(float(a), float(b)) for a, b in cues],
+        }
+
+    def test_find_cues_finds_one_red_blue_green_cue(self):
+        lead = 15
+        frames = self._dark(lead) + self._cue() + self._dark(15)
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "cue.avi"
+            self._write(path, frames)
+            cues = self.m.find_cues(str(path))
+
+        self.assertEqual(len(cues), 1, f"cues={cues}")
+        start, end = cues[0]
+        self.assertAlmostEqual(start, lead / self.FPS, delta=1.5 / self.FPS)
+        self.assertAlmostEqual(end, (lead + 30) / self.FPS, delta=1.5 / self.FPS)
+
+    def test_blinks_outside_both_cues_ignored_and_first_is_slot_zero(self):
+        feed = self._feed(
+            "a.mp4",
+            [(1.0, 999), (4.0, 0), (5.0, 10), (6.0, 20), (12.0, 888)],
+            [(2.0, 3.0), (10.0, 11.0)],
+        )
+        by_light, rejected = self.m.number_from_bookends([feed], None)
+
+        self.assertEqual(rejected, [])
+        self.assertEqual(sorted(by_light), [0, 1, 2])
+        for slot in range(3):
+            self.assertEqual(by_light[slot], [(0, slot * 10.0, 0.0)])
+
+    def test_closing_only_counts_back_from_light_count(self):
+        feed = self._feed("late.mp4", [(6.0, 20), (7.0, 30), (8.0, 40)], [(10.0, 11.0)])
+        by_light, rejected = self.m.number_from_bookends([feed], 5)
+
+        self.assertEqual(rejected, [])
+        self.assertEqual(sorted(by_light), [2, 3, 4])
+        self.assertEqual(by_light[2], [(0, 20.0, 0.0)])
+
+    def test_closing_only_without_count_copies_last_index_from_opening_clip(self):
+        full = self._feed(
+            "full.mp4",
+            [(4.0, 0), (5.0, 10), (6.0, 20), (7.0, 30), (8.0, 40)],
+            [(2.0, 3.0), (10.0, 11.0)],
+        )
+        late = self._feed("late.mp4", [(6.2, 20), (7.2, 30), (8.2, 40)], [(10.2, 11.2)])
+        by_light, rejected = self.m.number_from_bookends([full, late], None)
+
+        self.assertEqual(rejected, [])
+        self.assertEqual({fi for fi, _, _ in by_light[4]}, {0, 1})
+        self.assertEqual({fi for fi, _, _ in by_light[2]}, {0, 1})
+        self.assertEqual({fi for fi, _, _ in by_light[0]}, {0})
+
+    def test_closing_only_without_count_or_opening_clip_is_dropped(self):
+        late = self._feed("late.mp4", [(6.0, 20), (7.0, 30)], [(10.0, 11.0)])
+        by_light, rejected = self.m.number_from_bookends([late], None)
+
+        self.assertEqual(by_light, {})
+        self.assertEqual(len(rejected), 1)
+        reason = rejected[0]["reason"].lower()
+        self.assertIn("opening flash", reason)
+        self.assertIn("light count", reason)
+
+    def test_clip_without_cue_is_rejected(self):
+        feed = self._feed("nocue.mp4", [(1.0, 0), (2.0, 10)], [])
+        by_light, rejected = self.m.number_from_bookends([feed], None)
+
+        self.assertEqual(by_light, {})
+        self.assertEqual(rejected, [{"file": "nocue.mp4", "reason": "no start or end signal found"}])
+
+    def test_one_cue_with_blinks_on_both_sides_is_ambiguous(self):
+        feed = self._feed("amb.mp4", [(1.0, 0), (5.0, 10), (6.0, 20)], [(2.0, 3.0)])
+        by_light, rejected = self.m.number_from_bookends([feed], None)
+
+        self.assertEqual(by_light, {})
+        self.assertIn("ambiguous", rejected[0]["reason"])
+
+    def test_three_cues_are_ambiguous(self):
+        feed = self._feed(
+            "three.mp4", [(4.0, 0), (5.0, 10)], [(2.0, 3.0), (6.0, 7.0), (9.0, 10.0)]
+        )
+        by_light, rejected = self.m.number_from_bookends([feed], None)
+
+        self.assertEqual(by_light, {})
+        self.assertIn("ambiguous", rejected[0]["reason"])
+
+    def test_light_count_drops_high_indexes(self):
+        feed = self._feed(
+            "a.mp4", [(4.0, 0), (5.0, 10), (6.0, 20)], [(2.0, 3.0), (10.0, 11.0)]
+        )
+        by_light, _ = self.m.number_from_bookends([feed], 2)
+        self.assertEqual(sorted(by_light), [0, 1])
+
+    def test_one_second_flash_before_opening_cue_is_ignored(self):
+        spots = self.STRING
+        flash_spot = (80, 65)
+        frames = (
+            self._dark(12)
+            + [self._frame([flash_spot]) for _ in range(30)]
+            + self._dark(12)
+            + self._cue()
+            + self._dark(15)
+        )
+        for k in range(3):
+            frames += [self._frame([spots[k]]) for _ in range(30)]
+            frames += self._dark(3)
+        frames += self._dark(15) + self._cue() + self._dark(12)
+
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "flash.avi"
+            self._write(path, frames)
+            blinks, cues, _fw, _fh, _K = self.m.analyse_feed(str(path), 1000)
+
+        self.assertEqual(len(cues), 2, f"cues={cues}")
+        self.assertEqual(len(blinks), 4, f"blinks={blinks}")
+        by_light, rejected = self.m.number_from_bookends(
+            [{"name": "flash.avi", "blinks": blinks, "cues": cues}], None
+        )
+        self.assertEqual(rejected, [])
+        self.assertEqual(sorted(by_light), [0, 1, 2])
+        for k in range(3):
+            (_fi, cx, cy), = by_light[k]
+            self.assertAlmostEqual(cx, spots[k][0], delta=4)
+            self.assertAlmostEqual(cy, spots[k][1], delta=4)
+
+    def test_job_fails_when_clips_have_no_signal(self):
+        with tempfile.TemporaryDirectory() as d:
+            gt = _gen(d, n_lights=5, seed=11, no_bookend=True)
+            res, code = _reconstruct_with_exit(_spec(d, gt))
+
+        self.assertEqual(code, 1)
+        self.assertEqual(res["status"], "failed")
+        err = res["error"]
+        self.assertIn("start and end flashes", err)
+        self.assertIn("feed_0.avi", err)
+        self.assertIn("feed_1.avi", err)
+        self.assertIn("no start or end signal found", err)
+        self.assertEqual(res["rejected_feeds"], [
+            {"file": "feed_0.avi", "reason": "no start or end signal found"},
+            {"file": "feed_1.avi", "reason": "no start or end signal found"},
+        ])
+
+    def test_invalid_light_count_fails_job(self):
+        for bad in (0, 1001, 2.5, "5", True):
+            with tempfile.TemporaryDirectory() as d:
+                res, code = _reconstruct_with_exit(
+                    _spec(d, {"dwell_ms": 1000}, {"light_count": bad})
+                )
+            self.assertEqual(code, 1, bad)
+            self.assertEqual(
+                res["error"], "light_count must be a whole number from 1 to 1000"
+            )
+            self.assertEqual(res["rejected_feeds"], [])
+
+    def test_success_reports_rejected_feeds_and_light_count(self):
+        with tempfile.TemporaryDirectory() as d:
+            gt = _gen(d, n_lights=6, seed=12)
+            res = _reconstruct(_spec(d, gt, {"light_count": 8}))
+
+        self.assertEqual(res["status"], "succeeded", res.get("error"))
+        self.assertEqual(res["rejected_feeds"], [])
+        self.assertEqual(res["light_count"], 8)
+        self.assertIn(6, res["missing"])
+        self.assertIn(7, res["missing"])
 
 
 # ──────────────────────────────────────────────────────────────────────────────
