@@ -59,3 +59,4 @@ REQ-040 (§3.17 / §3.17.2).
   sweep, used to number bulbs in each uploaded clip (including a clip that only caught the closing
   flash when the light count is provided). Clips with no signal are named and dropped. See §3.22.1,
   §3.23.3, §4.15, §4.17, §8.24, §8.25.
+- **REQ-051** — dim-room capture. A lamp or window already visible before the opening flash is ignored; if that opening flash was missed, a light still visible after the closing flash is ignored instead. Each bulb must still be the brightest new thing. A clip with a bookend but no quiet moment of the room is named and dropped. A clip with no bookend still uses the darkest-sample background. See §3.23.

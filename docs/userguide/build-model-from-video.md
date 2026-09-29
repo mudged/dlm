@@ -89,10 +89,9 @@ everything really is. This is totally optional; you can skip it and still build 
   together), or they are not a supported video type. If it says the upload stopped before the server
   could reply, the connection dropped. On a Raspberry Pi, `journalctl -u dlm` shows the reason,
   including how long the request took and the error.
-- If it says the clip **stays bright** and no individual blinks were found, the bulbs were on
-  together (or a bright window filled the shot) instead of one at a time. Film again with **Start
-  capture**, so each bulb lights by itself for about a second, and keep a bright window out of the
-  background if you can.
+- A dim room is enough. A lamp or a window that is already in the shot before the opening colour flash is ignored. The bulbs still need to be the brightest new thing when they turn on, and the camera needs to stay still. Light on the printed marker is fine.
+- If it says the clip **stays bright** and no individual blinks were found, the bulbs were on together, or something lit up during the sweep and stayed on. Film again with **Start capture**, so each bulb lights by itself for about a second, and keep the camera still.
+- If a clip is set aside because the recording needs a moment of the room with the bulbs off, start filming before **Start capture** and keep filming until after the closing colour flash, with the bulbs off in those moments.
 - The video feature works out of the box on **Linux** (including Raspberry Pi) — nothing extra to
   install.
 - It's **not available on Windows yet**. If you're on Windows, you can still build models by

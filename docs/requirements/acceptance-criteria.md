@@ -224,6 +224,14 @@ does). No coding knowledge needed — just follow the steps.
 - You should see: the app say those recordings missed the start and end signal, and it does not offer
   you a model to save.
 
+**A dim room is enough.**
+- Try: film the capture sweep in a dim room. A lamp or a bright window may already be in the shot before you press Start capture. Keep the camera still. If you are using the printed marker, leave enough light to see it.
+- You should see: the review finds the bulbs. That lamp or window is not treated as a light that stayed on.
+
+**A clip with no moment of the room is named.**
+- Try: upload clips that include the colour flashes but have no moment with the bulbs off before the opening flash or after the closing flash.
+- You should see: each of those clips named, with a reason that the recording needs a moment of the room with the bulbs off. The app does not say the flashes were missed.
+
 ---
 
 ## Getting it and running it

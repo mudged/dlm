@@ -792,7 +792,7 @@ pattern and know where the one-by-one sweep starts and ends.
 matching the existing single-LED and all-off writes. Each wait listens for Stop so a stop during a
 colour flash still goes dark within the 2 s bound.
 
-### 3.23 Camera capture reconstruction engine (REQ-048, REQ-049)
+### 3.23 Camera capture reconstruction engine (REQ-048, REQ-049, REQ-051)
 
 **In plain terms:** given two or more videos of the capture sweep filmed from different angles, this
 engine figures out where each light is in 3D. In each video it finds the red–blue–green bookends
@@ -844,10 +844,7 @@ Python install (§3.23.1).
 - **Per-feed bookend alignment (REQ-050):** before numbering bulbs, find the red–blue–green bookends
   in each video and drop clips that have no usable signal (§3.23.3). Time ranges that belong to a
   bookend are excluded from blink detection.
-- **Per-feed 2D blink detection:** for each remaining video, detect the single bright blob that appears
-  during each dwell and record its 2D image coordinate and the time the blink turned on. Slot assignment
-  (§3.23.3) maps that blink to a light index. A missed bulb leaves a cadence gap so later bulbs keep
-  their indexes (REQ-047 / REQ-048 BR 2). Frames are downscaled as needed for Pi performance.
+- **Per-feed 2D blink detection (REQ-051):** when a clip has a red–blue–green bookend, the background is the per-pixel median of up to 15 frames from the quiet side. Two or more bookends use the frames before the opening bookend when that stretch is at least 0.3 s, otherwise the frames after the closing bookend. One bookend is the opening when more frames follow it than precede it (only the before side is a candidate) and the closing when at least as many frames precede it (only the after side is a candidate). The sweep between bookends is never the background. A pixel is lit only when it is brighter than that picture by more than the median brightening of the whole frame; darkening does not count. The cutoff stays 30 levels (`BLOB_THRESHOLD`). The largest lit blob is the bulb. If the chosen quiet side is under 0.3 s, the clip is dropped with reason `the recording needs a moment of the room with the bulbs off, before the opening flash or after the closing flash` and is not numbered. A clip with no bookend keeps the darkest-sample background (per-pixel minimum of `BG_FRAMES` spread samples and an absolute difference) so a string left on still reports that the clip stays bright. Slot assignment (§3.23.3) is unchanged. Frames are downscaled as needed for Pi performance.
 - **Camera pose / calibration:** estimate each camera's pose. When fiducial markers (a printed pattern
   like an ArUco/AprilTag used as a visual reference; §3.23.2) are visible, use them (e.g. ArUco /
   ChArUco detection) to recover pose, improve cross-feed alignment, and fix metric scale from the known

@@ -455,7 +455,9 @@ Here's the idea:
    is the first bulb, even when one camera started a moment later than another. Then it spots each
    blinking light and works out its real **3D position** by comparing the angles. A clip that never
    shows those flashes is set aside and named, rather than guessed. If fewer than two clips can be
-   used, the app stops and says so.
+   used, the app stops and says so. In a dim room, a light that is already in the picture before the
+   opening flash is ignored. If that opening flash was missed, a light that is still there after the
+   closing flash is ignored instead. Each bulb still has to be the brightest new thing when it turns on.
 5. **Review and save.** Before anything is saved, the app shows you what it found — how many lights it
    detected, and any it wasn't sure about — and you decide whether to keep it. Lights it couldn't place
    are honestly reported, never made up.
@@ -548,3 +550,4 @@ described, so those references still make sense.
 | REQ-048 | 3D positions from videos (OpenCV) | §11 Building a model from video |
 | REQ-049 | Create a model from uploaded videos | §11 Building a model from video |
 | REQ-050 | Red–blue–green signal at the start and end of the capture sweep | §11 Building a model from video |
+| REQ-051 | Dim-room capture ignores a light already in the shot | §11 Building a model from video |
