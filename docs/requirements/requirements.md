@@ -439,15 +439,23 @@ where your lights are by filming them.**
 
 Here's the idea:
 
-1. **The capture sweep.** From the Devices screen you start a special sweep that lights up **one bulb at
-   a time**, in order, for about **one second each**. You film this happening.
+1. **The capture sweep.** From the Devices screen you start a special sweep. First every bulb flashes
+   **red**, then **blue**, then **green** — a short flash of each colour, about a fifth of a second.
+   Then the app lights **one bulb at a time**, in order, for about **one second each**. When the last
+   bulb finishes, the red, blue, and green flashes play again. You film this happening, and you keep
+   the camera running until the second colour flash is over.
 2. **Film from two or more angles.** Record the same sweep with a couple of cameras (or your phone from
-   different positions).
+   different positions). Starting the recording before you press Start capture catches the opening
+   flash. A clip that misses that opening flash can still be used if it includes the closing flash and
+   you type the device's light count when you upload.
 3. **Upload the videos.** On the model screen there's a **"create from video"** option alongside the CSV
    upload. You upload your clips.
 4. **The app figures it out.** Using a computer-vision toolkit called **OpenCV** (built right into the
-   app — no separate install needed), it spots each blinking light in each video and works out its real
-   **3D position** by comparing the angles.
+   app — no separate install needed), it looks for the red–blue–green flashes so it knows which blink
+   is the first bulb, even when one camera started a moment later than another. Then it spots each
+   blinking light and works out its real **3D position** by comparing the angles. A clip that never
+   shows those flashes is set aside and named, rather than guessed. If fewer than two clips can be
+   used, the app stops and says so.
 5. **Review and save.** Before anything is saved, the app shows you what it found — how many lights it
    detected, and any it wasn't sure about — and you decide whether to keep it. Lights it couldn't place
    are honestly reported, never made up.
@@ -539,3 +547,4 @@ described, so those references still make sense.
 | REQ-047 | Capture sweep (blink lights in order) | §11 Building a model from video |
 | REQ-048 | 3D positions from videos (OpenCV) | §11 Building a model from video |
 | REQ-049 | Create a model from uploaded videos | §11 Building a model from video |
+| REQ-050 | Red–blue–green signal at the start and end of the capture sweep | §11 Building a model from video |

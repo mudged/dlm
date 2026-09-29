@@ -23,7 +23,11 @@ Part of the [dlm architecture](architecture.md).
 - **Device** — a physical light controller on the network, currently **WLED**. A device can be
   assigned to one model so that changing the model's lights also drives the real LEDs.
 - **Capture (light sequence)** — a server-driven sweep that turns on one physical LED at a time
-  (~1 second each), used to figure out which LED is where during camera reconstruction.
+  (~1 second each), used to figure out which LED is where during camera reconstruction. It starts
+  and ends with a short red–blue–green flash of every LED (a **bookend**) so each video can find
+  the first and last bulb.
+- **Bookend** — the red, then blue, then green flash of all lights that opens and closes a capture
+  sweep. Reconstruction uses it to number bulbs inside each uploaded clip.
 - **Reconstruction** — turning two or more uploaded videos of the blinking capture sweep into 3D
   positions for each light, so a model can be built "from video".
 

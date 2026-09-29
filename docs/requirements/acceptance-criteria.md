@@ -204,16 +204,25 @@ does). No coding knowledge needed — just follow the steps.
 
 ## Building a model from video
 
-**The capture sweep blinks lights in order.**
-- Try: start the capture sweep from the Devices screen.
-- You should see: one light on at a time, in order (0, 1, 2, …), about a second each. Stopping (or
-  finishing) turns them all off within about two seconds.
+**The capture sweep blinks lights in order, with a colour signal at each end.**
+- Try: start the capture sweep from the Devices screen, with the camera already recording.
+- You should see: every light flash red, then blue, then green, quickly. Then one light on at a time,
+  in order, about a second each. Then red, blue, and green again, and everything goes off. The device
+  page says the colour flash is happening, and it shows a bulb number only during the one-by-one part
+  (for example "3 / 120"). Stopping during a colour flash turns them all off within about two seconds.
+  Keep recording until the second colour flash finishes.
 
 **You can build a model from uploaded videos.**
 - Try: on the model screen, choose "create from video" and upload two or more clips of the same sweep
   from different angles.
 - You should see: the app processing the videos, then a review showing how many lights it found (and any
   it wasn't sure about) before you confirm and save. A printable marker is offered but isn't required.
+  An optional light-count box is there for when a clip missed the opening colour flash.
+
+**A clip that missed the colour flashes is named, not guessed.**
+- Try: upload two or more clips that never show the red–blue–green flashes.
+- You should see: the app say those recordings missed the start and end signal, and it does not offer
+  you a model to save.
 
 ---
 

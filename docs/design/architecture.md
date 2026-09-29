@@ -2,7 +2,7 @@
 
 This is the entry point to the technical design of **dlm (Domestic Light & Magic)**. It describes how
 the product in [`../requirements/requirements.md`](../requirements/requirements.md)
-(**REQ-001–REQ-049**) is built.
+(**REQ-001–REQ-050**) is built.
 
 New to the project? Read this page top to bottom, then follow the [reading order](#how-to-read-this-design)
 below. Keep the [glossary](glossary.md) open for unfamiliar words.
@@ -97,7 +97,7 @@ preserved. Use this table to find any `§` reference:
 | §1 | Goals and constraints (the per-requirement response table) | [overview.md](overview.md) |
 | §2 | Repository layout | [overview.md](overview.md) |
 | §3.1–§3.14 | Go service: modules, HTTP surface, persistence, build, samples, per-light state, scenes, factory reset | [backend-service.md](backend-service.md) |
-| §3.15–§3.23.2 | Scene spatial API, routines (Python + shape animation), light-state push/elision, WLED devices, capture sweep, camera reconstruction | [backend-lights-and-automation.md](backend-lights-and-automation.md) |
+| §3.15–§3.23.3 | Scene spatial API, routines (Python + shape animation), light-state push/elision, WLED devices, capture sweep, camera reconstruction | [backend-lights-and-automation.md](backend-lights-and-automation.md) |
 | §4.1–§4.17 | Next.js + Tailwind + three.js frontend | [frontend.md](frontend.md) |
 | §5 | UI ↔ API coordination | [deployment.md](deployment.md) |
 | §6.1–§6.12 | Raspberry Pi deployment, release targets, CI/CD | [deployment.md](deployment.md) |

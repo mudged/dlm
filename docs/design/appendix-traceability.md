@@ -43,7 +43,7 @@ REQ-040 (§3.17 / §3.17.2).
 - **REQ-043–REQ-046** — multi-platform release binaries, GitHub Actions CI and release, deployment
   runtime prerequisites, and README operator instructions; see §3.4 and §6.6–§6.12.
 
-## REQ-047–REQ-049 (camera capture)
+## REQ-047–REQ-050 (camera capture)
 
 - **REQ-047** — a built-in device capture light sequence: a sequential, one-light-on-for-~1-second
   sweep, started/stopped from the Devices screen, run server-side, turning all lights off on
@@ -55,3 +55,7 @@ REQ-040 (§3.17 / §3.17.2).
 - **REQ-049** — the create-model-from-video flow: upload → async reconstruct job → review detected
   lights → confirm to persist a normal model (per REQ-005 / REQ-007), plus an optional printable
   fiducial marker. See §3.23.2, §4.17, §8.25.
+- **REQ-050** — red, blue, then green flashes of every light at the start and end of the capture
+  sweep, used to number bulbs in each uploaded clip (including a clip that only caught the closing
+  flash when the light count is provided). Clips with no signal are named and dropped. See §3.22.1,
+  §3.23.3, §4.15, §4.17, §8.24, §8.25.

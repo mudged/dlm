@@ -116,7 +116,7 @@ func NewSiteHandler(cfg *config.Config, content fs.FS, st *store.Store, rev *Rev
 	// Wire the reconstruction manager. The work-dir base lives under DataDir so
 	// it survives across restarts alongside the database.
 	captureWorkDir := filepath.Join(cfg.DataDir, "runtime", "capture")
-	recMgr := reconstruct.New(reconstruct.RealRunner{}, st, captureWorkDir)
+	recMgr := reconstruct.New(reconstruct.RealRunner{}, st, captureWorkDir, reconstruct.WithLogger(log))
 	deps.reconstruct = recMgr
 
 	return &SiteHandler{

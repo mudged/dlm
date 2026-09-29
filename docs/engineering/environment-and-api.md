@@ -12,7 +12,8 @@ design and diagrams see [`../design/architecture.md`](../design/architecture.md)
 | `DLM_DB_PATH` | `data/dlm.db` | SQLite database file path (overrides the default under `DLM_DATA_DIR`). |
 | `DLM_PYTHON3` | *(auto)* | Path to the `python3` interpreter for **user** Python routines. |
 | `CORS_ALLOWED_ORIGINS` | Next dev origins on `:3000`/`:8000` | Comma-separated allowed origins; `-` disables CORS headers entirely. |
-| `HTTP_WRITE_TIMEOUT_SEC` | *(server default)* | HTTP write timeout; increase or set `0` (no deadline) when debugging SSE behind a proxy. |
+| `HTTP_READ_TIMEOUT_SEC` | `15` | HTTP read timeout for a whole request, including the body. Video uploads (`POST /api/v1/models/capture`) extend this to 15 minutes so large clips can finish. |
+| `HTTP_WRITE_TIMEOUT_SEC` | `15` | HTTP write timeout; increase or set `0` (no deadline) when debugging SSE behind a proxy. Video uploads use the same 15-minute deadline as the read timeout above. |
 | `DLM_CV_RUNTIME_DIR` | *(unset)* | Absolute path to a CV runtime bundle (see [`cv-runtime.md`](cv-runtime.md)). |
 | `DLM_CAPTURE_DWELL_MS` | `1000` | Milliseconds each light stays on during a device capture sweep. |
 

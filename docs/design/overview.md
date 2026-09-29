@@ -8,7 +8,7 @@ your bearings before diving into the deeper per-area documents.
 Part of the [dlm architecture](architecture.md); see the [glossary](glossary.md) for unfamiliar terms.
 
 This document defines the technical structure and deployment for the product described in
-`docs/requirements/requirements.md` (REQ-001–REQ-049). For the full map of which requirement is
+`docs/requirements/requirements.md` (REQ-001–REQ-050). For the full map of which requirement is
 covered by which architecture section, see `appendix-traceability.md`.
 
 ## Architectural resolution: REQ-004 (single binary) vs Next.js
@@ -98,7 +98,8 @@ read it top-to-bottom, but you return to it to find "where is REQ-022 handled?".
 | REQ-046 | §6.10, §3.7: `README.md` stays a short landing page (no `REQ-*` IDs); download/run/`systemd` live in `docs/userguide/` (`getting-started.md`, `running-as-a-service.md`); the developer `./scripts/run.sh` remains secondary (REQ-008) per `docs/engineering/` cross-links as needed. |
 | REQ-047 | §3.22, §3.2 (`/devices/{id}/capture/*`), §3.3 (`devices.light_count`), §4.15, §8.24: `internal/capture` runs a server-side sweep that drives one WLED LED `on` for ≈ 1 s in `idx` order `0 … n−1` using the device's configured `light_count` (the device need not be assigned — REQ-036); all-off on stop/completion within REQ-040's 2 s bound; at most one active sweep per device; a deterministic ordinal→index mapping for REQ-048. |
 | REQ-048 | §3.23 (`internal/reconstruct` pipeline), §3.23.1 (a bundled OpenCV runtime, no separate Python install — distinct from REQ-045), §6.9, §8.25: ≥ 2 video feeds → per-feed 2D blink detection keyed to the sweep ordinal (REQ-047) → multi-view triangulation → per-light `x,y,z` (SI m, REQ-005); optional fiducial markers improve pose/scale/alignment (their absence does not gate the flow); undetected lights are reported, never fabricated; an async server-side job (Pi-feasible, REQ-003), with no browser needed to finish. |
-| REQ-049 | §3.23.2, §3.2 (`/models/capture*`), §4.17, §8.25: the Models "create from video" path uploads ≥ 2 files, runs the REQ-048 job, shows a review (detected count + missing/low-confidence), then on explicit confirm persists a normal model via REQ-005/REQ-007 validation (§3.3 transaction); cancel discards; an optional printable fiducial-marker artifact (not required to create a model). |
+| REQ-049 | §3.23.2, §3.2 (`/models/capture*`), §4.17, §8.25: the Models "create from video" path uploads ≥ 2 files, runs the REQ-048 job, shows a review (detected count + missing/low-confidence + rejected feeds), then on explicit confirm persists a normal model via REQ-005/REQ-007 validation (§3.3 transaction); cancel discards; an optional printable fiducial-marker artifact (not required to create a model). |
+| REQ-050 | §3.22.1, §3.23.3, §3.2 (`phase` on `/devices/{id}/capture`, optional `light_count` on `POST /models/capture`), §4.15, §4.17, §8.24, §8.25: the capture sweep paints every LED red, then blue, then green (200 ms on, 200 ms off) before index 0 and again after the last index, with 500 ms all-off settles around the white one-by-one dwells; Start returns **422** `capture_dwell_too_short` when dwell is under 500 ms; each clip is indexed from those bookends, a closing-only clip counts backward when `light_count` is known, and a clip with no bookend is listed in `rejected_feeds` (the job fails when fewer than two clips remain). |
 
 **Assumed Pi context:** Raspberry Pi 4 Model B, 64-bit OS, ARM64 userspace. **2–8 GB RAM** — with no
 Node at runtime, 4 GB is practical for modest traffic; off-device `next export` builds are recommended.

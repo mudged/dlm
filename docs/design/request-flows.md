@@ -833,7 +833,7 @@ Boundary: no reliance on stale React state from the previous visit; the first pa
 
 ### 8.24 Device capture light sequence start/stop (REQ-047, §3.22)
 
-**In plain terms:** Lighting one LED at a time on a WLED device (an ESP-based LED controller) so external cameras can record which physical position each light index maps to. Go's capture sweep drives the device directly by index — it does not touch the `LightStateStore` — while the browser starts, stops, and polls status.
+**In plain terms:** Lighting one LED at a time on a WLED device (an ESP-based LED controller) so external cameras can record which physical position each light index maps to. The sweep opens and closes with a short red–blue–green flash of every light (REQ-050, §3.22.1). Go's capture sweep drives the device directly by index — it does not touch the `LightStateStore` — while the browser starts, stops, and polls status.
 
 ```mermaid
 sequenceDiagram
@@ -853,19 +853,23 @@ sequenceDiagram
     G-->>Page: 422 capture_no_lights
   else assigned model has running routine or sweep already active
     G-->>Page: 409 capture_conflict
+  else dwell under 500 ms
+    G-->>Page: 422 capture_dwell_too_short
   else ok
     G->>CAP: begin sweep (n = devices.light_count)
-    G-->>Page: 200 { state: running, light_count: n, current_index: 0 }
+    G-->>Page: 200 { state: running, light_count: n, phase: preamble }
+    CAP->>W: all LEDs red, blue, then green (200 ms each)
     loop k = 0 … n-1, dwell ≈ 1 s
       CAP->>W: set only LED k on, others off (one frame)
       CAP->>CAP: time.Ticker advance current_index
     end
+    CAP->>W: all LEDs red, blue, then green again
     CAP->>W: all off (completion)
   end
 
   Page->>P: GET /api/v1/devices/{id}/capture (poll)
   P->>G: GET
-  G-->>Page: { state, current_index }
+  G-->>Page: { state, phase, current_index? }
 
   User->>Page: Stop capture
   Page->>P: POST /api/v1/devices/{id}/capture/stop
@@ -905,8 +909,8 @@ sequenceDiagram
   else accepted
     G->>RC: enqueue job; stream files to work dir
     G-->>Page: 202 { job_id, status: pending }
-    RC->>CV: Run(jobSpec) — per-feed 2D blink detect, pose, triangulate
-    CV-->>RC: JSON { light_count, lights[], missing[], low_confidence[] }
+    RC->>CV: Run(jobSpec) — per-feed bookend alignment, 2D blink detect, pose, triangulate
+    CV-->>RC: JSON { light_count, lights[], missing[], low_confidence[], rejected_feeds[] }
   end
 
   loop poll until terminal

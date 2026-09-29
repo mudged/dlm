@@ -20,4 +20,25 @@ else
 fi
 
 cd "$ROOT/backend"
+
+# go run places the binary in a temp directory, so the release-layout lookup
+# (sibling runtime/cv/) does not see a bundle built into dist/. Point at that
+# bundle when the operator has not chosen one.
+if [[ -z "${DLM_CV_RUNTIME_DIR:-}" ]]; then
+  cv_arch=""
+  if command -v go >/dev/null 2>&1; then
+    cv_arch="$(go env GOARCH 2>/dev/null || true)"
+  fi
+  if [[ -z "$cv_arch" ]]; then
+    case "$(uname -m)" in
+      x86_64) cv_arch=amd64 ;;
+      aarch64 | arm64) cv_arch=arm64 ;;
+    esac
+  fi
+  cv_dir="${ROOT}/dist/cvruntime/linux_${cv_arch}"
+  if [[ -n "$cv_arch" && -d "${cv_dir}/python" && -f "${cv_dir}/reconstruct.py" ]]; then
+    export DLM_CV_RUNTIME_DIR="$cv_dir"
+  fi
+fi
+
 exec go run ./cmd/server

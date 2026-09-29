@@ -1,9 +1,11 @@
 package reconstruct_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -202,6 +204,22 @@ func TestManager_progressMonotonic(t *testing.T) {
 	job, _ = m.Get(id)
 	if job.Progress <= runningProgress || job.Progress != 1.0 {
 		t.Fatalf("terminal progress = %v, want 1.0 and > running (%v)", job.Progress, runningProgress)
+	}
+}
+
+func TestManager_failedJob_logsError(t *testing.T) {
+	var buf bytes.Buffer
+	log := slog.New(slog.NewTextHandler(&buf, nil))
+	runner := &fakeRunner{err: errors.New("cvruntime: missing bundle")}
+	m := reconstruct.New(runner, newTestStore(t), t.TempDir(), reconstruct.WithLogger(log))
+	id, err := m.Create(context.Background(), readers("a", "b"), []string{"a.mp4", "b.mp4"}, reconstruct.CreateParams{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, m, id, reconstruct.StatusFailed)
+	got := buf.String()
+	if !strings.Contains(got, "reconstruction failed") || !strings.Contains(got, "missing bundle") {
+		t.Fatalf("log = %q", got)
 	}
 }
 

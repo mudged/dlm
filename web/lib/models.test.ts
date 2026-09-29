@@ -94,6 +94,33 @@ describe("createCaptureJob (REQ-049)", () => {
       code: "too_few_files",
     });
   });
+
+  it("rejects videos over the size limit before uploading", async () => {
+    const fetchMock = vi.fn();
+    globalThis.fetch = fetchMock as typeof globalThis.fetch;
+    const big = (name: string) => {
+      const file = new File(["x"], name, { type: "video/mp4" });
+      Object.defineProperty(file, "size", { value: 1.5 * 1024 * 1024 * 1024 });
+      return file;
+    };
+
+    await expect(
+      createCaptureJob([big("a.mp4"), big("b.mp4")]),
+    ).rejects.toThrow(/larger than 2 GB combined/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("explains a dropped connection instead of Failed to fetch", async () => {
+    globalThis.fetch = vi.fn(async () => {
+      throw new TypeError("Failed to fetch");
+    }) as typeof globalThis.fetch;
+
+    const f1 = new File(["a"], "a.mp4", { type: "video/mp4" });
+    const f2 = new File(["b"], "b.mp4", { type: "video/mp4" });
+    await expect(createCaptureJob([f1, f2])).rejects.toThrow(
+      /stopped before the server could reply/,
+    );
+  });
 });
 
 describe("getCaptureJob (REQ-049)", () => {
@@ -132,6 +159,23 @@ describe("getCaptureJob (REQ-049)", () => {
 
     await getCaptureJob("job/with spaces");
     expect(captured).toBe("/api/v1/models/capture/job%2Fwith%20spaces");
+  });
+
+  it("reads a string error from a failed reconstruction job", async () => {
+    globalThis.fetch = vi.fn(async () => {
+      return new Response(
+        JSON.stringify({
+          status: "failed",
+          progress: 0.1,
+          error: "cvruntime: no CV runtime bundle found",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    }) as typeof globalThis.fetch;
+
+    const job = await getCaptureJob("job-abc");
+    expect(job.status).toBe("failed");
+    expect(job.error?.message).toBe("cvruntime: no CV runtime bundle found");
   });
 
   it("surfaces error message on 404", async () => {

@@ -724,8 +724,10 @@ conceptual name for that authoritative in-memory layer.
 
 **In plain terms:** to later rebuild a model from video, you first need a recording where each light
 blinks alone. This "capture sweep" lights one LED at a time in order (~1 s each) so a phone camera can
-film the whole strip. It's a separate controller — not a scene routine, no `python3`, no shape ticker
-— and it drives the device directly by LED index.
+film the whole strip. A short red–blue–green flash of every light marks the start and the end of that
+sweep (§3.22.1, REQ-050), so each camera can find light 0 without sharing a clock with the server.
+It's a separate controller — not a scene routine, no `python3`, no shape ticker — and it drives the
+device directly by LED index.
 
 **Purpose:** a built-in server-side capture sweep that turns one light on at a time, in ascending
 `idx` order, each for ≈ 1 s, so an operator can record the lights blinking individually and later
@@ -743,32 +745,59 @@ by LED index. No durable per-light state is written (REQ-039 unaffected).
 1. **Start** (`POST …/capture/start`): allocate a single active sweep for the device. Reject `409`
    `capture_conflict` if a sweep is already running for that device or the device is assigned to a
    model that currently has a `status=running` routine run (§3.16) — the sweep and a routine must not
-   fight over the same strip. Reject `422` `capture_no_lights` when `light_count = 0`.
-2. **Loop:** a Go `time.Ticker` (period = dwell, default ≈ 1000 ms — implementor-tunable per REQ-047
-   open question) advances `current_index` `0 → n−1`. Each tick sets the WLED so that only light
-   `current_index` is on (a documented default on appearance, e.g. white at full brightness) and all
-   others off — a single per-tick device write (one frame), not `n` writes.
-3. **Completion:** after the dwell for `n−1`, write all off and transition to `idle`.
-4. **Stop** (`POST …/capture/stop`): cancel the ticker before the next tick and write all off; from an
-   accepted stop, no further sweep-originated device writes and the strip is dark within ≤ 2 s (REQ-040
-   bound reused).
-5. **Status** (`GET …/capture`): `state` plus `light_count` and `current_index` while running, for the
-   Device screen to poll during recording.
+   fight over the same strip. Reject `422` `capture_no_lights` when `light_count = 0`. Reject `422`
+   `capture_dwell_too_short` when the configured dwell is under 500 ms (REQ-050 — the 200 ms marker
+   pulses must stay shorter than a bulb blink).
+2. **Bookends (REQ-050):** play the preamble in §3.22.1, then the bulb loop, then the 500 ms settle
+   and the postamble, then all off. Marker timings are fixed; they do not follow `DLM_CAPTURE_DWELL_MS`.
+3. **Loop:** a Go `time.Ticker` (period = dwell, default 1000 ms, override `DLM_CAPTURE_DWELL_MS` when
+   it is ≥ 500) advances `current_index` `0 → n−1`. Each tick sets the WLED so that only light
+   `current_index` is on (white at full brightness, `(255,255,255)`) and all others off — a single
+   per-tick device write (one frame), not `n` writes. `phase` is `sweep` for this loop.
+4. **Completion:** after the postamble, write all off and transition to `idle`.
+5. **Stop** (`POST …/capture/stop`): cancel the pending wait (preamble, dwell, settle, or postamble)
+   and write all off; from an accepted stop, no further sweep-originated device writes and the strip
+   is dark within ≤ 2 s (REQ-040 bound reused).
+6. **Status** (`GET …/capture`): `state`, `light_count`, and while running a `phase` of `preamble`,
+   `sweep`, or `postamble`. Include `current_index` only while `phase` is `sweep`.
 
-**Determinism for reconstruction (REQ-047 BR 5):** the k-th dwell window corresponds exactly to light
-index k. Because the order is fixed and one light is lit at a time, §3.23 can assign each detected
-blink to an index by its ordinal in the recording without clock sync between camera and server. An
-optional sync cue (e.g. an all-on frame bookending the sweep, or a documented start gesture) may be
-added later to make trimming the recording easier; it is not required for MVP.
+**Determinism for reconstruction (REQ-047 BR 5, REQ-050):** inside the sweep, the k-th dwell window
+corresponds exactly to light index k. Cameras and the server do not share a clock. §3.23.3 finds the
+red–blue–green bookends in each clip and uses them as the anchors for index 0 and the last index, then
+uses the dwell cadence to skip a missed bulb without shifting the bulbs after it.
 
 **Headless (REQ-038 alignment):** the sweep runs in the Go process and continues regardless of any
 open browser; the Device screen is a control / observability surface only.
 
+#### 3.22.1 Bookend signal (REQ-050)
+
+**In plain terms:** before the first bulb, and again after the last one, every light flashes red, then
+blue, then green. The flashes are short so they don't wash out the camera. Each video can see that
+pattern and know where the one-by-one sweep starts and ends.
+
+**Sequence** for `n ≥ 1` lights and dwell `D` ms (`D ≥ 500`, default 1000):
+
+1. **Preamble.** For red `(255,0,0)`, then blue `(0,0,255)`, then green `(0,255,0)`: one WLED frame
+   paints all `n` LEDs that colour at full brightness for 200 ms, then all off for 200 ms. After green,
+   stay all off for 500 ms. The 200 ms gaps sit only between the three colours; the 500 ms settle
+   follows green.
+2. **Sweep.** The §3.22 bulb loop: only LED `k` white `(255,255,255)` for `D` ms.
+3. **Settle.** All off for 500 ms.
+4. **Postamble.** Red, then blue, then green again: 200 ms on, with 200 ms all-off between those colours.
+   After green, go straight to all off. The 500 ms settle is the gap before this flash, not a second
+   gap after it.
+5. **Done.** All off, and the sweep goes idle.
+
+`internal/devices` gains a driver method that paints every LED one RGB triple in a single state frame,
+matching the existing single-LED and all-off writes. Each wait listens for Stop so a stop during a
+colour flash still goes dark within the 2 s bound.
+
 ### 3.23 Camera capture reconstruction engine (REQ-048, REQ-049)
 
 **In plain terms:** given two or more videos of the capture sweep filmed from different angles, this
-engine figures out where each light is in 3D. In each video it finds the bright blob for each blink
-(the blink's order tells it which light index it is), estimates where each camera was, then
+engine figures out where each light is in 3D. In each video it finds the red–blue–green bookends
+(§3.23.3), then the bright blob for each blink between them (the blink's place in that sequence tells
+it which light index it is), estimates where each camera was, then
 *triangulates* — using the same point seen from two known viewpoints to solve for its 3D position.
 Go orchestrates; the actual computer-vision (CV) work runs in a bundled OpenCV (a popular CV library)
 runtime so operators install no Python.
@@ -781,12 +810,23 @@ Python install (§3.23.1).
 **Job model (async, Pi-feasible — REQ-003, REQ-048 BR 6):**
 
 1. `POST /api/v1/models/capture` accepts `multipart/form-data` with two or more `files` (video),
-   optional `marker` and optional `scale_hint`. When `marker=true` (or `1`), the handler sets the
+   optional `marker`, optional `scale_hint`, and optional `light_count` (REQ-050). `light_count`, when
+   present, is an integer from 1 to 1000; a present but invalid value is **400**. When omitted, a clip
+   that only caught the closing bookend can still be numbered if another clip in the job caught the
+   opening bookend (§3.23.3). When `marker=true` (or `1`), the handler sets the
    default printable ArUco marker (`Dictionary: "DICT_4X4_50"`, `EdgeLengthM: 0.1` m — 100 mm);
    otherwise marker config is omitted. Optional `scale_hint` is a positive finite metres value
    forwarded as `scale_hint_m`. The handler streams uploads to a work directory under
    `DLM_DATA_DIR` (e.g. `runtime/capture/<job_id>/`), enforces an upload size limit and an allowed
-   container list (§9 notes), and returns `202 { job_id, status:"pending" }`.
+   container list (§9 notes), and returns `202 { job_id, status:"pending" }`. This route extends
+   the connection's read and write deadlines to 15 minutes so receiving and storing the videos is
+   not cut off by the server-wide 15-second `HTTP_READ_TIMEOUT_SEC` / `HTTP_WRITE_TIMEOUT_SEC`.
+   A rejected upload is logged with the underlying error, the content length, and the file names
+   when they are known. The combined upload limit is 2 GB. The page checks the file sizes before
+   sending, because a browser that is still uploading does not reliably show a response written
+   halfway through the body. The JSON `error.message` says which case it was: combined size over 2 GB,
+   the connection interrupted, an unreadable form, an unsupported container, or the server could
+   not store the files (the raw disk error stays in the log).
 2. A bounded worker (one job at a time on a Pi by default; implementor may add a small queue) runs the
    pipeline below, updating `progress` as feeds are processed. State is held in memory keyed by
    `job_id`; no `capture_jobs` SQLite table is required because nothing is persisted until confirm. A
@@ -801,10 +841,13 @@ Python install (§3.23.1).
 
 **Pipeline (inside the CV child — §3.23.1):**
 
-- **Per-feed 2D blink detection:** for each video, detect the single bright blob that appears during
-  each dwell and record its 2D image coordinate and the ordinal of the blink. Because §3.22 lights one
-  index at a time, the sequence of detected blinks yields an ordered list mapping ordinal → light index
-  (REQ-047 / REQ-048 BR 2). Frames are downscaled as needed for Pi performance.
+- **Per-feed bookend alignment (REQ-050):** before numbering bulbs, find the red–blue–green bookends
+  in each video and drop clips that have no usable signal (§3.23.3). Time ranges that belong to a
+  bookend are excluded from blink detection.
+- **Per-feed 2D blink detection:** for each remaining video, detect the single bright blob that appears
+  during each dwell and record its 2D image coordinate and the time the blink turned on. Slot assignment
+  (§3.23.3) maps that blink to a light index. A missed bulb leaves a cadence gap so later bulbs keep
+  their indexes (REQ-047 / REQ-048 BR 2). Frames are downscaled as needed for Pi performance.
 - **Camera pose / calibration:** estimate each camera's pose. When fiducial markers (a printed pattern
   like an ArUco/AprilTag used as a visual reference; §3.23.2) are visible, use them (e.g. ArUco /
   ChArUco detection) to recover pose, improve cross-feed alignment, and fix metric scale from the known
@@ -820,18 +863,19 @@ Python install (§3.23.1).
 
 **Result contract (Go ↔ CV child):** the child reads a small JSON job spec (input file paths, marker
 config, hints) and writes a JSON result
-(`{ "light_count", "lights":[{"id","x","y","z"}], "missing":[…], "low_confidence":[…] }`) to stdout or
-a result file; `internal/reconstruct` parses it. Failures surface as `status:"failed"` with a
-human-readable `error`.
+(`{ "light_count", "lights":[{"id","x","y","z"}], "missing":[…], "low_confidence":[…], "rejected_feeds":[{"file","reason"}] }`)
+to stdout or a result file; `internal/reconstruct` parses it. `rejected_feeds` names clips dropped by
+§3.23.3. Failures surface as `status:"failed"` with a human-readable `error`. Fewer than two usable
+clips is a failure, not a confirmable result.
 
 ```mermaid
 flowchart TB
   V1["video feed A"] --> DET
   V2["video feed B"] --> DET
-  DET["per-feed 2D blink detection (ordinal → light index)"] --> POSE
+  DET["per-feed bookends, then 2D blink detection (slot → light index)"] --> POSE
   POSE["camera pose / calibration (fiducial markers optional)"] --> TRI
   TRI["triangulate index seen in ≥ 2 feeds → x,y,z (metres)"] --> REP
-  REP["report lights + missing + low_confidence"] --> CONF["operator confirm → persist model (§3.3)"]
+  REP["report lights + missing + low_confidence + rejected feeds"] --> CONF["operator confirm → persist model (§3.3)"]
 ```
 
 #### 3.23.1 Bundled OpenCV runtime — no separate Python install (REQ-048 BR 5)
@@ -881,5 +925,38 @@ metric scale. dlm can hand you a printable one, but it's always optional.
   length (0.1 m for the default) is documented so it can supply metric scale to reconstruction.
 - **Optional, never gating:** obtaining or printing a marker is optional; reconstruction proceeds
   without it (REQ-048 BR 4 / REQ-049 BR 5).
+
+#### 3.23.3 Bookend alignment (REQ-050)
+
+**In plain terms:** each clip is numbered from the colour flashes. A recording that missed the opening
+flash can still be used if it caught the closing flash and the upload includes how many lights the
+device has. A recording that caught neither flash is set aside and named in the result.
+
+**Cue match.** A cue is a red pulse, then a blue pulse, then a green pulse. Each pulse lasts 100–350 ms
+(nominal 200 ms on the device). The dark gap between pulses lasts 80–450 ms (nominal 200 ms). A frame
+counts as a colour when, among its bright pixels, one channel is at least 1.5× each of the other two:
+red, blue, or green in that sense. Search the whole clip and keep non-overlapping matches in time order.
+
+**Per clip:**
+
+| Cues found | What the feed contributes |
+|------------|---------------------------|
+| Opening and closing | Blinks before the opening green turns off, and blinks after the closing red turns on, are ignored. The first blink after the opening signal is index 0. Cadence (`round(Δt / dwell)`) skips a gap when a bulb is missed. |
+| Closing only | The last dwell-length blink before the closing red is the last bulb. With `light_count` from the job, that blink is index `light_count − 1`, and earlier blinks count backward on the same cadence. Without `light_count`, use the last index established by another feed in the job that has an opening signal. If no feed has an opening signal, drop this clip. Reason: the opening flash is missing and the light count is needed to count backward. |
+| Opening only | Number forward from index 0 after the opening signal. Bulbs the camera never reached are absent. |
+| None | Drop the clip. Reason: no start or end signal found. |
+| Three or more matches, or a single match with dwell-length blinks on both sides of it | Drop the clip as ambiguous. |
+
+When both anchors exist, number each blink forward from the opening signal (index 0) and backward from
+the closing signal, where the closing signal marks the last slot of that same span. Discard a blink
+that receives two different indexes. Leave the surrounding indexes as they are. `light_count` does not
+renumber a clip that already has the opening signal. When `light_count` is provided, indexes at or
+above `light_count` are discarded, and ids in `0 … light_count−1` with no triangulated point go in
+`missing`.
+
+**Job outcome.** Each dropped clip is listed in `rejected_feeds` as `{ "file", "reason" }` using the
+upload's base name. The review screen shows that list. When fewer than two clips remain usable, the
+job `status` is `failed` and `error` says the recordings missed the start and end flashes. That job
+cannot be confirmed.
 
 ---

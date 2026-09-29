@@ -45,7 +45,7 @@ If neither is found, reconstruction fails with a descriptive error message.
 | Variable | Default | Effect |
 |----------|---------|--------|
 | **`DLM_CV_RUNTIME_DIR`** | *(unset)* | Absolute path to a CV runtime bundle directory (contains `python/` and `reconstruct.py`). Overrides sibling resolution. Required for local reconstruction testing when no release layout is present. |
-| **`DLM_CAPTURE_DWELL_MS`** | `1000` | Milliseconds each light stays on during a device **capture sweep** (Devices screen). Must be a positive integer. |
+| **`DLM_CAPTURE_DWELL_MS`** | `1000` | Milliseconds each light stays on during a device **capture sweep** (Devices screen). Must be an integer ≥ 500. A smaller value makes Start capture return `capture_dwell_too_short`, because the 200 ms red–blue–green bookend flashes have to stay shorter than a bulb blink. |
 | **`DLM_DATA_DIR`** | `data` | Root data directory. Reconstruction jobs write temporary uploads under **`DLM_DATA_DIR/runtime/capture/<job_id>/`**; these directories are cleaned up when a job finishes or is discarded. |
 
 ## Building a bundle locally

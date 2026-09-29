@@ -11,7 +11,7 @@
 # Output:
 #   dist/cvruntime/<goos>_<goarch>/
 #     python/          — self-contained CPython (python-build-standalone)
-#     reconstruct.py   — CV entrypoint (copied from backend/python/ or placeholder)
+#     reconstruct.py   — CV entrypoint (copied from backend/internal/cvruntime/src/)
 #
 # On-disk footprint (approximate, after pip install):
 #   linux/amd64:  ~200 MB  (CPython ~25 MB + OpenCV ~100 MB + NumPy ~60 MB + misc)
@@ -120,31 +120,13 @@ fi
 
 # ---- Copy the CV entrypoint ------------------------------------------------
 
-RECONSTRUCT_SRC="${REPO_ROOT}/backend/python/reconstruct.py"
-if [[ -f "${RECONSTRUCT_SRC}" ]]; then
-  cp "${RECONSTRUCT_SRC}" "${OUTDIR}/reconstruct.py"
-  echo "==> Copied entrypoint from ${RECONSTRUCT_SRC}"
-else
-  echo "==> WARNING: ${RECONSTRUCT_SRC} not found — writing WI-05 placeholder stub."
-  cat > "${OUTDIR}/reconstruct.py" << 'PYEOF'
-"""reconstruct.py — WI-05 placeholder stub.
-
-Replace this file with the real implementation from WI-05.
-Until then, every Run() call will return status=failed with an explanatory message.
-"""
-import json
-import sys
-
-print(json.dumps({
-    "status": "failed",
-    "light_count": 0,
-    "lights": [],
-    "missing": [],
-    "low_confidence": [],
-    "error": "reconstruct.py is a WI-05 placeholder; real implementation pending",
-}))
-PYEOF
+RECONSTRUCT_SRC="${REPO_ROOT}/backend/internal/cvruntime/src/reconstruct.py"
+if [[ ! -f "${RECONSTRUCT_SRC}" ]]; then
+  echo "ERROR: CV entrypoint not found at ${RECONSTRUCT_SRC}" >&2
+  exit 1
 fi
+cp "${RECONSTRUCT_SRC}" "${OUTDIR}/reconstruct.py"
+echo "==> Copied entrypoint from ${RECONSTRUCT_SRC}"
 
 # ---- Summary ---------------------------------------------------------------
 
