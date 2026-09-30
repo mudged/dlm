@@ -166,6 +166,9 @@ func TestAPIv1CaptureModels_postWithMarkerAndScaleHint_forwardsCreateParams(t *t
 	if fake.last.Marker.EdgeLengthM != 0.1 {
 		t.Fatalf("Marker.EdgeLengthM = %v, want 0.1", fake.last.Marker.EdgeLengthM)
 	}
+	if len(fake.last.Marker.IDs) != 3 || fake.last.Marker.IDs[0] != 0 || fake.last.Marker.IDs[1] != 1 || fake.last.Marker.IDs[2] != 2 {
+		t.Fatalf("Marker.IDs = %v, want [0 1 2]", fake.last.Marker.IDs)
+	}
 	if fake.last.ScaleHint == nil {
 		t.Fatal("expected ScaleHint to be set")
 	}

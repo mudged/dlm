@@ -168,7 +168,11 @@ func (a *apiDeps) postModelsCapture(w http.ResponseWriter, r *http.Request) {
 
 	params := reconstruct.CreateParams{}
 	if m := strings.TrimSpace(r.FormValue("marker")); m == "true" || m == "1" {
-		params.Marker = &cvruntime.Marker{Dictionary: "DICT_4X4_50", EdgeLengthM: 0.1}
+		params.Marker = &cvruntime.Marker{
+			Dictionary:  "DICT_4X4_50",
+			EdgeLengthM: 0.1,
+			IDs:         []int{0, 1, 2},
+		}
 	}
 	if sh := strings.TrimSpace(r.FormValue("scale_hint")); sh != "" {
 		v, err := strconv.ParseFloat(sh, 64)

@@ -40,6 +40,7 @@ type FeedRef struct {
 type Marker struct {
 	Dictionary  string  `json:"dictionary"`
 	EdgeLengthM float64 `json:"edge_length_m"`
+	IDs         []int   `json:"ids,omitempty"`
 }
 
 // Result is the JSON payload the CV child writes to stdout.
