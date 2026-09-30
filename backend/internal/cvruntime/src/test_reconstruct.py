@@ -1917,6 +1917,29 @@ class TestMarkerJoin(unittest.TestCase):
         np.testing.assert_allclose(poses[2][0], R_k, atol=1e-9)
         np.testing.assert_allclose(poses[2][1], t_k, atol=1e-9)
 
+    def test_supplied_detections_are_not_scanned_again(self):
+        def _boom(*_args, **_kwargs):
+            raise AssertionError("marker scan should not run when detections are supplied")
+
+        eye = np.eye(3, dtype=np.float64)
+        zero = np.zeros((3, 1), dtype=np.float64)
+        detections = [{0: (eye, zero.copy())}, {0: (eye, zero.copy())}]
+        original = self.m._detect_markers
+        self.m._detect_markers = _boom
+        try:
+            poses, scale = self.m.estimate_poses(
+                ["a.mp4", "b.mp4"],
+                [eye, eye],
+                {"dictionary": "DICT_4X4_50", "edge_length_m": 0.1, "ids": [0]},
+                {},
+                None,
+                detections=detections,
+            )
+        finally:
+            self.m._detect_markers = original
+        self.assertEqual(scale, 1.0)
+        self.assertTrue(all(p is not None for p in poses))
+
     def test_failed_pose_skips_only_that_marker(self):
         class _Cap:
             def isOpened(self):

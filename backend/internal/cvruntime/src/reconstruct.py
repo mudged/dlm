@@ -1123,6 +1123,7 @@ def estimate_poses(
     marker_spec: Optional[dict],
     by_light: dict[int, list[tuple[int, float, float]]],
     scale_hint_m: Optional[float],
+    detections: Optional[list[dict[int, tuple[np.ndarray, np.ndarray]]]] = None,
 ) -> tuple[list[Optional[tuple[np.ndarray, np.ndarray]]], float]:
     """
     Estimates extrinsic camera poses and the metric scale.
@@ -1149,7 +1150,10 @@ def estimate_poses(
     if marker_spec is not None:
         _log("  trying ArUco marker pose estimation …")
         try:
-            detections = _detect_markers(feed_paths, Ks, marker_spec)
+            if detections is None:
+                detections = _detect_markers(feed_paths, Ks, marker_spec)
+            else:
+                _log("  using marker poses from the join scan")
             aruco_poses, scale = _poses_from_detections(detections)
             if all(p is not None for p in aruco_poses):
                 _log(f"  ArUco: all {n} cameras localised")
@@ -1963,6 +1967,7 @@ def main() -> None:
         if len(usable) < 2:
             _emit_failure(_missed_flashes_message(rejected_feeds), rejected_feeds)
 
+        joined_detections = None
         if marker_spec is not None:
             detections = _detect_markers(
                 [feeds[fi]["path"] for fi in usable],
@@ -1981,6 +1986,7 @@ def main() -> None:
                     rejected[fi] = NOT_JOINED_REASON
             rejected_feeds = _rejected_feeds(scans, rejected)
             usable = [fi for local_i, fi in enumerate(usable) if local_i in chosen_set]
+            joined_detections = [detections[i] for i in chosen]
 
         compact = {fi: i for i, fi in enumerate(usable)}
         by_light = {}
@@ -2002,6 +2008,7 @@ def main() -> None:
             marker_spec,
             by_light,
             scale_hint_m,
+            detections=joined_detections,
         )
         if marker_spec is not None and any(p is None for p in poses):
             for fi in usable:

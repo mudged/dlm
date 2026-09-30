@@ -1,7 +1,9 @@
 package cvruntime
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -318,5 +320,30 @@ printf '{"status":"succeeded","light_count":3,"lights":[],"missing":[],"low_conf
 	}
 	if result.LightCount != 3 {
 		t.Errorf("LightCount = %d, want 3", result.LightCount)
+	}
+}
+
+func TestMarkerIDsJSON_emptySliceIsExplicit(t *testing.T) {
+	empty, err := json.Marshal(Marker{
+		Dictionary:  "DICT_4X4_50",
+		EdgeLengthM: 0.1,
+		IDs:         []int{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(empty, []byte(`"ids":[]`)) {
+		t.Fatalf("empty ids = %s, want an explicit empty list", empty)
+	}
+
+	missing, err := json.Marshal(Marker{
+		Dictionary:  "DICT_4X4_50",
+		EdgeLengthM: 0.1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(missing, []byte(`"ids":null`)) {
+		t.Fatalf("nil ids = %s, want null so the child treats them as ids 0, 1, and 2", missing)
 	}
 }

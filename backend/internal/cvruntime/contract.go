@@ -37,10 +37,12 @@ type FeedRef struct {
 }
 
 // Marker describes an optional ArUco marker used for scale/orientation reference.
+// IDs lists the marker ids reconstruction may use. Nil becomes JSON null and
+// means ids 0, 1, and 2. An empty slice becomes JSON [] and accepts no marker.
 type Marker struct {
 	Dictionary  string  `json:"dictionary"`
 	EdgeLengthM float64 `json:"edge_length_m"`
-	IDs         []int   `json:"ids,omitempty"`
+	IDs         []int   `json:"ids"`
 }
 
 // Result is the JSON payload the CV child writes to stdout.
