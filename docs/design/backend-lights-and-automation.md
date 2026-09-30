@@ -845,12 +845,8 @@ Python install (§3.23.1).
   in each video and drop clips that have no usable signal (§3.23.3). Time ranges that belong to a
   bookend are excluded from blink detection.
 - **Per-feed 2D blink detection (REQ-051):** when a clip has a red–blue–green bookend, the background is the per-pixel median of up to 15 frames from the quiet side. Two or more bookends use the frames before the opening bookend when that stretch is at least 0.3 s, otherwise the frames after the closing bookend. One bookend is the opening when more frames follow it than precede it (only the before side is a candidate) and the closing when at least as many frames precede it (only the after side is a candidate). The sweep between bookends is never the background. A pixel is lit only when it is brighter than that picture by more than the median brightening of the whole frame; darkening does not count. The cutoff stays 30 levels (`BLOB_THRESHOLD`). The largest lit blob is the bulb. If the chosen quiet side is under 0.3 s, the clip is dropped with reason `the recording needs a moment of the room with the bulbs off, before the opening flash or after the closing flash` and is not numbered. A clip with no bookend keeps the darkest-sample background (per-pixel minimum of `BG_FRAMES` spread samples and an absolute difference) so a string left on still reports that the clip stays bright. Slot assignment (§3.23.3) is unchanged. Frames are downscaled as needed for Pi performance.
-- **Camera pose / calibration:** estimate each camera's pose. When fiducial markers (a printed pattern
-  like an ArUco/AprilTag used as a visual reference; §3.23.2) are visible, use them (e.g. ArUco /
-  ChArUco detection) to recover pose, improve cross-feed alignment, and fix metric scale from the known
-  marker size (REQ-048 BR 4). Markers are optional: without them the pipeline still attempts
-  reconstruction (e.g. relative pose up to scale), and scale falls back to a documented default or a
-  user-supplied hint.
+- **Camera pose / calibration:** estimate each camera's pose. Fiducial markers are printed patterns
+  used as a visual reference (§3.23.2). When the job includes a marker spec, detect ArUco ids 0, 1, and 2 (`marker.ids` when that list is present; omitted ids mean those three). A clip sees an id only when pose estimation succeeds in the first 5 seconds. Clips that share an id are one group. A clip that sees two ids joins those groups, including through a longer chain. Reconstruct the largest group. If two groups are the same size, use the one that contains the earliest uploaded file. Pose that group in the lowest id's frame. The earliest uploaded clip that sees two markers supplies the link between those frames. Scale is 1.0 because the printed edge is 0.1 m. Do not run the essential-matrix path when a marker spec is present. When the spec is absent, keep today's essential-matrix path and do not scan for markers. Without a marker spec, scale falls back to a documented default or a user-supplied hint (REQ-048 BR 4).
 - **Triangulation:** for each light index present in ≥ 2 feeds, triangulate the corresponding 2D
   detections into a 3D point; optionally refine with a small bundle adjustment. Output coordinates in
   metres.
@@ -909,19 +905,14 @@ capture CV = bundled interpreter the product controls (REQ-048).
 
 #### 3.23.2 Printable fiducial marker (REQ-049 BR 5)
 
-**In plain terms:** a fiducial marker is a printed pattern (like a QR-ish ArUco square) the camera can
-recognize; placing one in the shot gives the reconstruction a known-size reference so it can fix real
-metric scale. dlm can hand you a printable one, but it's always optional.
+**In plain terms:** three different printed patterns can sit on different sides of a tree. A camera only has to see one of them. Clips join when they saw the same pattern, or when some clip saw two and links the sides. You can still build a model without printing any.
 
-- `GET /api/v1/capture/marker` returns a printable marker artifact (PDF preferred for print fidelity,
-  or PNG) with brief on-page guidance (place flat and fully visible in all feeds; keep it stationary
-  during the sweep). Query params may select `type` (PDF vs PNG); the default served asset is ArUco
-  `DICT_4X4_50`, id 0, 100 mm edge — the same default `marker=true` maps to on `POST …/models/capture`.
-- **Generation:** markers may be static embedded assets (simplest) or generated on demand by the CV
-  bundle's marker module so the dictionary / size matches what §3.23 detects. The marker's printed edge
-  length (0.1 m for the default) is documented so it can supply metric scale to reconstruction.
-- **Optional, never gating:** obtaining or printing a marker is optional; reconstruction proceeds
-  without it (REQ-048 BR 4 / REQ-049 BR 5).
+- `GET /api/v1/capture/marker?id=0|1|2` returns that marker. Omitting `id` returns Marker 1 (id 0). Any other id is **400** `bad_request` with message `marker id must be 0, 1, or 2`. `type=png` returns a PNG. Omitted `type`, `pdf`, or `aruco` returns a PDF. Any other `type` returns the PDF for that id.
+- Filenames are `fiducial_marker_aruco4x4_50_id0_100mm.pdf` (and `.png`), and the same with `id1` and `id2`. Dictionary `DICT_4X4_50`, black outer edge 100 mm. Each PDF says to put the three markers on different sides, keep them still, and have one clip show two markers to join sides that do not share one.
+- `marker=true` on `POST /api/v1/models/capture` sends `dictionary: "DICT_4X4_50"`, `edge_length_m: 0.1`, `ids: [0, 1, 2]`. Patterns outside that list are ignored.
+- A usable clip outside the chosen group is a `rejected_feeds` row whose reason is `this clip does not share a marker with the clips used for the model`. The review list already shows that row.
+- If the colour-flash checks left at least two clips and the join then leaves fewer than two, the job fails. `error` is `Not enough joined footage. At least two clips need to share a marker, or be linked by a clip that shows two markers. Dropped: {dropped}.` `{dropped}` is `file (reason)` joined with `"; "`, in upload order. Confirm is not offered. If fewer than two clips survived the colour-flash checks, keep today's flash or quiet-room error and do not use the marker reason.
+- Printing a marker is still optional. With the marker box unchecked, reconstruction does not look for these patterns.
 
 #### 3.23.3 Bookend alignment (REQ-050)
 

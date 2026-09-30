@@ -462,8 +462,13 @@ Here's the idea:
    detected, and any it wasn't sure about — and you decide whether to keep it. Lights it couldn't place
    are honestly reported, never made up.
 
-There's also an **optional** printable **marker** (a special printed pattern) you can place in the shot
-to improve accuracy and get real-world scale — but it's genuinely optional; the app works without it.
+There's also an **optional** set of three printable **markers** (special printed patterns, each one
+different). Print all three and stick them on different sides of what you are wrapping, such as a
+tree. Keep them flat and do not move them between clips. Each clip should show at least one. Clips
+that see the same marker go together. Clips that see different markers go together only when some
+clip shows two markers at once, or a chain of clips links them. A clip that cannot be joined is
+named and left out. If fewer than two clips can be joined, the app says there is not enough joined
+footage and does not save a model. You can skip the markers and the app still works.
 
 Because this can take a while, the crunching happens **on the server** and reports its progress, so you
 don't have to keep the tab open the whole time.
@@ -551,3 +556,4 @@ described, so those references still make sense.
 | REQ-049 | Create a model from uploaded videos | §11 Building a model from video |
 | REQ-050 | Red–blue–green signal at the start and end of the capture sweep | §11 Building a model from video |
 | REQ-051 | Dim-room capture ignores a light already in the shot | §11 Building a model from video |
+| REQ-052 | Three printable markers so wrapped lights can still be joined | §11 Building a model from video |

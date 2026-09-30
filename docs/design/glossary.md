@@ -130,7 +130,8 @@ Part of the [dlm architecture](architecture.md).
 - **OpenCV** — the computer-vision library used by the reconstruction runtime.
 - **Triangulation** — computing a 3D point from where it appears in two or more camera views.
 - **Fiducial marker** — a printed pattern (like an ArUco/AprilTag square) placed in the scene to give
-  the cameras a known reference for scale, position, and orientation. Optional.
+  the cameras a known reference for scale, position, and orientation. Optional. Video capture offers
+  three patterns so a wrap can hide one of them from a given camera.
 
 ## Traceability
 

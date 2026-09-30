@@ -77,11 +77,18 @@ closing flash.
 If it looks good, type a name and press **Confirm** to save it as a model. Not happy? Press
 **Cancel** and try again with better recordings.
 
-### 5. Optional: a printable marker
+### 5. Optional: three printable markers
 
-If you want, you can download and print a special **marker** (a printed square pattern) from the
-upload screen and put it in the shot. It helps the app get the *scale* right — basically how big
-everything really is. This is totally optional; you can skip it and still build a model.
+If you want, you can download and print three special **markers** (printed square patterns, each one
+different) from the upload screen. Stick them on different sides of what you are wrapping, such as a
+tree. Keep them flat, and do not move them between clips.
+
+Each clip should show at least one marker. If two clips see different markers, they can still be
+joined when one clip shows two markers at the same time. A clip that cannot be joined is named and
+left out. If the page says there is not enough joined footage, film again so at least two clips share
+a marker, or add a clip that shows two of them.
+
+This is totally optional. Leave the marker box unchecked and you can still build a model.
 
 ## Good to know
 

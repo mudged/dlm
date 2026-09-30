@@ -216,8 +216,16 @@ does). No coding knowledge needed — just follow the steps.
 - Try: on the model screen, choose "create from video" and upload two or more clips of the same sweep
   from different angles.
 - You should see: the app processing the videos, then a review showing how many lights it found (and any
-  it wasn't sure about) before you confirm and save. A printable marker is offered but isn't required.
+  it wasn't sure about) before you confirm and save. Three printable markers are offered but aren't required.
   An optional light-count box is there for when a clip missed the opening colour flash.
+
+**A clip that does not share a marker is named.**
+- Try: print two different markers and film two clips that share one of them, plus a third clip that shows only the other marker. Upload all three with the marker box checked.
+- You should see: a model you can review, and the third file set aside because this clip does not share a marker with the clips used for the model.
+
+**Too little joined footage stops the job.**
+- Try: upload two clips that show different markers, with no clip showing both, and the marker box checked.
+- You should see: a message that starts with "Not enough joined footage." You are not offered Confirm.
 
 **A clip that missed the colour flashes is named, not guessed.**
 - Try: upload two or more clips that never show the red–blue–green flashes.
