@@ -814,7 +814,7 @@ Python install (§3.23.1).
    present, is an integer from 1 to 1000; a present but invalid value is **400**. When omitted, a clip
    that only caught the closing bookend can still be numbered if another clip in the job caught the
    opening bookend (§3.23.3). When `marker=true` (or `1`), the handler sets the
-   default printable ArUco marker (`Dictionary: "DICT_4X4_50"`, `EdgeLengthM: 0.1` m — 100 mm);
+   default printable ArUco marker (`Dictionary: "DICT_4X4_50"`, `EdgeLengthM: 0.1` m — 100 mm, `IDs: [0, 1, 2]`);
    otherwise marker config is omitted. Optional `scale_hint` is a positive finite metres value
    forwarded as `scale_hint_m`. The handler streams uploads to a work directory under
    `DLM_DATA_DIR` (e.g. `runtime/capture/<job_id>/`), enforces an upload size limit and an allowed

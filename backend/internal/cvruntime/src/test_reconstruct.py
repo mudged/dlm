@@ -248,8 +248,8 @@ class TestReconstructSynthetic(unittest.TestCase):
 
     # ── ArUco marker path ────────────────────────────────────────────────────
 
-    def test_with_marker_spec_succeeds_and_finds_lights(self):
-        """A marker spec with no marker in the picture is not enough joined footage."""
+    def test_marker_spec_without_a_visible_marker_fails(self):
+        """A marker spec with no marker in the picture fails with not enough joined footage."""
         n = 6
         with tempfile.TemporaryDirectory() as d:
             gt = _gen(d, n_lights=n, seed=7)
@@ -1893,6 +1893,29 @@ class TestMarkerJoin(unittest.TestCase):
         self.assertEqual(len(poses), 3)
         np.testing.assert_allclose(poses[2][1], [[-0.2], [0.0], [0.0]], atol=1e-9)
         np.testing.assert_allclose(poses[0][1], [[0.0], [0.0], [0.0]], atol=1e-9)
+
+    def test_anchor_pose_with_marker_rotated_ninety_degrees(self):
+        """A 90-degree marker rotation must survive the anchor-frame link.
+
+        Marker 1 is Ry(90) and 0.3 m along x from marker 0. The bridge
+        camera's pose relative to marker 1 is Rx(90), not the identity, so a
+        missing transpose in the link does not cancel out.
+        """
+        rx = np.array([[1.0, 0.0, 0.0], [0.0, 0.0, -1.0], [0.0, 1.0, 0.0]])
+        ry = np.array([[0.0, 0.0, 1.0], [0.0, 1.0, 0.0], [-1.0, 0.0, 0.0]])
+        t_am = np.array([[0.3], [0.0], [0.0]])
+        R_u = rx
+        R_k = rx @ ry
+        t_k = rx @ t_am
+        zero = np.zeros((3, 1))
+        detections = [
+            {0: (np.eye(3), zero.copy())},
+            {0: (R_k, t_k), 1: (R_u, zero.copy())},
+            {1: (R_u, zero.copy())},
+        ]
+        poses = self.m._anchor_poses(detections, [0, 1, 2])
+        np.testing.assert_allclose(poses[2][0], R_k, atol=1e-9)
+        np.testing.assert_allclose(poses[2][1], t_k, atol=1e-9)
 
     def test_failed_pose_skips_only_that_marker(self):
         class _Cap:
