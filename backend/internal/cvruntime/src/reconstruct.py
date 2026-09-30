@@ -1149,18 +1149,16 @@ def estimate_poses(
     if marker_spec is not None:
         _log("  trying ArUco marker pose estimation …")
         try:
-            aruco_poses = _poses_from_aruco(feed_paths, Ks, marker_spec)
-            n_found = sum(1 for p in aruco_poses if p is not None)
-            if n_found == n:
+            detections = _detect_markers(feed_paths, Ks, marker_spec)
+            aruco_poses, scale = _poses_from_detections(detections)
+            if all(p is not None for p in aruco_poses):
                 _log(f"  ArUco: all {n} cameras localised")
-                # solvePnP uses object points defined in metres, so the
-                # resulting poses are already metric.  DLT output is therefore
-                # already in metres; no additional scaling is needed.
-                return aruco_poses, 1.0
-            else:
-                _log(f"  ArUco: only {n_found}/{n} cameras; falling back to E-matrix")
+                return aruco_poses, scale
+            _log("  ArUco: feeds are not one joined group; not using E-matrix")
+            return aruco_poses, scale
         except Exception as exc:
-            _log(f"  ArUco failed ({exc}); falling back to E-matrix")
+            _log(f"  ArUco failed ({exc}); not using E-matrix")
+            return [None] * n, 1.0
 
     # --- Essential-matrix path (fallback) ---
     if n < 2:
@@ -1307,33 +1305,6 @@ def _anchor_poses(
     return poses
 
 
-def _poses_from_aruco(
-    feed_paths: list[str],
-    Ks: list[np.ndarray],
-    marker_spec: dict,
-) -> list[Optional[tuple[np.ndarray, np.ndarray]]]:
-    adict = _aruco_dict(marker_spec["dictionary"])
-    params = cv2.aruco.DetectorParameters()
-    try:
-        detector = cv2.aruco.ArucoDetector(adict, params)
-        def _detect(gray):
-            corners, ids, _ = detector.detectMarkers(gray)
-            return corners, ids
-    except AttributeError:
-        # OpenCV < 4.7 fallback
-        def _detect(gray):
-            corners, ids, _ = cv2.aruco.detectMarkers(gray, adict, parameters=params)
-            return corners, ids
-
-    edge_m = float(marker_spec["edge_length_m"])
-    dist = np.zeros((4, 1), dtype=np.float64)
-    poses = []
-    for fi, (path, K) in enumerate(zip(feed_paths, Ks)):
-        pose = _aruco_pose_single_feed(path, K, dist, _detect, edge_m, fi)
-        poses.append(pose)
-    return poses
-
-
 def _estimate_pose_single(corners, edge_m: float, K: np.ndarray, dist: np.ndarray):
     """
     Compatibility shim for estimatePoseSingleMarkers, which was removed in
@@ -1364,43 +1335,88 @@ def _estimate_pose_single(corners, edge_m: float, K: np.ndarray, dist: np.ndarra
     return np.array(rvecs), np.array(tvecs), None
 
 
-def _aruco_pose_single_feed(
+def _detect_markers(
+    feed_paths: list[str],
+    Ks: list[np.ndarray],
+    marker_spec: dict,
+) -> list[dict[int, tuple[np.ndarray, np.ndarray]]]:
+    allowed = set(_marker_ids(marker_spec))
+    adict = _aruco_dict(marker_spec["dictionary"])
+    params = cv2.aruco.DetectorParameters()
+    try:
+        detector = cv2.aruco.ArucoDetector(adict, params)
+
+        def _detect(gray):
+            corners, ids, _ = detector.detectMarkers(gray)
+            return corners, ids
+    except AttributeError:
+        def _detect(gray):
+            corners, ids, _ = cv2.aruco.detectMarkers(gray, adict, parameters=params)
+            return corners, ids
+
+    edge_m = float(marker_spec["edge_length_m"])
+    dist = np.zeros((4, 1), dtype=np.float64)
+    found = []
+    for fi, (path, K) in enumerate(zip(feed_paths, Ks)):
+        found.append(_detect_markers_one_feed(path, K, dist, _detect, edge_m, allowed, fi))
+    return found
+
+
+def _detect_markers_one_feed(
     video_path: str,
     K: np.ndarray,
     dist: np.ndarray,
     detect_fn,
     edge_m: float,
+    allowed: set[int],
     feed_idx: int,
-) -> Optional[tuple[np.ndarray, np.ndarray]]:
+) -> dict[int, tuple[np.ndarray, np.ndarray]]:
     cap = cv2.VideoCapture(video_path)
+    poses: dict[int, tuple[np.ndarray, np.ndarray]] = {}
     try:
         if not cap.isOpened():
-            return None
+            return poses
         fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
         max_frames = max(1, int(MARKER_SCAN_SECS * fps))
-
-        pose: Optional[tuple[np.ndarray, np.ndarray]] = None
         for _ in range(max_frames):
+            if allowed and allowed <= set(poses):
+                break
             ret, frame = cap.read()
             if not ret:
                 break
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             corners, ids = detect_fn(gray)
-            if ids is not None and len(ids) > 0:
+            if ids is None:
+                continue
+            for corner, marker_id in zip(corners, ids.flatten().tolist()):
+                marker_id = int(marker_id)
+                if marker_id not in allowed or marker_id in poses:
+                    continue
                 rvecs, tvecs, _ = _estimate_pose_single(
-                    corners[:1], edge_m, K, dist
+                    [corner], edge_m, K, dist
                 )
-                R = _rodrigues(rvecs[0])
-                t = tvecs[0].reshape(3, 1)
-                pose = (R, t)
-                _log(f"    feed {feed_idx}: marker found")
-                break
+                poses[marker_id] = (_rodrigues(rvecs[0]), tvecs[0].reshape(3, 1))
+                _log(f"    feed {feed_idx}: marker {marker_id} found")
     finally:
         cap.release()
-
-    if pose is None:
+    if not poses:
         _log(f"    feed {feed_idx}: no marker in first {MARKER_SCAN_SECS:.0f}s")
-    return pose
+    return poses
+
+
+def _poses_from_detections(
+    detections: list[dict[int, tuple[np.ndarray, np.ndarray]]],
+) -> tuple[list, float]:
+    """Poses in the anchor frame when every feed is in one joined group.
+
+    Returns all-None poses and scale 1.0 when they are not. Does not use
+    the essential matrix.
+    """
+    n = len(detections)
+    chosen = _choose_joined_feeds([set(d) for d in detections])
+    if chosen != list(range(n)) or n < 2:
+        return [None] * n, 1.0
+    return _anchor_poses(detections, chosen), 1.0
 
 
 # --- Essential-matrix helpers ------------------------------------------------
@@ -1944,11 +1960,31 @@ def main() -> None:
         if len(usable) < 2:
             _emit_failure(_missed_flashes_message(rejected_feeds), rejected_feeds)
 
+        if marker_spec is not None:
+            detections = _detect_markers(
+                [feeds[fi]["path"] for fi in usable],
+                [all_Ks[fi] for fi in usable],
+                marker_spec,
+            )
+            chosen = _choose_joined_feeds([set(d) for d in detections])
+            if len(chosen) < 2:
+                for fi in usable:
+                    rejected[fi] = NOT_JOINED_REASON
+                rejected_feeds = _rejected_feeds(scans, rejected)
+                _emit_failure(_joined_footage_message(rejected_feeds), rejected_feeds)
+            chosen_set = set(chosen)
+            for local_i, fi in enumerate(usable):
+                if local_i not in chosen_set:
+                    rejected[fi] = NOT_JOINED_REASON
+            rejected_feeds = _rejected_feeds(scans, rejected)
+            usable = [fi for local_i, fi in enumerate(usable) if local_i in chosen_set]
+
         compact = {fi: i for i, fi in enumerate(usable)}
-        by_light = {
-            lid: [(compact[fi], cx, cy) for fi, cx, cy in dets]
-            for lid, dets in numbered.items()
-        }
+        by_light = {}
+        for lid, dets in numbered.items():
+            kept = [(compact[fi], cx, cy) for fi, cx, cy in dets if fi in compact]
+            if kept:
+                by_light[lid] = kept
         Ks = [all_Ks[fi] for fi in usable]
         all_ids  = set(by_light.keys())
         _log(f"  detected light indices: {sorted(all_ids) if all_ids else '(none)'}")
@@ -1964,6 +2000,11 @@ def main() -> None:
             by_light,
             scale_hint_m,
         )
+        if marker_spec is not None and any(p is None for p in poses):
+            for fi in usable:
+                rejected[fi] = NOT_JOINED_REASON
+            rejected_feeds = _rejected_feeds(scans, rejected)
+            _emit_failure(_joined_footage_message(rejected_feeds), rejected_feeds)
 
         # Stage 4 — triangulation.
         lights_3d, missing, low_conf = triangulate_all(

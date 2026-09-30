@@ -249,35 +249,18 @@ class TestReconstructSynthetic(unittest.TestCase):
     # ── ArUco marker path ────────────────────────────────────────────────────
 
     def test_with_marker_spec_succeeds_and_finds_lights(self):
-        """
-        When a marker spec is included in the JobSpec, reconstruction must
-        succeed and recover most lights.
-
-        Two sub-scenarios are meaningful in practice:
-          (a) Marker visible in both feeds → ArUco poses used.
-          (b) Marker not visible (spec provided but frames don't contain it)
-              → graceful fallback to the essential-matrix path.
-
-        This test covers scenario (b), which also exercises the full code path
-        through the ArUco attempt and fallback.  Scenario (a) requires either
-        a physical camera setup or a more sophisticated synthetic scene that can
-        render a perspective-correct marker without occluding the lights.
-        """
-        n = 6  # ≥ 6 ensures E-matrix has enough correspondences
+        """A marker spec with no marker in the picture is not enough joined footage."""
+        n = 6
         with tempfile.TemporaryDirectory() as d:
-            # Generate fixture WITHOUT an embedded marker so blink detection
-            # is not disturbed.  Pass the marker spec anyway to exercise the
-            # ArUco-attempt → E-matrix fallback code path.
-            gt  = _gen(d, n_lights=n, seed=7)
+            gt = _gen(d, n_lights=n, seed=7)
             spec = _spec(d, gt)
             spec["marker"] = {"dictionary": "DICT_4X4_50", "edge_length_m": 0.05}
             res = _reconstruct(spec)
 
-        self.assertEqual(res["status"], "succeeded", res.get("error"))
-        self.assertGreaterEqual(
-            len(res["lights"]),
-            n - 1,
-            f"Expected ≥{n-1} lights (via E-matrix fallback), got {len(res['lights'])}",
+        self.assertEqual(res["status"], "failed", res)
+        self.assertTrue(
+            res["error"].startswith("Not enough joined footage."),
+            res["error"],
         )
 
     def test_aruco_no_double_scaling(self):
@@ -289,7 +272,7 @@ class TestReconstructSynthetic(unittest.TestCase):
         again by edge_length_m shrinks every coordinate by the marker size —
         e.g. a 0.05 m marker makes coordinates 20× too small.
 
-        This test imports reconstruct.py directly, stubs _poses_from_aruco with
+        This test imports reconstruct.py directly, stubs _detect_markers with
         two known metric camera poses (baseline 0.30 m), then:
           (a) asserts estimate_poses returns metric_scale == 1.0
           (b) runs triangulate_all with that scale and asserts the recovered
@@ -321,11 +304,11 @@ class TestReconstructSynthetic(unittest.TestCase):
         t1 = np.array([[-BASELINE_M], [0.0], [0.0]], dtype=np.float64)
 
         # --- (a) metric_scale assertion ---
-        def _stub_aruco(feed_paths, Ks, marker_spec):
-            return [(R0, t0), (R1, t1)]
+        def _stub_detect(feed_paths, Ks, marker_spec):
+            return [{0: (R0, t0)}, {0: (R1, t1)}]
 
-        original = m._poses_from_aruco
-        m._poses_from_aruco = _stub_aruco
+        original = m._detect_markers
+        m._detect_markers = _stub_detect
         try:
             poses, scale = m.estimate_poses(
                 feed_paths=["a.mp4", "b.mp4"],
@@ -335,7 +318,7 @@ class TestReconstructSynthetic(unittest.TestCase):
                 scale_hint_m=None,
             )
         finally:
-            m._poses_from_aruco = original
+            m._detect_markers = original
 
         self.assertEqual(
             scale, 1.0,
@@ -1910,6 +1893,284 @@ class TestMarkerJoin(unittest.TestCase):
         self.assertEqual(len(poses), 3)
         np.testing.assert_allclose(poses[2][1], [[-0.2], [0.0], [0.0]], atol=1e-9)
         np.testing.assert_allclose(poses[0][1], [[0.0], [0.0], [0.0]], atol=1e-9)
+
+
+def _write_avi(path: str, frames: list, fps: int = 30) -> None:
+    h, w = frames[0].shape[:2]
+    out = cv2.VideoWriter(path, cv2.VideoWriter_fourcc(*"XVID"), fps, (w, h))
+    for frame in frames:
+        out.write(frame)
+    out.release()
+
+
+def _blank(w: int, h: int):
+    return np.zeros((h, w, 3), dtype=np.uint8)
+
+
+def _billboard(frame, marker_id: int, center: tuple[int, int], size: int = 80) -> None:
+    dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
+    image = cv2.aruco.generateImageMarker(dictionary, marker_id, 64)
+    cx, cy = center
+    half = size // 2
+    margin = 20
+    h, w = frame.shape[:2]
+    x0, y0 = max(0, cx - half - margin), max(0, cy - half - margin)
+    x1, y1 = min(w, cx + half + margin), min(h, cy + half + margin)
+    frame[y0:y1, x0:x1] = (255, 255, 255)
+    patch = cv2.cvtColor(cv2.resize(image, (size, size), interpolation=cv2.INTER_NEAREST), cv2.COLOR_GRAY2BGR)
+    frame[cy - half:cy + half, cx - half:cx + half] = patch
+
+
+def _write_joined_clip(path: str, marker_ids: list[int], blink_xy: tuple[int, int] = (320, 300)) -> None:
+    """One still clip: markers in the opening quiet moment, then one bulb and both bookends."""
+    fps = 30
+    w, h = 640, 480
+    lead = 12  # 0.4 s
+    cue = 6    # 0.2 s
+    settle = 15
+    dwell = 30
+    frames = []
+    centers = {0: (140, 140), 1: (500, 140), 2: (320, 80)}
+
+    def base(with_markers: bool):
+        frame = _blank(w, h)
+        if with_markers:
+            for marker_id in marker_ids:
+                _billboard(frame, marker_id, centers.get(marker_id, (320, 80)))
+        return frame
+
+    for _ in range(lead):
+        frames.append(base(True))
+    colours = ((0, 0, 255), (255, 0, 0), (0, 255, 0))
+
+    def bookend():
+        for i, colour in enumerate(colours):
+            if i:
+                frames.extend(base(False) for _ in range(cue))
+            for _ in range(cue):
+                frame = base(False)
+                cv2.circle(frame, blink_xy, 14, colour, -1)
+                frames.append(frame)
+
+    bookend()
+    frames.extend(base(False) for _ in range(settle))
+    for _ in range(dwell):
+        frame = base(False)
+        cv2.circle(frame, blink_xy, 14, (255, 255, 255), -1)
+        frames.append(frame)
+    frames.extend(base(False) for _ in range(settle))
+    bookend()
+    frames.extend(base(False) for _ in range(9))
+    _write_avi(path, frames, fps)
+
+
+def _write_bridge_scene(directory: str) -> list[str]:
+    fps = 30
+    width = height = 640
+    f = 500.0
+    K = np.array([[f, 0, width / 2], [0, f, height / 2], [0, 0, 1]], dtype=np.float64)
+    R = np.array([[1, 0, 0], [0, -1, 0], [0, 0, -1]], dtype=np.float64)
+    edge = 0.1
+    half = edge / 2
+    corners = np.array([
+        [-half, half, 0],
+        [half, half, 0],
+        [half, -half, 0],
+        [-half, -half, 0],
+    ], dtype=np.float64)
+    marker_1 = corners + np.array([0.50, 0, 0])
+    lights = [np.array([0.25, 0.18, 0.0]), np.array([0.25, -0.18, 0.0])]
+    cameras = {
+        "a.avi": np.array([0.00, 0, 0.7]),
+        "b.avi": np.array([0.25, 0, 0.7]),
+        "c.avi": np.array([0.50, 0, 0.7]),
+    }
+    visible = {
+        "a.avi": [0],
+        "b.avi": [0, 1],
+        "c.avi": [1],
+    }
+    dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
+    images = {i: cv2.aruco.generateImageMarker(dictionary, i, 120) for i in (0, 1)}
+
+    def project(point, t):
+        cam = R @ point.reshape(3, 1) + t
+        pix = K @ cam
+        return np.array([pix[0, 0] / pix[2, 0], pix[1, 0] / pix[2, 0]], dtype=np.float32)
+
+    def draw_marker(frame, marker_id, world_corners, t):
+        dst = np.stack([project(p, t) for p in world_corners])
+        if np.any(dst[:, 0] < 0) or np.any(dst[:, 0] >= width) or np.any(dst[:, 1] < 0) or np.any(dst[:, 1] >= height):
+            return
+        src = np.array([[0, 0], [119, 0], [119, 119], [0, 119]], dtype=np.float32)
+        bigger = (dst - dst.mean(axis=0)) * 1.45 + dst.mean(axis=0)
+        white = cv2.warpPerspective(
+            np.full((120, 120), 255, np.uint8),
+            cv2.getPerspectiveTransform(src, bigger.astype(np.float32)),
+            (width, height),
+        )
+        to_marker = cv2.getPerspectiveTransform(src, dst.astype(np.float32))
+        gray = cv2.warpPerspective(images[marker_id], to_marker, (width, height))
+        area = cv2.warpPerspective(np.full((120, 120), 255, np.uint8), to_marker, (width, height))
+        mask = white > 0
+        frame[mask] = 255
+        ink = area > 0
+        colour = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+        frame[ink] = colour[ink]
+
+    paths = []
+    for name, center in cameras.items():
+        t = -R @ center.reshape(3, 1)
+        frames = []
+        lead = 12
+        cue = 6
+        settle = 15
+        dwell = 30
+
+        def base(with_markers: bool):
+            frame = _blank(width, height)
+            if with_markers:
+                if 0 in visible[name]:
+                    draw_marker(frame, 0, corners, t)
+                if 1 in visible[name]:
+                    draw_marker(frame, 1, marker_1, t)
+            return frame
+
+        for _ in range(lead):
+            frames.append(base(True))
+        colours = ((0, 0, 255), (255, 0, 0), (0, 255, 0))
+        light_px = [project(p, t) for p in lights]
+
+        def bookend():
+            for i, colour in enumerate(colours):
+                if i:
+                    frames.extend(base(False) for _ in range(cue))
+                for _ in range(cue):
+                    frame = base(False)
+                    for pix in light_px:
+                        cv2.circle(frame, (int(round(pix[0])), int(round(pix[1]))), 12, colour, -1)
+                    frames.append(frame)
+
+        bookend()
+        frames.extend(base(False) for _ in range(settle))
+        for pix in light_px:
+            for _ in range(dwell):
+                frame = base(False)
+                cv2.circle(frame, (int(round(pix[0])), int(round(pix[1]))), 12, (255, 255, 255), -1)
+                frames.append(frame)
+            frames.extend(base(False) for _ in range(2))
+        frames.extend(base(False) for _ in range(settle))
+        bookend()
+        frames.extend(base(False) for _ in range(9))
+        path = os.path.join(directory, name)
+        _write_avi(path, frames, fps)
+        paths.append(path)
+    return paths
+
+
+def _spec_from_paths(paths: list[str], marker: bool) -> dict:
+    spec = {
+        "feeds": [{"path": p, "name": os.path.basename(p)} for p in paths],
+        "dwell_ms": 1000,
+    }
+    if marker:
+        spec["marker"] = {"dictionary": "DICT_4X4_50", "edge_length_m": 0.1, "ids": [0, 1, 2]}
+    return spec
+
+
+class TestMarkerJoinVideos(unittest.TestCase):
+    """REQ-052 job outcomes. Clips are synthetic and the camera does not move."""
+
+    def test_shared_marker_uses_the_pair_and_names_the_outsider(self):
+        with tempfile.TemporaryDirectory() as d:
+            paths = []
+            for name, ids in (("a.avi", [0]), ("b.avi", [0]), ("c.avi", [1])):
+                path = os.path.join(d, name)
+                _write_joined_clip(path, ids)
+                paths.append(path)
+            res = _reconstruct(_spec_from_paths(paths, marker=True))
+        self.assertEqual(res["status"], "succeeded", res.get("error"))
+        self.assertEqual(res["rejected_feeds"], [{
+            "file": "c.avi",
+            "reason": "this clip does not share a marker with the clips used for the model",
+        }])
+
+    def test_different_markers_without_a_bridge_fail(self):
+        with tempfile.TemporaryDirectory() as d:
+            a = os.path.join(d, "a.avi")
+            b = os.path.join(d, "b.avi")
+            _write_joined_clip(a, [0])
+            _write_joined_clip(b, [1])
+            res = _reconstruct(_spec_from_paths([a, b], marker=True))
+        self.assertEqual(res["status"], "failed")
+        self.assertTrue(res["error"].startswith("Not enough joined footage."), res["error"])
+        self.assertIn("a.avi (this clip does not share a marker with the clips used for the model)", res["error"])
+        self.assertIn("b.avi (this clip does not share a marker with the clips used for the model)", res["error"])
+
+    def test_equal_pairs_keep_the_earlier_upload(self):
+        with tempfile.TemporaryDirectory() as d:
+            names = (("a.avi", [0]), ("b.avi", [0]), ("c.avi", [1]), ("d.avi", [1]))
+            paths = []
+            for name, ids in names:
+                path = os.path.join(d, name)
+                _write_joined_clip(path, ids)
+                paths.append(path)
+            res = _reconstruct(_spec_from_paths(paths, marker=True))
+        self.assertEqual(res["status"], "succeeded", res.get("error"))
+        files = [row["file"] for row in res["rejected_feeds"]]
+        self.assertEqual(files, ["c.avi", "d.avi"])
+
+    def test_larger_group_is_used(self):
+        with tempfile.TemporaryDirectory() as d:
+            names = (("a.avi", [0]), ("b.avi", [0]), ("c.avi", [0]), ("d.avi", [1]), ("e.avi", [1]))
+            paths = []
+            for name, ids in names:
+                path = os.path.join(d, name)
+                _write_joined_clip(path, ids)
+                paths.append(path)
+            res = _reconstruct(_spec_from_paths(paths, marker=True))
+        self.assertEqual(res["status"], "succeeded", res.get("error"))
+        self.assertEqual(
+            [row["file"] for row in res["rejected_feeds"]],
+            ["d.avi", "e.avi"],
+        )
+
+    def test_unknown_aruco_id_does_not_join(self):
+        with tempfile.TemporaryDirectory() as d:
+            a = os.path.join(d, "a.avi")
+            b = os.path.join(d, "b.avi")
+            c = os.path.join(d, "c.avi")
+            _write_joined_clip(a, [0])
+            _write_joined_clip(b, [0])
+            _write_joined_clip(c, [7])
+            res = _reconstruct(_spec_from_paths([a, b, c], marker=True))
+        self.assertEqual(res["status"], "succeeded", res.get("error"))
+        self.assertEqual(res["rejected_feeds"], [{
+            "file": "c.avi",
+            "reason": "this clip does not share a marker with the clips used for the model",
+        }])
+
+    def test_missing_flashes_are_not_blamed_on_markers(self):
+        with tempfile.TemporaryDirectory() as d:
+            gt = _gen(d, n_lights=2, no_bookend=True, seed=1)
+            spec = _spec(d, gt)
+            spec["marker"] = {"dictionary": "DICT_4X4_50", "edge_length_m": 0.1, "ids": [0, 1, 2]}
+            res = _reconstruct(spec)
+        self.assertEqual(res["status"], "failed")
+        self.assertIn("missed the start and end flashes", res["error"])
+        self.assertFalse(res["error"].startswith("Not enough joined footage."))
+
+    def test_bridge_puts_all_three_clips_in_one_metric_frame(self):
+        """Two lights 0.36 m apart. A sees marker 0, C sees marker 1, B sees both."""
+        with tempfile.TemporaryDirectory() as d:
+            paths = _write_bridge_scene(d)
+            res = _reconstruct(_spec_from_paths(paths, marker=True))
+        self.assertEqual(res["status"], "succeeded", res.get("error"))
+        self.assertEqual(res["rejected_feeds"], [])
+        self.assertGreaterEqual(len(res["lights"]), 2, res)
+        pts = [(p["x"], p["y"], p["z"]) for p in res["lights"]]
+        dist = float(np.linalg.norm(np.array(pts[0]) - np.array(pts[1])))
+        self.assertAlmostEqual(dist, 0.36, delta=0.36 * 0.20, msg=pts)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
