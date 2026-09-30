@@ -379,26 +379,31 @@ function VideoPanel({
             />
             I&apos;ve placed a printed marker in the scene
           </label>
-          <a
-            href="/api/v1/capture/marker"
-            download
-            className="inline-flex w-fit items-center gap-1.5 text-xs text-sky-600 underline-offset-2 hover:underline dark:text-sky-400"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-3.5 w-3.5"
-              viewBox="0 0 20 20"
-              fill="currentColor"
-              aria-hidden
+          <ul className="list-disc space-y-1 pl-4 text-xs text-slate-600 dark:text-slate-400">
+            <li>Print all three and stick them on different sides of what you are wrapping.</li>
+            <li>Keep them flat and do not move them between clips.</li>
+            <li>
+              Each clip should show at least one marker. To join two sides that do not share a
+              marker, at least one clip must show two markers at the same time.
+            </li>
+            <li>You can still leave the marker box unchecked and build a model without them.</li>
+          </ul>
+          {(
+            [
+              ["0", "Download marker 1"],
+              ["1", "Download marker 2"],
+              ["2", "Download marker 3"],
+            ] as const
+          ).map(([id, label]) => (
+            <a
+              key={id}
+              href={`/api/v1/capture/marker?id=${id}`}
+              download
+              className="inline-flex min-h-11 w-fit items-center gap-1.5 text-xs text-sky-600 underline-offset-2 hover:underline dark:text-sky-400"
             >
-              <path
-                fillRule="evenodd"
-                d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z"
-                clipRule="evenodd"
-              />
-            </svg>
-            Download printable marker
-          </a>
+              {label}
+            </a>
+          ))}
         </div>
 
         <div className="flex flex-col gap-1">
