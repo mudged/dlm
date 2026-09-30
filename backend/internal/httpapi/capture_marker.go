@@ -12,17 +12,31 @@ func (a *apiDeps) getCaptureMarker(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
 		return
 	}
-
-	format := r.URL.Query().Get("type")
-	switch format {
-	case "", "pdf", "aruco":
-		serveMarkerAsset(w, fiducialMarkerPDF, "application/pdf", "fiducial_marker_aruco4x4_50_id0_100mm.pdf")
-	case "png":
-		serveMarkerAsset(w, fiducialMarkerPNG, "image/png", "fiducial_marker_aruco4x4_50_id0_100mm.png")
-	default:
-		// Unknown type/size: serve the sensible PDF default (REQ-049 optional params).
-		serveMarkerAsset(w, fiducialMarkerPDF, "application/pdf", "fiducial_marker_aruco4x4_50_id0_100mm.pdf")
+	id, ok := markerQueryID(r.URL.Query().Get("id"))
+	if !ok {
+		writeAPIError(w, http.StatusBadRequest, "bad_request", "marker id must be 0, 1, or 2")
+		return
 	}
+	format := r.URL.Query().Get("type")
+	png := format == "png"
+	switch format {
+	case "", "pdf", "aruco", "png":
+	default:
+		png = false
+	}
+	data, contentType, filename := markerAsset(id, png)
+	serveMarkerAsset(w, data, contentType, filename)
+}
+
+func markerQueryID(raw string) (int, bool) {
+	if raw == "" {
+		return 0, true
+	}
+	id, err := strconv.Atoi(raw)
+	if err != nil || id < 0 || id > 2 {
+		return 0, false
+	}
+	return id, true
 }
 
 func serveMarkerAsset(w http.ResponseWriter, data []byte, contentType, filename string) {
