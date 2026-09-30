@@ -1392,9 +1392,12 @@ def _detect_markers_one_feed(
                 marker_id = int(marker_id)
                 if marker_id not in allowed or marker_id in poses:
                     continue
-                rvecs, tvecs, _ = _estimate_pose_single(
-                    [corner], edge_m, K, dist
-                )
+                try:
+                    rvecs, tvecs, _ = _estimate_pose_single(
+                        [corner], edge_m, K, dist
+                    )
+                except RuntimeError:
+                    continue
                 poses[marker_id] = (_rodrigues(rvecs[0]), tvecs[0].reshape(3, 1))
                 _log(f"    feed {feed_idx}: marker {marker_id} found")
     finally:

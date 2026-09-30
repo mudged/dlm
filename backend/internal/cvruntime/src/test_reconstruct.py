@@ -1894,6 +1894,36 @@ class TestMarkerJoin(unittest.TestCase):
         np.testing.assert_allclose(poses[2][1], [[-0.2], [0.0], [0.0]], atol=1e-9)
         np.testing.assert_allclose(poses[0][1], [[0.0], [0.0], [0.0]], atol=1e-9)
 
+    def test_failed_pose_skips_only_that_marker(self):
+        class _Cap:
+            def isOpened(self):
+                return True
+
+            def get(self, prop):
+                return 30.0
+
+            def read(self):
+                return True, np.zeros((8, 8, 3), dtype=np.uint8)
+
+            def release(self):
+                pass
+
+        def detect(gray):
+            corners = [np.zeros((1, 4, 2), np.float32), np.ones((1, 4, 2), np.float32)]
+            return corners, np.array([[0], [1]])
+
+        def estimate(corners, edge_m, K, dist):
+            if not corners[0].any():
+                raise RuntimeError("solvePnP failed for ArUco corner")
+            return np.zeros((1, 3, 1)), np.ones((1, 3, 1)), None
+
+        with patch.object(self.m.cv2, "VideoCapture", lambda path: _Cap()), \
+                patch.object(self.m, "_estimate_pose_single", estimate):
+            poses = self.m._detect_markers_one_feed(
+                "a.avi", np.eye(3), np.zeros((4, 1)), detect, 0.1, {0, 1}, 0,
+            )
+        self.assertEqual(sorted(poses), [1])
+
 
 def _write_avi(path: str, frames: list, fps: int = 30) -> None:
     h, w = frames[0].shape[:2]
