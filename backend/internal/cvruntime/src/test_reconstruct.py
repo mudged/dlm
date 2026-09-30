@@ -1855,6 +1855,63 @@ class TestQuietRoom(unittest.TestCase):
         )
 
 
+class TestMarkerJoin(unittest.TestCase):
+    """REQ-052: which clips share a marker frame."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.m = _load_reconstruct_module()
+
+    def test_reason_and_failure_sentence(self):
+        dropped = self.m._joined_footage_message([
+            {"file": "a.avi", "reason": self.m.NOT_JOINED_REASON},
+            {"file": "b.avi", "reason": "no start or end signal found"},
+        ])
+        self.assertEqual(
+            dropped,
+            "Not enough joined footage. At least two clips need to share a marker, "
+            "or be linked by a clip that shows two markers. "
+            "Dropped: a.avi (this clip does not share a marker with the clips used for the model); "
+            "b.avi (no start or end signal found).",
+        )
+
+    def test_omitted_ids_mean_zero_one_two(self):
+        self.assertEqual(self.m._marker_ids({"dictionary": "DICT_4X4_50", "edge_length_m": 0.1}), [0, 1, 2])
+        self.assertEqual(self.m._marker_ids({"ids": []}), [])
+
+    def test_chain_joins_three_clips(self):
+        chosen = self.m._choose_joined_feeds([{0}, {0, 1}, {1}])
+        self.assertEqual(chosen, [0, 1, 2])
+
+    def test_outsider_is_left_out(self):
+        chosen = self.m._choose_joined_feeds([{0}, {0}, {1}])
+        self.assertEqual(chosen, [0, 1])
+
+    def test_equal_groups_keep_the_earliest_file(self):
+        chosen = self.m._choose_joined_feeds([{0}, {0}, {1}, {1}])
+        self.assertEqual(chosen, [0, 1])
+
+    def test_larger_group_wins(self):
+        chosen = self.m._choose_joined_feeds([{1}, {1}, {0}, {0}, {0}])
+        self.assertEqual(chosen, [2, 3, 4])
+
+    def test_anchor_pose_uses_the_earliest_bridge(self):
+        eye = np.eye(3, dtype=np.float64)
+
+        def T(x):
+            return (eye, np.array([[x], [0.0], [0.0]], dtype=np.float64))
+
+        detections = [
+            {0: T(0.0)},
+            {0: T(-0.2), 1: T(-0.5)},
+            {1: T(-0.5)},
+        ]
+        poses = self.m._anchor_poses(detections, [0, 1, 2])
+        self.assertEqual(len(poses), 3)
+        np.testing.assert_allclose(poses[2][1], [[-0.2], [0.0], [0.0]], atol=1e-9)
+        np.testing.assert_allclose(poses[0][1], [[0.0], [0.0], [0.0]], atol=1e-9)
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Entry point
 # ──────────────────────────────────────────────────────────────────────────────

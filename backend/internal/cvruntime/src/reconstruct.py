@@ -1204,6 +1204,109 @@ def _aruco_dict(name: str):
     return cv2.aruco.getPredefinedDictionary(val)
 
 
+NOT_JOINED_REASON = (
+    "this clip does not share a marker with the clips used for the model"
+)
+
+
+def _joined_footage_message(rejected_feeds: list[dict]) -> str:
+    dropped = "; ".join(f"{r['file']} ({r['reason']})" for r in rejected_feeds)
+    return (
+        "Not enough joined footage. At least two clips need to share a marker, "
+        "or be linked by a clip that shows two markers. "
+        f"Dropped: {dropped}."
+    )
+
+
+def _marker_ids(marker_spec: dict) -> list[int]:
+    raw = marker_spec.get("ids", None)
+    if raw is None:
+        return [0, 1, 2]
+    return [int(i) for i in raw]
+
+
+def _choose_joined_feeds(sightings: list[set[int]]) -> list[int]:
+    """Largest set of feeds connected by shared marker ids.
+
+    Equal sizes keep the set that contains the earliest feed. Returned
+    indexes are sorted ascending.
+    """
+    n = len(sightings)
+    parent = list(range(n))
+
+    def find(i: int) -> int:
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    def union(a: int, b: int) -> None:
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[rb] = ra
+
+    seen_by_id: dict[int, list[int]] = {}
+    for i, ids in enumerate(sightings):
+        for marker_id in ids:
+            seen_by_id.setdefault(marker_id, []).append(i)
+    for feeds in seen_by_id.values():
+        for other in feeds[1:]:
+            union(feeds[0], other)
+
+    components: dict[int, list[int]] = {}
+    for i in range(n):
+        components.setdefault(find(i), []).append(i)
+    best = min(components.values(), key=lambda members: (-len(members), min(members)))
+    return sorted(best)
+
+
+def _anchor_poses(
+    detections: list[dict[int, tuple[np.ndarray, np.ndarray]]],
+    chosen: list[int],
+) -> list[tuple[np.ndarray, np.ndarray]]:
+    """Camera poses for *chosen* feeds, in the lowest marker id's frame.
+
+    detections[i][marker_id] is (R, t) with x_cam = R @ x_marker + t.
+    A marker frame already known as x_m = R_am @ x_anchor + t_am is linked
+    by the earliest chosen feed that sees both that marker and a new one.
+    """
+    present: set[int] = set()
+    for i in chosen:
+        present.update(detections[i])
+    anchor = min(present)
+    known: dict[int, tuple[np.ndarray, np.ndarray]] = {
+        anchor: (np.eye(3, dtype=np.float64), np.zeros((3, 1), dtype=np.float64)),
+    }
+    progressed = True
+    while len(known) < len(present) and progressed:
+        progressed = False
+        for i in chosen:
+            seen = detections[i]
+            known_ids = [m for m in seen if m in known]
+            unknown_ids = [m for m in seen if m not in known]
+            if not known_ids or not unknown_ids:
+                continue
+            k = min(known_ids)
+            R_k, t_k = seen[k]
+            R_ak, t_ak = known[k]
+            for u in sorted(unknown_ids):
+                if u in known:
+                    continue
+                R_u, t_u = seen[u]
+                R_au = R_u.T @ R_k @ R_ak
+                t_au = R_u.T @ (R_k @ t_ak + t_k - t_u)
+                known[u] = (R_au, t_au)
+                progressed = True
+    poses = []
+    for i in chosen:
+        seen = detections[i]
+        marker_id = anchor if anchor in seen else min(m for m in seen if m in known)
+        R_m, t_m = seen[marker_id]
+        R_am, t_am = known[marker_id]
+        poses.append((R_m @ R_am, R_m @ t_am + t_m))
+    return poses
+
+
 def _poses_from_aruco(
     feed_paths: list[str],
     Ks: list[np.ndarray],
