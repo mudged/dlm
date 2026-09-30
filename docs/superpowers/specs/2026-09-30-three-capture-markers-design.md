@@ -1,7 +1,7 @@
 # Three printable capture markers — design
 
 **Date:** 2026-09-30
-**Status:** Awaiting review
+**Status:** Approved for planning
 **Scope:** Offer three distinct printable markers for video capture, and join clips only through those markers when the operator says they used one. This is REQ-052, an addition to the optional marker in REQ-049 and to pose estimation in REQ-048. Building a model with the marker box unchecked does not change.
 
 ## Context
