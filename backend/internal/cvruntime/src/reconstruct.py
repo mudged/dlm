@@ -809,6 +809,11 @@ def _cue_frames(
     """
     Finds red-blue-green cues in per-frame colours (`_frame_colour`).  Returns
     each cue as ``(first_red_frame, last_green_frame)``, inclusive.
+
+    A colourless stretch between two colour pulses is the dark gap when the
+    frames between those pulses last a cue gap, including a dark edge shorter
+    than the minimum gap.  A longer colourless stretch, such as a one-second
+    white bulb, stays bright.
     """
     labels = [None if c is None else c[0] for c in colours]
     for colour, first, last in _runs(labels):
@@ -827,22 +832,41 @@ def _cue_frames(
         return lo - 1e-9 <= d <= hi + 1e-9
 
     runs = _runs(labels)
-    for idx in range(1, len(runs) - 1):
-        label, first, last = runs[idx]
-        if label is None or label in CUE_SEQUENCE:
+
+    def shorter_than_gap(run) -> bool:
+        return (run[2] - run[1] + 1) / fps < CUE_GAP_MIN_S
+
+    for idx, run in enumerate(runs):
+        if run[0] is None or run[0] in CUE_SEQUENCE:
             continue
-        if not lasts(runs[idx], CUE_GAP_MIN_S, CUE_GAP_MAX_S):
+        prev_i = idx - 1
+        while (
+            prev_i >= 0
+            and runs[prev_i][0] is None
+            and shorter_than_gap(runs[prev_i])
+        ):
+            prev_i -= 1
+        next_i = idx + 1
+        while (
+            next_i < len(runs)
+            and runs[next_i][0] is None
+            and shorter_than_gap(runs[next_i])
+        ):
+            next_i += 1
+        if prev_i < 0 or next_i >= len(runs):
             continue
-        prev_l, prev_a, prev_b = runs[idx - 1]
-        next_l, next_a, next_b = runs[idx + 1]
-        if prev_l not in CUE_SEQUENCE or next_l not in CUE_SEQUENCE:
+        if runs[prev_i][0] not in CUE_SEQUENCE or runs[next_i][0] not in CUE_SEQUENCE:
             continue
-        peak = max(colours[i][1] for i in range(first, last + 1))
-        prev_peak = max(colours[i][1] for i in range(prev_a, prev_b + 1))
-        next_peak = max(colours[i][1] for i in range(next_a, next_b + 1))
-        if peak < CUE_TAIL_FRAC * min(prev_peak, next_peak):
-            for i in range(first, last + 1):
-                labels[i] = None
+        gap_first = runs[prev_i][2] + 1
+        gap_last = runs[next_i][1] - 1
+        if gap_last < gap_first:
+            continue
+        if not lasts([None, gap_first, gap_last], CUE_GAP_MIN_S, CUE_GAP_MAX_S):
+            continue
+        if any(labels[j] in CUE_SEQUENCE for j in range(gap_first, gap_last + 1)):
+            continue
+        for j in range(gap_first, gap_last + 1):
+            labels[j] = None
     runs = _runs(labels)
 
     cues: list[tuple[int, int]] = []

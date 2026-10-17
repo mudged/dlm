@@ -1374,6 +1374,48 @@ class TestBookends(unittest.TestCase):
 
         self.assertEqual(len(cues), 1, f"cues={cues}")
 
+    def _colours(self, runs):
+        colours = []
+        for label, area, n in runs:
+            colours += [(label, area)] * n
+        return colours
+
+    def test_colourless_gap_brighter_than_a_quarter_is_a_bookend(self):
+        # 800 px is most of a 1000 px colour pulse, so the quarter-area smear
+        # rule rejects it. Phone exposure leaves the room this bright while the
+        # bulbs are off for 0.2 s.
+        colours = self._colours([
+            ("r", 1000, 6), ("w", 800, 6),
+            ("b", 1000, 6), ("w", 800, 6),
+            ("g", 1000, 6),
+        ])
+        cues = self.m._cue_frames(colours, 30)
+        self.assertEqual(len(cues), 1, cues)
+
+    def test_one_frame_dark_edge_stays_inside_the_gap(self):
+        # The first frame of blue and green is under a quarter of that pulse,
+        # so tail trim turns it dark and splits it off the white gap.
+        colours = self._colours([
+            ("r", 1000, 6),
+            ("w", 40, 5),
+            ("b", 10, 1),
+            ("b", 1000, 6),
+            ("w", 40, 5),
+            ("g", 10, 1),
+            ("g", 1000, 6),
+        ])
+        cues = self.m._cue_frames(colours, 30)
+        self.assertEqual(len(cues), 1, cues)
+
+    def test_one_second_white_between_colours_is_not_a_gap(self):
+        colours = self._colours([
+            ("r", 1000, 6), ("w", 800, 30),
+            ("b", 1000, 6), ("w", 800, 30),
+            ("g", 1000, 6),
+        ])
+        cues = self.m._cue_frames(colours, 30)
+        self.assertEqual(cues, [])
+
     def test_blinks_outside_both_cues_ignored_and_first_is_slot_zero(self):
         feed = self._feed(
             "a.mp4",
