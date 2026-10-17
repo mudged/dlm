@@ -61,6 +61,11 @@ BLOB_THRESHOLD = 30
 # not a one-second bulb. Three dwells is longer than one bulb plus the bookend.
 ROOM_LIT_FACTOR = 3
 
+# Fraction of the shorter full-resolution side. A lit spot that stays this far
+# from the blink so far, for BLINK_JUMP_FRAMES in a row, is the next bulb.
+BLINK_JUMP_FRAC = 0.025
+BLINK_JUMP_FRAMES = 2
+
 # Minimum blob area (at processing resolution) to be treated as a real light.
 MIN_BLOB_AREA = 4
 
@@ -207,9 +212,9 @@ def detect_blinks(
     """
     Opens *video_path* and detects blink events via an on/off state machine.
 
-    Frame-rate independence: blinks are delimited by brightness transitions,
-    not by a fixed frame count, so cameras recording at different FPS or
-    starting/stopping at different times all align correctly (REQ-048 BR 2).
+    Blinks end on a dark frame or when the lit spot stays jumped for two
+    frames, so cameras at different frame rates still line up, including a
+    sweep with no dark frame between bulbs.
     When *dwell_ms* > 0, on-duration must fall within
     ``[DWELL_MIN_FRAC, DWELL_MAX_FRAC] × dwell_ms`` or the blink is rejected
     (stray flashes / stuck-on segments).  Rejected on-durations, in seconds,
@@ -271,14 +276,14 @@ def analyse_feed(
     )
     cue_frames = _cue_frames(colours, fps)
     blinks = _blinks_from_blobs(
-        _without_cues(blobs, cue_frames), fps, dwell_ms, None
+        _without_cues(blobs, cue_frames), fps, dwell_ms, None, min(frame_w, frame_h)
     )
     if not blinks and not problems:
         raw, _colours, fps, frame_w, frame_h, K = _scan_feed(
             video_path, None, dwell_ms, False
         )
         blinks = _blinks_from_blobs(
-            _without_cues(raw, cue_frames), fps, dwell_ms, rejections
+            _without_cues(raw, cue_frames), fps, dwell_ms, rejections, min(frame_w, frame_h)
         )
     cues = [(a / fps, (b + 1) / fps) for a, b in cue_frames]
     _log(f"    → {len(blinks)} blink(s), {len(cues)} cue(s) detected")
@@ -677,49 +682,93 @@ def _blinks_from_blobs(
     fps: float,
     dwell_ms: int,
     rejections: Optional[list[float]],
+    shorter_side: int,
 ) -> list[tuple[float, float, float]]:
-    """On/off state machine over per-frame blob centroids (see `detect_blinks`)."""
+    """On/off state machine over per-frame blob centroids (see `detect_blinks`).
+
+    A dark frame ends a blink. So does a centroid that stays more than
+    ``BLINK_JUMP_FRAC`` of *shorter_side* away from the blink's mean, for
+    ``BLINK_JUMP_FRAMES`` in a row. One far frame is a glitch and stays in
+    the current blink.
+    """
+    jump_px = BLINK_JUMP_FRAC * max(shorter_side, 1)
     blinks: list[tuple[float, float, float]] = []
     blink_start_frame = 0
     in_blink = False
     accum: list[tuple[float, float]] = []
+    away: list[tuple[int, tuple[float, float]]] = []
+    # One-frame glitches stay in the blink, but not in the jump mean.
+    held: list[tuple[float, float]] = []
 
-    for frame_idx, blob in enumerate(blobs):
-        if blob is not None:
-            if not in_blink:
-                in_blink = True
-                blink_start_frame = frame_idx
-                accum = [blob]
-            else:
-                accum.append(blob)
-        elif in_blink:
-            duration_s = _blink_duration_s(blink_start_frame, frame_idx - 1, fps)
-            if _accept_blink_duration(duration_s, dwell_ms):
-                _finalise_blink(blinks, blink_start_frame / fps, accum)
-            else:
-                _log(
-                    f"    rejected blink at frame {blink_start_frame}: "
-                    f"duration {duration_s * 1000:.0f} ms outside "
-                    f"dwell window ({dwell_ms} ms)"
-                )
-                if rejections is not None:
-                    rejections.append(duration_s)
+    def close(end_frame: int) -> None:
+        nonlocal in_blink, accum, away, held
+        accum.extend(held)
+        held = []
+        if not accum or end_frame < blink_start_frame:
             accum = []
+            away = []
             in_blink = False
-
-    # Handle clip ending while still inside a blink.
-    if in_blink and accum:
-        duration_s = _blink_duration_s(blink_start_frame, len(blobs) - 1, fps)
+            return
+        duration_s = _blink_duration_s(blink_start_frame, end_frame, fps)
         if _accept_blink_duration(duration_s, dwell_ms):
             _finalise_blink(blinks, blink_start_frame / fps, accum)
         else:
             _log(
-                f"    rejected trailing blink at frame {blink_start_frame}: "
+                f"    rejected blink at frame {blink_start_frame}: "
                 f"duration {duration_s * 1000:.0f} ms outside "
                 f"dwell window ({dwell_ms} ms)"
             )
             if rejections is not None:
                 rejections.append(duration_s)
+        accum = []
+        away = []
+        in_blink = False
+
+    def open_from(pending: list[tuple[int, tuple[float, float]]]) -> None:
+        nonlocal in_blink, blink_start_frame, accum, away
+        started = pending[0][0]
+        points = [p for _, p in pending]
+        close(started - 1)
+        in_blink = True
+        blink_start_frame = started
+        accum = points
+        away = []
+
+    for frame_idx, blob in enumerate(blobs):
+        if blob is None:
+            if in_blink:
+                if len(away) >= BLINK_JUMP_FRAMES:
+                    open_from(away)
+                elif away:
+                    held.extend(p for _, p in away)
+                    away = []
+                close(frame_idx - 1)
+            continue
+        if not in_blink:
+            in_blink = True
+            blink_start_frame = frame_idx
+            accum = [blob]
+            away = []
+            continue
+        cx = sum(p[0] for p in accum) / len(accum)
+        cy = sum(p[1] for p in accum) / len(accum)
+        if math.hypot(blob[0] - cx, blob[1] - cy) > jump_px:
+            away.append((frame_idx, blob))
+            if len(away) >= BLINK_JUMP_FRAMES:
+                open_from(away)
+            continue
+        if away:
+            held.extend(p for _, p in away)
+            away = []
+        accum.append(blob)
+
+    if in_blink:
+        if len(away) >= BLINK_JUMP_FRAMES:
+            open_from(away)
+            close(blink_start_frame + len(accum) - 1)
+        else:
+            accum.extend(p for _, p in away)
+            close(blink_start_frame + len(accum) + len(held) - 1)
     return blinks
 
 

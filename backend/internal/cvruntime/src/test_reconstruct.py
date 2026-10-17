@@ -1873,6 +1873,54 @@ class TestQuietRoom(unittest.TestCase):
             [{"file": "short.avi", "reason": self.m.QUIET_ROOM_REASON}],
         )
 
+    def test_no_dark_gap_between_bulbs_is_three_blinks(self):
+        frames = (
+            [self._frame() for _ in range(15)]
+            + self._cue()
+            + [self._frame() for _ in range(6)]
+        )
+        for bulb in self.BULBS:
+            frames += [self._frame([bulb]) for _ in range(30)]
+        frames += self._cue() + [self._frame() for _ in range(15)]
+        with tempfile.TemporaryDirectory() as d:
+            path = str(Path(d) / "nogap.avi")
+            self._write(path, frames)
+            rejections: list[float] = []
+            blinks, cues, *_ = self.m.analyse_feed(path, 1000, rejections)
+        self.assertEqual(len(cues), 2, cues)
+        self._assert_on_bulbs(blinks)
+        self.assertFalse(any(d >= 3 for d in rejections), rejections)
+
+    def test_one_frame_centroid_spike_stays_one_blink(self):
+        fps = 30
+        blobs = [(40.0, 60.0)] * 10 + [(100.0, 100.0)] + [(40.0, 60.0)] * 10
+        blinks = self.m._blinks_from_blobs(blobs, fps, 500, [], 120)
+        self.assertEqual(len(blinks), 1, blinks)
+        _t, cx, cy = blinks[0]
+        self.assertLess(math.hypot(cx - 40, cy - 60), 5)
+
+    def test_phone_shape_smear_glare_and_no_gap(self):
+        frames = [self._frame() for _ in range(15)]
+        for i, colour in enumerate((self.RED, self.BLUE, self.GREEN)):
+            if i:
+                smear = self._frame()
+                cv2.circle(smear, self.BULBS[0], 2, (255, 255, 255), -1)
+                frames += [smear for _ in range(6)]
+            frames += [self._frame(self.BULBS, colour) for _ in range(6)]
+        frames += [self._frame(glare=True) for _ in range(6)]
+        for bulb in self.BULBS:
+            frames += [self._frame([bulb], glare=True) for _ in range(30)]
+        frames += [self._frame(glare=True) for _ in range(15)]
+        frames += self._cue() + [self._frame() for _ in range(15)]
+        with tempfile.TemporaryDirectory() as d:
+            path = str(Path(d) / "phone.avi")
+            self._write(path, frames)
+            rejections: list[float] = []
+            blinks, cues, *_ = self.m.analyse_feed(path, 1000, rejections)
+        self.assertEqual(len(cues), 2, cues)
+        self._assert_on_bulbs(blinks)
+        self.assertFalse(any(d >= 3 for d in rejections), rejections)
+
 
 class TestMarkerJoin(unittest.TestCase):
     """REQ-052: which clips share a marker frame."""
