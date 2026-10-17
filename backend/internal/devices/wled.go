@@ -35,26 +35,28 @@ func rgbFromLogical(on bool, hexColor string, brightnessPct float64) (r, g, b in
 		br = 100
 	}
 	scale := br / 100.0
-	return int(float64(rr) * scale + 0.5), int(float64(gg) * scale + 0.5), int(float64(bb) * scale + 0.5)
+	return int(float64(rr)*scale + 0.5), int(float64(gg)*scale + 0.5), int(float64(bb)*scale + 0.5)
 }
 
-// buildWLEDState builds a /json/state body for per-LED colours on segment 0 (1:1 idx → LED).
+// buildWLEDState builds a /json/state body for per-LED colours on segment 0.
+// Light id i is LED i. Each colour is red, green, blue only; the id is the
+// position in the list, not a channel.
 func buildWLEDState(states []store.LightStateDTO) map[string]any {
-	leds := make([][]int, 0, len(states))
+	n := 0
 	for _, s := range states {
+		if s.ID >= n {
+			n = s.ID + 1
+		}
+	}
+	colors := make([][3]int, n)
+	for _, s := range states {
+		if s.ID < 0 || s.ID >= n {
+			continue
+		}
 		r, g, b := rgbFromLogical(s.On, s.Color, s.BrightnessPct)
-		leds = append(leds, []int{s.ID, r, g, b})
+		colors[s.ID] = [3]int{r, g, b}
 	}
-	return map[string]any{
-		"on":  true,
-		"bri": 255,
-		"seg": []map[string]any{
-			{
-				"id": 0,
-				"i":  leds,
-			},
-		},
-	}
+	return wledLEDFrame(true, 255, colors)
 }
 
 const deviceHTTPTimeout = 5 * time.Second

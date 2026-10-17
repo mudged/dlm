@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"example.com/dlm/backend/internal/store"
 )
 
 func TestPostJSONState_success(t *testing.T) {
@@ -63,5 +65,36 @@ func TestPostJSONState_doesNotFollowRedirects(t *testing.T) {
 	}
 	if attackerHit {
 		t.Fatal("client followed redirect to attacker URL")
+	}
+}
+
+func TestBuildWLEDState_colourIsRGBWithoutBulbNumber(t *testing.T) {
+	t.Parallel()
+	body := buildWLEDState([]store.LightStateDTO{
+		{ID: 0, On: false, Color: "#ffffff", BrightnessPct: 100},
+		{ID: 1, On: true, Color: "#ff0000", BrightnessPct: 100},
+		{ID: 2, On: true, Color: "#00ff00", BrightnessPct: 50},
+	})
+	seg, ok := body["seg"].([]map[string]any)
+	if !ok || len(seg) != 1 {
+		t.Fatalf("seg: %#v", body["seg"])
+	}
+	got, ok := seg[0]["i"].([][]int)
+	if !ok {
+		t.Fatalf("i: %#v", seg[0]["i"])
+	}
+	want := [][]int{{0, 0, 0}, {255, 0, 0}, {0, 128, 0}}
+	if len(got) != len(want) {
+		t.Fatalf("colors: got %#v want %#v", got, want)
+	}
+	for i := range want {
+		if len(got[i]) != len(want[i]) {
+			t.Fatalf("colors: got %#v want %#v", got, want)
+		}
+		for j := range want[i] {
+			if got[i][j] != want[i][j] {
+				t.Fatalf("colors: got %#v want %#v", got, want)
+			}
+		}
 	}
 }
