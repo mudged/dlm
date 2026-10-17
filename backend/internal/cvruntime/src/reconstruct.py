@@ -689,11 +689,28 @@ def _cue_frames(
         if (last - first + 1) / fps < CUE_PULSE_MIN_S:
             for i in range(first, last + 1):
                 labels[i] = None
-    runs = _runs(labels)
-
     def lasts(run, lo: float, hi: float) -> bool:
         d = (run[2] - run[1] + 1) / fps
         return lo - 1e-9 <= d <= hi + 1e-9
+
+    runs = _runs(labels)
+    for idx in range(1, len(runs) - 1):
+        label, first, last = runs[idx]
+        if label is None or label in CUE_SEQUENCE:
+            continue
+        if not lasts(runs[idx], CUE_GAP_MIN_S, CUE_GAP_MAX_S):
+            continue
+        prev_l, prev_a, prev_b = runs[idx - 1]
+        next_l, next_a, next_b = runs[idx + 1]
+        if prev_l not in CUE_SEQUENCE or next_l not in CUE_SEQUENCE:
+            continue
+        peak = max(colours[i][1] for i in range(first, last + 1))
+        prev_peak = max(colours[i][1] for i in range(prev_a, prev_b + 1))
+        next_peak = max(colours[i][1] for i in range(next_a, next_b + 1))
+        if peak < CUE_TAIL_FRAC * min(prev_peak, next_peak):
+            for i in range(first, last + 1):
+                labels[i] = None
+    runs = _runs(labels)
 
     cues: list[tuple[int, int]] = []
     i = 0

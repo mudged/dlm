@@ -1732,6 +1732,21 @@ class TestQuietRoom(unittest.TestCase):
         self.assertEqual(len(cues), 2)
         self.assertEqual(len(found), 2)
 
+    def test_white_smear_between_colours_is_still_a_bookend(self):
+        frames = [self._frame() for _ in range(15)]
+        for i, colour in enumerate((self.RED, self.BLUE, self.GREEN)):
+            if i:
+                smear = self._frame()
+                cv2.circle(smear, self.BULBS[0], 2, (255, 255, 255), -1)
+                frames += [smear for _ in range(6)]
+            frames += [self._frame(self.BULBS, colour) for _ in range(6)]
+        frames += [self._frame() for _ in range(15)]
+        with tempfile.TemporaryDirectory() as d:
+            path = str(Path(d) / "smear.avi")
+            self._write(path, frames)
+            cues = self.m.find_cues(path)
+        self.assertEqual(len(cues), 1, cues)
+
     def test_rebuilt_short_quiet_room_drops_bulbs_without_a_problems_list(self):
         # A lamp on the opening red spot for most of the quiet frames hides that
         # red pulse from the room picture, so the rebuild finds only the closing
