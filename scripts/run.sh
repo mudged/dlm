@@ -38,6 +38,11 @@ if [[ -z "${DLM_CV_RUNTIME_DIR:-}" ]]; then
   cv_dir="${ROOT}/dist/cvruntime/linux_${cv_arch}"
   if [[ -n "$cv_arch" && -d "${cv_dir}/python" && -f "${cv_dir}/reconstruct.py" ]]; then
     export DLM_CV_RUNTIME_DIR="$cv_dir"
+    src_py="${ROOT}/backend/internal/cvruntime/src/reconstruct.py"
+    if [[ -f "${src_py}" && "${src_py}" -nt "${cv_dir}/reconstruct.py" ]]; then
+      cp "${src_py}" "${cv_dir}/reconstruct.py"
+      echo "run.sh: updated ${cv_dir}/reconstruct.py from source"
+    fi
   fi
 fi
 

@@ -33,7 +33,7 @@ starts the Go server with `go run ./cmd/server` in `backend/` (the script **repl
 |----------|--------|
 | `DLM_SKIP_NPM_CI=1` | Skip `npm ci`; only run `release:sync` (fastest when `node_modules` is already correct). |
 | `DLM_FORCE_NPM_CI=1` | Always run `npm ci` before `release:sync` (clean install, CI, or after `package-lock.json` changes). |
-| `DLM_CV_RUNTIME_DIR` | CV runtime bundle used for "create from video". If unset, `run.sh` points it at `dist/cvruntime/linux_<arch>/` when that directory exists. |
+| `DLM_CV_RUNTIME_DIR` | CV runtime bundle used for "create from video". If unset, `run.sh` points it at `dist/cvruntime/linux_<arch>/` when that directory exists, and copies `backend/internal/cvruntime/src/reconstruct.py` over the bundle copy when the source file is newer. It does not re-download Python or OpenCV; that remains `scripts/build-cvruntime.sh`. |
 
 If `web/node_modules` already exists and neither skip nor force is set, the script skips `npm ci` and
 only runs `release:sync`.
