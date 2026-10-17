@@ -1624,9 +1624,9 @@ class TestQuietRoom(unittest.TestCase):
     def setUpClass(cls):
         cls.m = _load_reconstruct_module()
 
-    def _frame(self, spots=(), colour=(255, 255, 255), lift=0):
+    def _frame(self, spots=(), colour=(255, 255, 255), lift=0, glare=False):
         f = np.zeros((self.H, self.W, 3), dtype=np.uint8)
-        f[0:24, 110:150] = 180
+        f[0:24, 110:150] = 230 if glare else 180
         for cx, cy in spots:
             cv2.circle(f, (cx, cy), 6, colour, -1)
         if lift:
@@ -1702,6 +1702,27 @@ class TestQuietRoom(unittest.TestCase):
         self.assertEqual(len(cues), 2, cues)
         self._assert_on_bulbs(blinks)
         self.assertFalse(any(d >= 1.5 for d in rejections), rejections)
+
+    def test_glare_bigger_than_a_bulb_is_not_the_blink(self):
+        # Dwell is 1 s (30 frames). A bulb is also on for both bookends
+        # (about 1.2 s), still under the 3 s room cutoff. The rectangle is
+        # brighter for the settle, the sweep, and the tail: 6+102+15 frames.
+        frames = [self._frame() for _ in range(15)] + self._cue()
+        frames += [self._frame(glare=True) for _ in range(6)]
+        for i, bulb in enumerate(self.BULBS):
+            frames += [self._frame([bulb], glare=True) for _ in range(30)]
+            if i != len(self.BULBS) - 1:
+                frames += [self._frame(glare=True) for _ in range(6)]
+        frames += [self._frame(glare=True) for _ in range(15)]
+        frames += self._cue() + [self._frame() for _ in range(15)]
+        with tempfile.TemporaryDirectory() as d:
+            path = str(Path(d) / "glare.avi")
+            self._write(path, frames)
+            rejections: list[float] = []
+            blinks, cues, *_ = self.m.analyse_feed(path, 1000, rejections)
+        self.assertEqual(len(cues), 2, cues)
+        self._assert_on_bulbs(blinks)
+        self.assertFalse(any(d >= 3 for d in rejections), rejections)
 
     def test_closing_only_uses_the_tail_with_a_window(self):
         frames = self._sweep() + self._cue() + [self._frame() for _ in range(15)]

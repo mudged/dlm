@@ -57,6 +57,10 @@ MAX_PROC_DIM = 480
 # After background subtraction, a pixel must exceed this to be considered lit.
 BLOB_THRESHOLD = 30
 
+# A pixel lit longer than this many dwells is the room (window, leg, desk),
+# not a one-second bulb. Three dwells is longer than one bulb plus the bookend.
+ROOM_LIT_FACTOR = 3
+
 # Minimum blob area (at processing resolution) to be treated as a real light.
 MIN_BLOB_AREA = 4
 
@@ -238,6 +242,14 @@ def find_cues(video_path: str) -> list[tuple[float, float]]:
     return [(a / fps, (b + 1) / fps) for a, b in _cue_frames(colours, fps)]
 
 
+def _without_cues(blobs, cue_frames):
+    out = list(blobs)
+    for first, last in cue_frames:
+        for i in range(first, min(last + 1, len(out))):
+            out[i] = None
+    return out
+
+
 def analyse_feed(
     video_path: str,
     dwell_ms: int,
@@ -254,12 +266,20 @@ def analyse_feed(
     `QUIET_ROOM_REASON` to *problems* when that list is passed, returns the
     bookends, and returns no blinks.
     """
-    blobs, colours, fps, frame_w, frame_h, K = _scan_feed(video_path, problems)
+    blobs, colours, fps, frame_w, frame_h, K = _scan_feed(
+        video_path, problems, dwell_ms, True
+    )
     cue_frames = _cue_frames(colours, fps)
-    for first, last in cue_frames:
-        for i in range(first, last + 1):
-            blobs[i] = None
-    blinks = _blinks_from_blobs(blobs, fps, dwell_ms, rejections)
+    blinks = _blinks_from_blobs(
+        _without_cues(blobs, cue_frames), fps, dwell_ms, None
+    )
+    if not blinks and not problems:
+        raw, _colours, fps, frame_w, frame_h, K = _scan_feed(
+            video_path, None, dwell_ms, False
+        )
+        blinks = _blinks_from_blobs(
+            _without_cues(raw, cue_frames), fps, dwell_ms, rejections
+        )
     cues = [(a / fps, (b + 1) / fps) for a, b in cue_frames]
     _log(f"    → {len(blinks)} blink(s), {len(cues)} cue(s) detected")
     return blinks, cues, frame_w, frame_h, K
@@ -396,7 +416,32 @@ def _room_baselines(video_path: str, meta: dict, start: int, end: int):
     return _median_u8(grays), _median_u8(maxes)
 
 
-def _measure_feed(video_path: str, meta: dict, baseline_gray, baseline_max):
+def _room_pixel_mask(
+    video_path: str,
+    meta: dict,
+    baseline_gray: np.ndarray,
+    dwell_ms: int,
+) -> np.ndarray:
+    """True where a pixel is lit for longer than ROOM_LIT_FACTOR dwells."""
+    limit = ROOM_LIT_FACTOR * (max(dwell_ms, 1) / 1000.0) * meta["fps"]
+    counts = np.zeros((meta["proc_h"], meta["proc_w"]), dtype=np.uint16)
+    cap = cv2.VideoCapture(video_path)
+    try:
+        if not cap.isOpened():
+            raise IOError(f"Cannot open video: {video_path!r}")
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+            gray = cv2.cvtColor(_resize_small(frame, meta), cv2.COLOR_BGR2GRAY)
+            excess = _positive_excess(gray, baseline_gray)
+            counts += (excess > BLOB_THRESHOLD).astype(np.uint16)
+    finally:
+        cap.release()
+    return counts > limit
+
+
+def _measure_feed(video_path: str, meta: dict, baseline_gray, baseline_max, room_mask=None):
     """One straight read. Blobs and colours against the real room picture."""
     blobs: list = []
     colours: list = []
@@ -411,7 +456,11 @@ def _measure_feed(video_path: str, meta: dict, baseline_gray, baseline_max):
                 break
             small = _resize_small(frame, meta)
             gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
-            blob = _find_bright_blob(_positive_excess(gray, baseline_gray))
+            excess = _positive_excess(gray, baseline_gray)
+            if room_mask is not None:
+                excess = excess.copy()
+                excess[room_mask] = 0
+            blob = _find_bright_blob(excess)
             blobs.append(None if blob is None else (blob[0] / scale, blob[1] / scale))
             colours.append(
                 _frame_colour(
@@ -423,7 +472,9 @@ def _measure_feed(video_path: str, meta: dict, baseline_gray, baseline_max):
     return blobs, colours
 
 
-def _scan_with_room(video_path, meta, colours, cues, problems):
+def _scan_with_room(
+    video_path, meta, colours, cues, problems, dwell_ms=1000, mask_room=True
+):
     """Blobs from the quiet-room picture. Appends QUIET_ROOM_REASON when needed."""
     n = len(colours)
     interval, reason = _quiet_interval(cues, n, meta["fps"])
@@ -435,7 +486,13 @@ def _scan_with_room(video_path, meta, colours, cues, problems):
         )
     side, start, end = interval
     baseline_gray, baseline_max = _room_baselines(video_path, meta, start, end)
-    blobs, measured = _measure_feed(video_path, meta, baseline_gray, baseline_max)
+    room = (
+        _room_pixel_mask(video_path, meta, baseline_gray, dwell_ms)
+        if mask_room else None
+    )
+    blobs, measured = _measure_feed(
+        video_path, meta, baseline_gray, baseline_max, room
+    )
     cues2 = _cue_frames(measured, meta["fps"])
     if not _boundary_moved(cues, cues2, side):
         return (
@@ -459,11 +516,18 @@ def _scan_with_room(video_path, meta, colours, cues, problems):
         )
     _side2, start2, end2 = interval2
     baseline_gray, baseline_max = _room_baselines(video_path, meta, start2, end2)
-    blobs, measured = _measure_feed(video_path, meta, baseline_gray, baseline_max)
+    blobs, measured = _measure_feed(
+        video_path, meta, baseline_gray, baseline_max, room
+    )
     return blobs, measured, meta["fps"], meta["frame_w"], meta["frame_h"], meta["K"]
 
 
-def _scan_feed(video_path: str, problems: Optional[list[str]] = None):
+def _scan_feed(
+    video_path: str,
+    problems: Optional[list[str]] = None,
+    dwell_ms: int = 1000,
+    mask_room: bool = True,
+):
     """
     Blobs and flash colours for one clip (REQ-051).
 
@@ -475,12 +539,16 @@ def _scan_feed(video_path: str, problems: Optional[list[str]] = None):
         colours = _classify_against_stored(video_path, meta, tail)
         cues = _cue_frames(colours, meta["fps"])
     if not cues:
-        return _scan_feed_legacy(video_path)
-    return _scan_with_room(video_path, meta, colours, cues, problems)
+        return _scan_feed_legacy(video_path, dwell_ms, mask_room)
+    return _scan_with_room(
+        video_path, meta, colours, cues, problems, dwell_ms, mask_room
+    )
 
 
 def _scan_feed_legacy(
     video_path: str,
+    dwell_ms: int = 1000,
+    mask_room: bool = True,
 ) -> tuple[
     list[Optional[tuple[float, float]]],
     list[Optional[tuple[str, int]]],
@@ -558,6 +626,18 @@ def _scan_feed_legacy(
         background = np.zeros((proc_h, proc_w), dtype=np.uint8)
         background_max = background
 
+    room = None
+    if mask_room:
+        meta = {
+            "frame_w": frame_w,
+            "frame_h": frame_h,
+            "fps": float(fps),
+            "scale": scale,
+            "proc_w": proc_w,
+            "proc_h": proc_h,
+        }
+        room = _room_pixel_mask(video_path, meta, background, dwell_ms)
+
     # ── Pass 2: blink detection ───────────────────────────────────────────────
     # A fresh VideoCapture open restarts from frame 0 deterministically across
     # container backends (MP4, MKV, AVI, …).  CAP_PROP_POS_FRAMES = 0 seeking
@@ -577,7 +657,11 @@ def _scan_feed_legacy(
 
             small = cv2.resize(frame, (proc_w, proc_h), interpolation=cv2.INTER_AREA)
             gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
-            blob = _find_bright_blob(cv2.absdiff(gray, background))
+            diff = cv2.absdiff(gray, background)
+            if room is not None:
+                diff = diff.copy()
+                diff[room] = 0
+            blob = _find_bright_blob(diff)
             # Scale centroid back to full-resolution coordinates.
             blobs.append(None if blob is None else (blob[0] / scale, blob[1] / scale))
             colours.append(
