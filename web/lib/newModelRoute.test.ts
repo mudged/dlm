@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  activeNewModelTab,
   buildNewModelUrl,
   initialVideoPhaseFromJobId,
 } from "./newModelRoute";
@@ -46,5 +47,19 @@ describe("initialVideoPhaseFromJobId", () => {
       kind: "polling",
       jobId: "job-abc",
     });
+  });
+});
+
+describe("activeNewModelTab", () => {
+  it("opens the file tab only for csv", () => {
+    expect(activeNewModelTab("csv")).toBe("csv");
+  });
+
+  it("opens the video tab when tab is missing, video, or anything else", () => {
+    expect(activeNewModelTab(null)).toBe("video");
+    expect(activeNewModelTab("")).toBe("video");
+    expect(activeNewModelTab("video")).toBe("video");
+    expect(activeNewModelTab("CSV")).toBe("video");
+    expect(activeNewModelTab("nope")).toBe("video");
   });
 });

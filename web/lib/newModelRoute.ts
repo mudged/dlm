@@ -16,6 +16,11 @@ export function buildNewModelUrl(
   return base;
 }
 
+/** Video is the usual path. Only an explicit csv tab opens the file form. */
+export function activeNewModelTab(rawTab: string | null): NewModelTab {
+  return rawTab === "csv" ? "csv" : "video";
+}
+
 /** Video panel phase on mount when restoring from URL after a tab switch. */
 export function initialVideoPhaseFromJobId(
   jobId: string | null,
