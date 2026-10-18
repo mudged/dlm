@@ -169,8 +169,8 @@ class TestReconstructSynthetic(unittest.TestCase):
 
     # ── occlusion / missing detection (REQ-048 BR 7) ────────────────────────
 
-    def test_occluded_light_in_missing_not_lights(self):
-        """A light visible in only 1 feed must appear in missing, never in lights."""
+    def test_occluded_light_between_neighbours_is_guessed(self):
+        """A light seen in only one feed, between neighbours the scan is sure about, is filled in and listed as guessed."""
         occlude_feed, occlude_light = 1, 2
         with tempfile.TemporaryDirectory() as d:
             gt  = _gen(d, n_lights=6, seed=4,
@@ -2577,7 +2577,7 @@ class TestWireSpacing(unittest.TestCase):
 
     def test_input_dict_is_not_mutated(self):
         src = {2: (0.0, 0.0, 0.0), 3: (0.08, 0.0, 0.0)}
-        self._apply(src, [0, 1], [], 4)
+        self.m.apply_wire_spacing(src, [0, 1], [], 4, 0.10)
         self.assertEqual(src, {2: (0.0, 0.0, 0.0), 3: (0.08, 0.0, 0.0)})
 
 
