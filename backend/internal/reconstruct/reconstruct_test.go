@@ -285,6 +285,68 @@ func TestManager_confirmInvalidCandidate_validationError(t *testing.T) {
 	}
 }
 
+func TestManager_confirmGuessedLights_persists(t *testing.T) {
+	st := newTestStore(t)
+	filled := cvruntime.Result{
+		Status:     "succeeded",
+		LightCount: 3,
+		Lights: []cvruntime.LightPoint{
+			{ID: 0, X: 0}, {ID: 1, X: 0.1}, {ID: 2, X: 0.2},
+		},
+		Missing: []int{},
+		Guessed: []int{1},
+	}
+	m := reconstruct.New(&fakeRunner{result: filled}, st, t.TempDir())
+	id, err := m.Create(context.Background(), readers("v1", "v2"), nil, reconstruct.CreateParams{})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	waitFor(t, m, id, reconstruct.StatusSucceeded)
+	if _, err := m.Confirm(context.Background(), id, "guessed-model"); err != nil {
+		t.Fatalf("Confirm: %v", err)
+	}
+	all, err := st.List(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, s := range all {
+		if s.Name == "guessed-model" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("guessed model was not persisted")
+	}
+}
+
+func TestManager_confirmGuessedAndMissing_stillNamesTheHole(t *testing.T) {
+	st := newTestStore(t)
+	partial := cvruntime.Result{
+		Status:     "succeeded",
+		LightCount: 4,
+		Lights: []cvruntime.LightPoint{
+			{ID: 0, X: 0}, {ID: 1, X: 0.1}, {ID: 3, X: 0.3},
+		},
+		Missing: []int{2},
+		Guessed: []int{1},
+	}
+	m := reconstruct.New(&fakeRunner{result: partial}, st, t.TempDir())
+	id, err := m.Create(context.Background(), readers("v1", "v2"), nil, reconstruct.CreateParams{})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	waitFor(t, m, id, reconstruct.StatusSucceeded)
+	_, err = m.Confirm(context.Background(), id, "partial-model")
+	var pe *wiremodel.ParseError
+	if !errors.As(err, &pe) {
+		t.Fatalf("expected *wiremodel.ParseError, got %v", err)
+	}
+	if !strings.Contains(pe.Message, "2") {
+		t.Fatalf("error message should name missing light id 2, got: %q", pe.Message)
+	}
+}
+
 func TestManager_confirmMiddleGap_specificError(t *testing.T) {
 	st := newTestStore(t)
 	// Lights 0, 1, 3, 4 were triangulated; light 2 is in Missing.

@@ -190,6 +190,16 @@ func (a *apiDeps) postModelsCapture(w http.ResponseWriter, r *http.Request) {
 		}
 		params.LightCount = &v
 	}
+	maxGapM := 0.10
+	if raw := strings.TrimSpace(r.FormValue("max_gap_cm")); raw != "" {
+		v, err := strconv.ParseFloat(raw, 64)
+		if err != nil || math.IsNaN(v) || math.IsInf(v, 0) || v <= 0 || v > 100 {
+			writeAPIError(w, http.StatusBadRequest, "bad_request", "maximum gap must be a positive number of centimetres up to 100")
+			return
+		}
+		maxGapM = v / 100
+	}
+	params.MaxGapM = maxGapM
 
 	jobID, err := a.reconstruct.Create(r.Context(), fileReaders, fileNames, params)
 	if errors.Is(err, reconstruct.ErrCapExceeded) {

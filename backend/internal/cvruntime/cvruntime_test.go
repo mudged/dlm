@@ -137,6 +137,9 @@ func TestRun_StubInterpreter(t *testing.T) {
 	if result.Lights[0].ID != 0 || result.Lights[1].ID != 1 {
 		t.Errorf("unexpected light IDs: %v", result.Lights)
 	}
+	if result.Guessed == nil || result.Adjusted == nil {
+		t.Fatalf("Guessed=%v Adjusted=%v, want empty slices", result.Guessed, result.Adjusted)
+	}
 }
 
 func TestRun_ChildReportsFailure(t *testing.T) {

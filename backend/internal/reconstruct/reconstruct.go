@@ -92,6 +92,7 @@ type CreateParams struct {
 	ScaleHint  *float64
 	DwellMS    int
 	LightCount *int
+	MaxGapM    float64
 }
 
 // Option configures a Manager. Use WithNow and WithMaxRetainedJobs in tests.
@@ -237,6 +238,7 @@ func (m *Manager) Create(ctx context.Context, files []io.Reader, names []string,
 		ScaleHint:  params.ScaleHint,
 		DwellMS:    dwellMS,
 		LightCount: params.LightCount,
+		MaxGapM:    params.MaxGapM,
 	})
 
 	return id, nil

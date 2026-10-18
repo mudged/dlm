@@ -26,6 +26,9 @@ type JobSpec struct {
 	// LightCount is the optional device light count (1…1000) so a closing-only
 	// clip can number backward from the last bulb (REQ-050).
 	LightCount *int `json:"light_count,omitempty"`
+	// MaxGapM is the fallback step in metres when the scan has no confident
+	// adjacent pair (REQ-053). Zero means the child uses 0.10.
+	MaxGapM float64 `json:"max_gap_m,omitempty"`
 }
 
 // DefaultDwellMS matches the capture sweep default (REQ-047) and reconstruct.py.
@@ -53,8 +56,32 @@ type Result struct {
 	Lights        []LightPoint   `json:"lights"`
 	Missing       []int          `json:"missing"`
 	LowConfidence []int          `json:"low_confidence"`
+	Guessed       []int          `json:"guessed"`
+	Adjusted      []int          `json:"adjusted"`
 	Error         *string        `json:"error"`
 	RejectedFeeds []RejectedFeed `json:"rejected_feeds"`
+}
+
+// normalizeLists makes JSON omit no id list. A nil slice would marshal as null.
+func (r *Result) normalizeLists() {
+	if r.Lights == nil {
+		r.Lights = []LightPoint{}
+	}
+	if r.Missing == nil {
+		r.Missing = []int{}
+	}
+	if r.LowConfidence == nil {
+		r.LowConfidence = []int{}
+	}
+	if r.Guessed == nil {
+		r.Guessed = []int{}
+	}
+	if r.Adjusted == nil {
+		r.Adjusted = []int{}
+	}
+	if r.RejectedFeeds == nil {
+		r.RejectedFeeds = []RejectedFeed{}
+	}
 }
 
 // RejectedFeed names a clip the bookend path dropped, using the upload base name.

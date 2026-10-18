@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -279,6 +280,79 @@ func TestAPIv1CaptureModels_postWithInvalidLightCount_returns400(t *testing.T) {
 			}
 			if fake.createCalled {
 				t.Fatal("Create should not be called with invalid light_count")
+			}
+		})
+	}
+}
+
+func TestAPIv1CaptureModels_postMaxGap_forwardsMetres(t *testing.T) {
+	srv, fake := newCaptureModelsTestServer(t)
+	body, ct := multipartBody(t, map[string]string{
+		"feed_a.mp4": "fake-video-a",
+		"feed_b.mp4": "fake-video-b",
+	}, "max_gap_cm", "100")
+	res, err := http.Post(srv.URL+"/api/v1/models/capture", ct, body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusAccepted {
+		b, _ := io.ReadAll(res.Body)
+		t.Fatalf("status = %d, body = %s", res.StatusCode, b)
+	}
+	if math.Abs(fake.last.MaxGapM-1.0) > 1e-9 {
+		t.Fatalf("MaxGapM = %v, want 1", fake.last.MaxGapM)
+	}
+}
+
+func TestAPIv1CaptureModels_postWithoutMaxGap_defaultsToTenCm(t *testing.T) {
+	srv, fake := newCaptureModelsTestServer(t)
+	body, ct := multipartBody(t, map[string]string{
+		"feed_a.mp4": "fake-video-a",
+		"feed_b.mp4": "fake-video-b",
+	})
+	res, err := http.Post(srv.URL+"/api/v1/models/capture", ct, body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusAccepted {
+		b, _ := io.ReadAll(res.Body)
+		t.Fatalf("status = %d, body = %s", res.StatusCode, b)
+	}
+	if math.Abs(fake.last.MaxGapM-0.10) > 1e-9 {
+		t.Fatalf("MaxGapM = %v, want 0.10", fake.last.MaxGapM)
+	}
+}
+
+func TestAPIv1CaptureModels_postWithInvalidMaxGap_returns400(t *testing.T) {
+	const wantMsg = "maximum gap must be a positive number of centimetres up to 100"
+	for _, val := range []string{"0", "-1", "101", "nope"} {
+		t.Run(val, func(t *testing.T) {
+			srv, _ := newCaptureModelsTestServer(t)
+			body, ct := multipartBody(t, map[string]string{
+				"feed_a.mp4": "fake-video-a",
+				"feed_b.mp4": "fake-video-b",
+			}, "max_gap_cm", val)
+			res, err := http.Post(srv.URL+"/api/v1/models/capture", ct, body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer res.Body.Close()
+			if res.StatusCode != http.StatusBadRequest {
+				b, _ := io.ReadAll(res.Body)
+				t.Fatalf("status = %d, want 400, body = %s", res.StatusCode, b)
+			}
+			var env struct {
+				Error struct {
+					Message string `json:"message"`
+				} `json:"error"`
+			}
+			if err := json.NewDecoder(res.Body).Decode(&env); err != nil {
+				t.Fatalf("decode: %v", err)
+			}
+			if env.Error.Message != wantMsg {
+				t.Fatalf("message = %q, want %q", env.Error.Message, wantMsg)
 			}
 		})
 	}

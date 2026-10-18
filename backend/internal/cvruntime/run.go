@@ -123,6 +123,7 @@ func runWithDir(ctx context.Context, spec JobSpec, runtimeDir string) (Result, e
 			var result Result
 			if jsonErr := json.Unmarshal(stdout.buf.Bytes(), &result); jsonErr == nil &&
 				result.Status == "failed" {
+				result.normalizeLists()
 				return result, nil
 			}
 		}
@@ -146,5 +147,6 @@ func runWithDir(ctx context.Context, spec JobSpec, runtimeDir string) (Result, e
 			err, stdout.buf.String(),
 		)
 	}
+	result.normalizeLists()
 	return result, nil
 }
