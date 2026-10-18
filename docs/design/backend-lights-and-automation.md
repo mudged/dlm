@@ -936,8 +936,12 @@ red, blue, or green in that sense. Search the whole clip and keep non-overlappin
 | Three or more matches, or a single match with dwell-length blinks on both sides of it | Drop the clip as ambiguous. |
 
 When both anchors exist, number each blink forward from the opening signal (index 0) and backward from
-the closing signal, where the closing signal marks the last slot of that same span. Discard a blink
-that receives two different indexes. Leave the surrounding indexes as they are. `light_count` does not
+the closing signal. The backward count ends on the same slot the forward count gave the last blink. The
+offset is the backward index minus the forward index. A blink whose offset equals the offset of the
+previous blink or the next blink is kept at the forward index. A blink whose offset differs from both
+of those, or from its only neighbour, is discarded. One blink alone is kept. Where the offset changes
+between two stretches, both blinks at that change stay, because each matches the rest of its own
+stretch. Leave the other indexes as they are. `light_count` does not
 renumber a clip that already has the opening signal. When `light_count` is provided, indexes at or
 above `light_count` are discarded, and ids in `0 … light_count−1` with no triangulated point go in
 `missing`.

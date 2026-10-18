@@ -1429,6 +1429,35 @@ class TestBookends(unittest.TestCase):
         for slot in range(3):
             self.assertEqual(by_light[slot], [(0, slot * 10.0, 0.0)])
 
+    def test_steady_offset_keeps_the_forward_indexes(self):
+        times = [0, 0.6, 1.2, 1.8, 2.8, 3.8, 4.8, 5.8, 6.8]
+        feed = self._feed(
+            "steady.mp4",
+            [(t, i * 10) for i, t in enumerate(times)],
+            [(-1.0, -0.5), (7.0, 7.5)],
+        )
+        by_light, rejected = self.m.number_from_bookends([feed], None)
+
+        self.assertEqual(rejected, [])
+        self.assertEqual(sorted(by_light), list(range(9)))
+
+    def test_odd_blink_is_dropped_and_its_slot_stays(self):
+        feed = self._feed(
+            "extra.mp4",
+            [(0.0, 0), (1.5, 15), (1.9, 19), (2.3, 23), (3.8, 38)],
+            [(-1.0, -0.5), (4.5, 5.0)],
+        )
+        by_light, rejected = self.m.number_from_bookends([feed], None)
+
+        self.assertEqual(rejected, [])
+        self.assertEqual(sorted(by_light), [0, 2, 3, 5])
+        self.assertEqual(by_light[2], [(0, 15.0, 0.0)])
+
+    def test_offset_change_between_stretches_keeps_both_boundaries(self):
+        # Offsets are 0, 0, 1, 1. Each boundary blink matches its own stretch.
+        kept = self.m._agreeing_forward_slots([0, 1, 2, 3], [0, 1, 3, 4])
+        self.assertEqual(kept, [0, 1, 2, 3])
+
     def test_closing_only_counts_back_from_light_count(self):
         feed = self._feed("late.mp4", [(6.0, 20), (7.0, 30), (8.0, 40)], [(10.0, 11.0)])
         by_light, rejected = self.m.number_from_bookends([feed], 5)

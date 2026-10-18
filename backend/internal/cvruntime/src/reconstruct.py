@@ -1174,6 +1174,32 @@ def _rejected_feeds(feeds: list[dict], rejected: dict[int, str]) -> list[dict]:
     ]
 
 
+def _agreeing_forward_slots(
+    forward: list[int], backward: list[int]
+) -> list[Optional[int]]:
+    """Forward slots to keep when both bookends numbered the blink.
+
+    Offset is the backward index minus the forward index. A blink stays
+    when that offset equals the previous or next blink's offset. One blink
+    with no neighbour stays. Comparison happens before any blink is removed,
+    so a change of offset between two stretches keeps both boundary blinks.
+    """
+    deltas = [b - f for f, b in zip(forward, backward)]
+    kept: list[Optional[int]] = []
+    n = len(deltas)
+    for i, slot in enumerate(forward):
+        neighbours = []
+        if i:
+            neighbours.append(deltas[i - 1])
+        if i + 1 < n:
+            neighbours.append(deltas[i + 1])
+        if not neighbours or any(deltas[i] == d for d in neighbours):
+            kept.append(slot)
+        else:
+            kept.append(None)
+    return kept
+
+
 def _number_from_bookends(
     feeds: list[dict],
     light_count: Optional[int],
@@ -1197,14 +1223,8 @@ def _number_from_bookends(
             slots_by_feed[fi] = list(_assign_slots(times, period))
         elif kind == "both":
             forward = _assign_slots(times, period)
-            last = (
-                int(round((times[-1] - times[0]) / period))
-                if period > 0 else len(times) - 1
-            )
-            backward = _backward_slots(times, period, last)
-            slots_by_feed[fi] = [
-                f if f == b else None for f, b in zip(forward, backward)
-            ]
+            backward = _backward_slots(times, period, forward[-1])
+            slots_by_feed[fi] = _agreeing_forward_slots(forward, backward)
 
     closing = [fi for fi, (kind, _span) in spans.items() if kind == "closing"]
     if closing:
