@@ -2404,6 +2404,157 @@ class TestMarkerJoinVideos(unittest.TestCase):
         self.assertAlmostEqual(dist, 0.36, delta=0.36 * 0.20, msg=pts)
 
 
+class TestWireSpacing(unittest.TestCase):
+    """REQ-053: short holes are filled from the wire spacing."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.m = _load_reconstruct_module()
+
+    def _near(self, got, want):
+        self.assertEqual(len(got), 3)
+        for a, b in zip(got, want):
+            self.assertAlmostEqual(a, b, delta=1e-6)
+
+    def _apply(self, points, missing, low, span, gap=0.10):
+        return self.m.apply_wire_spacing(
+            dict(points), list(missing), list(low), span, gap
+        )
+
+    def test_end_uses_longest_confident_step(self):
+        points, missing, low, guessed, adjusted = self._apply(
+            {2: (0.0, 0.0, 0.0), 3: (0.08, 0.0, 0.0), 4: (0.18, 0.0, 0.0)},
+            [0, 1], [], 5,
+        )
+        self.assertEqual(guessed, [0, 1])
+        self.assertEqual(missing, [])
+        self.assertEqual(adjusted, [])
+        self.assertEqual(low, [])
+        self._near(points[0], (-0.20, 0.0, 0.0))
+        self._near(points[1], (-0.10, 0.0, 0.0))
+        self._near(points[2], (0.0, 0.0, 0.0))
+        self._near(points[3], (0.08, 0.0, 0.0))
+        self._near(points[4], (0.18, 0.0, 0.0))
+
+    def test_suffix_uses_longest_step_not_the_short_neighbour(self):
+        points, missing, low, guessed, adjusted = self._apply(
+            {0: (0.0, 0.0, 0.0), 1: (0.10, 0.0, 0.0), 2: (0.18, 0.0, 0.0)},
+            [3], [], 4,
+        )
+        self.assertEqual(guessed, [3])
+        self.assertEqual(missing, [])
+        self.assertEqual(adjusted, [])
+        self._near(points[3], (0.28, 0.0, 0.0))
+
+    def test_interior_low_confidence_moves_to_the_midpoint(self):
+        points, missing, low, guessed, adjusted = self._apply(
+            {3: (0.08, 0.0, 0.0), 4: (9.0, 9.0, 9.0), 5: (0.24, 0.0, 0.0)},
+            [], [4], 6,
+        )
+        self.assertEqual(adjusted, [4])
+        self.assertEqual(low, [])
+        self.assertEqual(guessed, [])
+        self.assertEqual(missing, [])
+        self._near(points[4], (0.16, 0.0, 0.0))
+        self._near(points[3], (0.08, 0.0, 0.0))
+
+    def test_three_missing_ids_are_evenly_spaced(self):
+        points, missing, low, guessed, adjusted = self._apply(
+            {0: (0.0, 0.0, 0.0), 4: (0.40, 0.0, 0.0)},
+            [1, 2, 3], [], 5,
+        )
+        self.assertEqual(guessed, [1, 2, 3])
+        self.assertEqual(missing, [])
+        self._near(points[1], (0.10, 0.0, 0.0))
+        self._near(points[2], (0.20, 0.0, 0.0))
+        self._near(points[3], (0.30, 0.0, 0.0))
+
+    def test_interior_fills_even_when_the_step_is_longer_than_the_max(self):
+        points, missing, low, guessed, adjusted = self._apply(
+            {
+                0: (0.0, 0.0, 0.0),
+                2: (1.0, 0.0, 0.0),
+                4: (2.0, 0.0, 0.0),
+                5: (2.08, 0.0, 0.0),
+            },
+            [1, 3], [], 6,
+        )
+        self.assertEqual(guessed, [1, 3])
+        self._near(points[1], (0.50, 0.0, 0.0))
+        self._near(points[3], (1.50, 0.0, 0.0))
+
+    def test_four_missing_ids_stay_missing(self):
+        points, missing, low, guessed, adjusted = self._apply(
+            {0: (0.0, 0.0, 0.0), 5: (0.50, 0.0, 0.0)},
+            [1, 2, 3, 4], [], 6,
+        )
+        self.assertEqual(missing, [1, 2, 3, 4])
+        self.assertEqual(guessed, [])
+        self.assertNotIn(1, points)
+
+    def test_low_confidence_inside_a_run_of_four_stays(self):
+        points, missing, low, guessed, adjusted = self._apply(
+            {0: (0.0, 0.0, 0.0), 2: (1.0, 1.0, 1.0), 5: (0.50, 0.0, 0.0)},
+            [1, 3, 4], [2], 6,
+        )
+        self.assertEqual(low, [2])
+        self.assertEqual(adjusted, [])
+        self.assertEqual(guessed, [])
+        self.assertEqual(missing, [1, 3, 4])
+        self._near(points[2], (1.0, 1.0, 1.0))
+
+    def test_end_without_a_confident_neighbour_stays_missing(self):
+        points, missing, low, guessed, adjusted = self._apply(
+            {2: (0.0, 0.0, 0.0)},
+            [0, 1, 3], [], 4,
+        )
+        self.assertEqual(missing, [0, 1, 3])
+        self.assertEqual(guessed, [])
+
+    def test_zero_length_neighbour_does_not_grow_the_end(self):
+        points, missing, low, guessed, adjusted = self._apply(
+            {0: (0.0, 0.0, 0.0), 1: (0.0, 0.0, 0.0)},
+            [2], [], 3,
+        )
+        self.assertEqual(missing, [2])
+        self.assertEqual(guessed, [])
+        self.assertNotIn(2, points)
+
+    def test_fallback_slides_a_low_confidence_light_and_leaves_the_hole(self):
+        points, missing, low, guessed, adjusted = self._apply(
+            {2: (0.0, 0.0, 0.0), 4: (0.0, 0.50, 0.0)},
+            [3], [4], 5, gap=0.10,
+        )
+        self.assertEqual(adjusted, [4])
+        self.assertEqual(low, [])
+        self.assertEqual(missing, [3])
+        self.assertEqual(guessed, [])
+        self._near(points[4], (0.0, 0.20, 0.0))
+
+    def test_low_confidence_on_the_anchor_stays(self):
+        points, missing, low, guessed, adjusted = self._apply(
+            {0: (0.0, 0.0, 0.0), 1: (0.0, 0.0, 0.0)},
+            [], [1], 2,
+        )
+        self.assertEqual(low, [1])
+        self.assertEqual(adjusted, [])
+        self._near(points[1], (0.0, 0.0, 0.0))
+
+    def test_no_anchors_leaves_the_lists_empty(self):
+        points, missing, low, guessed, adjusted = self._apply(
+            {}, [0, 1], [], 2,
+        )
+        self.assertEqual(points, {})
+        self.assertEqual(missing, [0, 1])
+        self.assertEqual(guessed, [])
+        self.assertEqual(adjusted, [])
+
+    def test_input_dict_is_not_mutated(self):
+        src = {2: (0.0, 0.0, 0.0), 3: (0.08, 0.0, 0.0)}
+        self._apply(src, [0, 1], [], 4)
+        self.assertEqual(src, {2: (0.0, 0.0, 0.0), 3: (0.08, 0.0, 0.0)})
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Entry point
 # ──────────────────────────────────────────────────────────────────────────────
