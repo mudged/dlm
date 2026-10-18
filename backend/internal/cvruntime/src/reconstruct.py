@@ -1985,120 +1985,92 @@ def apply_wire_spacing(
     list[int],
     list[int],
 ]:
-    """Fill holes of 1..3 lights and move low-confidence lights (REQ-053).
+    """Fill holes of 1..5 lights between seen lights (REQ-053).
 
-    Anchors are triangulated ids that are not low-confidence. Their
-    coordinates are copied through unchanged. Returns new lists; the
-    caller's dict is not mutated.
+    Every triangulated id is a seen anchor, including a low-confidence
+    light. Seen coordinates are not moved. A guessed id is not an anchor.
+    max_gap_m is accepted so the call site stays, and it is not read.
+    Returns new lists; the caller's dict is not mutated.
     """
+    _ = max_gap_m
     points = dict(lights_3d)
     missing_set = set(missing)
     low_set = set(low_conf)
     guessed: list[int] = []
-    adjusted: list[int] = []
 
-    anchors = sorted(lid for lid in points if lid not in low_set)
-    anchor_set = set(anchors)
+    seen = sorted(points)
+    sure_set = {lid for lid in seen if lid not in low_set}
 
-    def _dist(a: int, b: int) -> float:
-        ax, ay, az = points[a]
-        bx, by, bz = points[b]
-        return math.dist((ax, ay, az), (bx, by, bz))
+    def _guess(lid: int, xyz: tuple[float, float, float]) -> None:
+        if lid not in missing_set or lid in points:
+            return
+        points[lid] = xyz
+        missing_set.discard(lid)
+        guessed.append(lid)
 
-    usable: list[float] = []
-    for lid in anchors:
-        if lid + 1 in anchor_set:
-            d = _dist(lid, lid + 1)
-            if d > 0:
-                usable.append(d)
-    max_step = max(usable) if usable else max_gap_m
+    for i in range(len(seen) - 1):
+        prev, nxt = seen[i], seen[i + 1]
+        k = nxt - prev - 1
+        if not 1 <= k <= 5:
+            continue
+        px, py, pz = points[prev]
+        nx, ny, nz = points[nxt]
+        for j in range(1, k + 1):
+            t = j / (k + 1)
+            _guess(prev + j, (
+                px + t * (nx - px),
+                py + t * (ny - py),
+                pz + t * (nz - pz),
+            ))
 
-    def _place(lid: int, xyz: tuple[float, float, float]) -> None:
-        if lid in low_set:
-            points[lid] = xyz
-            low_set.discard(lid)
-            adjusted.append(lid)
-        elif lid in missing_set:
-            points[lid] = xyz
-            missing_set.discard(lid)
-            guessed.append(lid)
-
-    if anchors:
-        for i in range(len(anchors) - 1):
-            prev, nxt = anchors[i], anchors[i + 1]
-            k = nxt - prev - 1
-            if not 1 <= k <= 3:
+    def _max_step() -> float:
+        best = 0.0
+        for lid in sure_set:
+            if lid + 1 not in sure_set:
                 continue
-            px, py, pz = points[prev]
-            nx, ny, nz = points[nxt]
-            for j in range(1, k + 1):
-                t = j / (k + 1)
-                _place(prev + j, (
-                    px + t * (nx - px),
-                    py + t * (ny - py),
-                    pz + t * (nz - pz),
-                ))
+            d = math.dist(points[lid], points[lid + 1])
+            if d > best:
+                best = d
+        return best
 
-        s = anchors[0]
-        if 1 <= s <= 3 and (s + 1) in anchor_set:
+    if seen:
+        s = seen[0]
+        if s in sure_set and (s + 1) in sure_set and 1 <= s <= 3:
             vx = points[s + 1][0] - points[s][0]
             vy = points[s + 1][1] - points[s][1]
             vz = points[s + 1][2] - points[s][2]
             length = math.sqrt(vx * vx + vy * vy + vz * vz)
             if length > 0:
-                scale = max_step / length
+                scale = _max_step() / length
                 for j in range(1, s + 1):
-                    _place(s - j, (
+                    _guess(s - j, (
                         points[s][0] - j * scale * vx,
                         points[s][1] - j * scale * vy,
                         points[s][2] - j * scale * vz,
                     ))
 
-        t_id = anchors[-1]
+        t_id = seen[-1]
         k_suf = span - 1 - t_id
-        if 1 <= k_suf <= 3 and (t_id - 1) in anchor_set:
+        if t_id in sure_set and (t_id - 1) in sure_set and 1 <= k_suf <= 3:
             vx = points[t_id][0] - points[t_id - 1][0]
             vy = points[t_id][1] - points[t_id - 1][1]
             vz = points[t_id][2] - points[t_id - 1][2]
             length = math.sqrt(vx * vx + vy * vy + vz * vz)
             if length > 0:
-                scale = max_step / length
+                scale = _max_step() / length
                 for j in range(1, k_suf + 1):
-                    _place(t_id + j, (
+                    _guess(t_id + j, (
                         points[t_id][0] + j * scale * vx,
                         points[t_id][1] + j * scale * vy,
                         points[t_id][2] + j * scale * vz,
                     ))
-
-    if not usable and anchors:
-        for lid in sorted(low_set):
-            # A low-confidence light inside a run of 4 or more stays put.
-            # That run was left unchanged in the interior phase.
-            prevs = [a for a in anchors if a < lid]
-            nexts = [a for a in anchors if a > lid]
-            if prevs and nexts and (min(nexts) - max(prevs) - 1) >= 4:
-                continue
-            best = min(anchors, key=lambda a: (abs(a - lid), a))
-            gap = abs(best - lid)
-            if not 1 <= gap <= 3:
-                continue
-            ax, ay, az = points[best]
-            lx, ly, lz = points[lid]
-            vx, vy, vz = lx - ax, ly - ay, lz - az
-            length = math.sqrt(vx * vx + vy * vy + vz * vz)
-            if length <= 0:
-                continue
-            scale = (gap * max_gap_m) / length
-            points[lid] = (ax + scale * vx, ay + scale * vy, az + scale * vz)
-            low_set.discard(lid)
-            adjusted.append(lid)
 
     return (
         points,
         sorted(missing_set),
         sorted(low_set),
         sorted(guessed),
-        sorted(adjusted),
+        [],
     )
 
 

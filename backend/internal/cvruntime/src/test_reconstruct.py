@@ -2407,7 +2407,7 @@ class TestMarkerJoinVideos(unittest.TestCase):
 
 
 class TestWireSpacing(unittest.TestCase):
-    """REQ-053: short holes are filled from the wire spacing."""
+    """REQ-053: holes of up to five between seen lights are filled."""
 
     @classmethod
     def setUpClass(cls):
@@ -2472,18 +2472,6 @@ class TestWireSpacing(unittest.TestCase):
         self.assertEqual(adjusted, [])
         self._near(points[3], (0.28, 0.0, 0.0))
 
-    def test_interior_low_confidence_moves_to_the_midpoint(self):
-        points, missing, low, guessed, adjusted = self._apply(
-            {3: (0.08, 0.0, 0.0), 4: (9.0, 9.0, 9.0), 5: (0.24, 0.0, 0.0)},
-            [], [4], 6,
-        )
-        self.assertEqual(adjusted, [4])
-        self.assertEqual(low, [])
-        self.assertEqual(guessed, [])
-        self.assertEqual(missing, [])
-        self._near(points[4], (0.16, 0.0, 0.0))
-        self._near(points[3], (0.08, 0.0, 0.0))
-
     def test_three_missing_ids_are_evenly_spaced(self):
         points, missing, low, guessed, adjusted = self._apply(
             {0: (0.0, 0.0, 0.0), 4: (0.40, 0.0, 0.0)},
@@ -2509,26 +2497,6 @@ class TestWireSpacing(unittest.TestCase):
         self._near(points[1], (0.50, 0.0, 0.0))
         self._near(points[3], (1.50, 0.0, 0.0))
 
-    def test_four_missing_ids_stay_missing(self):
-        points, missing, low, guessed, adjusted = self._apply(
-            {0: (0.0, 0.0, 0.0), 5: (0.50, 0.0, 0.0)},
-            [1, 2, 3, 4], [], 6,
-        )
-        self.assertEqual(missing, [1, 2, 3, 4])
-        self.assertEqual(guessed, [])
-        self.assertNotIn(1, points)
-
-    def test_low_confidence_inside_a_run_of_four_stays(self):
-        points, missing, low, guessed, adjusted = self._apply(
-            {0: (0.0, 0.0, 0.0), 2: (1.0, 1.0, 1.0), 5: (0.50, 0.0, 0.0)},
-            [1, 3, 4], [2], 6,
-        )
-        self.assertEqual(low, [2])
-        self.assertEqual(adjusted, [])
-        self.assertEqual(guessed, [])
-        self.assertEqual(missing, [1, 3, 4])
-        self._near(points[2], (1.0, 1.0, 1.0))
-
     def test_end_without_a_confident_neighbour_stays_missing(self):
         points, missing, low, guessed, adjusted = self._apply(
             {2: (0.0, 0.0, 0.0)},
@@ -2545,17 +2513,6 @@ class TestWireSpacing(unittest.TestCase):
         self.assertEqual(missing, [2])
         self.assertEqual(guessed, [])
         self.assertNotIn(2, points)
-
-    def test_fallback_slides_a_low_confidence_light_and_leaves_the_hole(self):
-        points, missing, low, guessed, adjusted = self._apply(
-            {2: (0.0, 0.0, 0.0), 4: (0.0, 0.50, 0.0)},
-            [3], [4], 5, gap=0.10,
-        )
-        self.assertEqual(adjusted, [4])
-        self.assertEqual(low, [])
-        self.assertEqual(missing, [3])
-        self.assertEqual(guessed, [])
-        self._near(points[4], (0.0, 0.20, 0.0))
 
     def test_low_confidence_on_the_anchor_stays(self):
         points, missing, low, guessed, adjusted = self._apply(
@@ -2574,6 +2531,191 @@ class TestWireSpacing(unittest.TestCase):
         self.assertEqual(missing, [0, 1])
         self.assertEqual(guessed, [])
         self.assertEqual(adjusted, [])
+
+    def test_low_confidence_between_sure_lights_keeps_its_coordinate(self):
+        points, missing, low, guessed, adjusted = self._apply(
+            {3: (0.08, 0.0, 0.0), 4: (9.0, 9.0, 9.0), 5: (0.24, 0.0, 0.0)},
+            [], [4], 6,
+        )
+        self.assertEqual(adjusted, [])
+        self.assertEqual(low, [4])
+        self.assertEqual(guessed, [])
+        self.assertEqual(missing, [])
+        self._near(points[4], (9.0, 9.0, 9.0))
+        self._near(points[3], (0.08, 0.0, 0.0))
+        self._near(points[5], (0.24, 0.0, 0.0))
+
+    def test_four_missing_between_seen_lights_are_guessed(self):
+        points, missing, low, guessed, adjusted = self._apply(
+            {0: (0.0, 0.0, 0.0), 5: (0.50, 0.0, 0.0)},
+            [1, 2, 3, 4], [], 6,
+        )
+        self.assertEqual(guessed, [1, 2, 3, 4])
+        self.assertEqual(missing, [])
+        self.assertEqual(adjusted, [])
+        self._near(points[1], (0.10, 0.0, 0.0))
+        self._near(points[2], (0.20, 0.0, 0.0))
+        self._near(points[3], (0.30, 0.0, 0.0))
+        self._near(points[4], (0.40, 0.0, 0.0))
+
+    def test_low_confidence_light_splits_the_gap(self):
+        points, missing, low, guessed, adjusted = self._apply(
+            {0: (0.0, 0.0, 0.0), 2: (1.0, 1.0, 1.0), 5: (0.5, 0.0, 0.0)},
+            [1, 3, 4], [2], 6,
+        )
+        self.assertEqual(low, [2])
+        self.assertEqual(adjusted, [])
+        self.assertEqual(guessed, [1, 3, 4])
+        self.assertEqual(missing, [])
+        self._near(points[2], (1.0, 1.0, 1.0))
+        self._near(points[1], (0.5, 0.5, 0.5))
+        self._near(points[3], (5.0 / 6.0, 2.0 / 3.0, 2.0 / 3.0))
+        self._near(points[4], (2.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0))
+
+    def test_missing_id_between_sure_and_low_confidence_is_guessed(self):
+        points, missing, low, guessed, adjusted = self._apply(
+            {2: (0.0, 0.0, 0.0), 4: (0.0, 0.50, 0.0)},
+            [3], [4], 5, gap=0.10,
+        )
+        self.assertEqual(guessed, [3])
+        self.assertEqual(missing, [])
+        self.assertEqual(adjusted, [])
+        self.assertEqual(low, [4])
+        self._near(points[3], (0.0, 0.25, 0.0))
+        self._near(points[4], (0.0, 0.50, 0.0))
+
+    def test_five_missing_ids_are_evenly_spaced(self):
+        points, missing, low, guessed, adjusted = self._apply(
+            {0: (0.0, 0.0, 0.0), 6: (0.60, 0.0, 0.0)},
+            [1, 2, 3, 4, 5], [], 7,
+        )
+        self.assertEqual(guessed, [1, 2, 3, 4, 5])
+        self.assertEqual(missing, [])
+        self.assertEqual(adjusted, [])
+        for j in range(1, 6):
+            self._near(points[j], (0.10 * j, 0.0, 0.0))
+
+    def test_five_missing_ids_use_a_low_confidence_end(self):
+        points, missing, low, guessed, adjusted = self._apply(
+            {0: (0.0, 0.0, 0.0), 6: (0.60, 0.0, 0.0)},
+            [1, 2, 3, 4, 5], [6], 7,
+        )
+        self.assertEqual(guessed, [1, 2, 3, 4, 5])
+        self.assertEqual(missing, [])
+        self.assertEqual(low, [6])
+        self.assertEqual(adjusted, [])
+        self._near(points[6], (0.60, 0.0, 0.0))
+        for j in range(1, 6):
+            self._near(points[j], (0.10 * j, 0.0, 0.0))
+
+    def test_six_missing_ids_stay_missing(self):
+        points, missing, low, guessed, adjusted = self._apply(
+            {0: (0.0, 0.0, 0.0), 7: (0.70, 0.0, 0.0)},
+            [1, 2, 3, 4, 5, 6], [], 8,
+        )
+        self.assertEqual(missing, [1, 2, 3, 4, 5, 6])
+        self.assertEqual(guessed, [])
+        self.assertEqual(adjusted, [])
+        self.assertNotIn(1, points)
+        self._near(points[0], (0.0, 0.0, 0.0))
+        self._near(points[7], (0.70, 0.0, 0.0))
+
+    def test_three_missing_ids_before_a_sure_light_are_guessed(self):
+        points, missing, low, guessed, adjusted = self._apply(
+            {3: (0.0, 0.0, 0.0), 4: (0.10, 0.0, 0.0)},
+            [0, 1, 2], [], 5,
+        )
+        self.assertEqual(guessed, [0, 1, 2])
+        self.assertEqual(missing, [])
+        self.assertEqual(adjusted, [])
+        self._near(points[2], (-0.10, 0.0, 0.0))
+        self._near(points[1], (-0.20, 0.0, 0.0))
+        self._near(points[0], (-0.30, 0.0, 0.0))
+
+    def test_four_missing_ids_before_a_sure_light_stay_missing(self):
+        points, missing, low, guessed, adjusted = self._apply(
+            {4: (0.0, 0.0, 0.0), 5: (0.10, 0.0, 0.0)},
+            [0, 1, 2, 3], [], 6,
+        )
+        self.assertEqual(missing, [0, 1, 2, 3])
+        self.assertEqual(guessed, [])
+        self.assertEqual(adjusted, [])
+        self.assertNotIn(0, points)
+
+    def test_three_missing_ids_after_the_last_sure_light_are_guessed(self):
+        points, missing, low, guessed, adjusted = self._apply(
+            {0: (0.0, 0.0, 0.0), 1: (0.10, 0.0, 0.0)},
+            [2, 3, 4], [], 5,
+        )
+        self.assertEqual(guessed, [2, 3, 4])
+        self.assertEqual(missing, [])
+        self._near(points[2], (0.20, 0.0, 0.0))
+        self._near(points[3], (0.30, 0.0, 0.0))
+        self._near(points[4], (0.40, 0.0, 0.0))
+
+    def test_four_missing_ids_after_the_last_sure_light_stay_missing(self):
+        points, missing, low, guessed, adjusted = self._apply(
+            {0: (0.0, 0.0, 0.0), 1: (0.10, 0.0, 0.0)},
+            [2, 3, 4, 5], [], 6,
+        )
+        self.assertEqual(missing, [2, 3, 4, 5])
+        self.assertEqual(guessed, [])
+        self.assertNotIn(2, points)
+
+    def test_low_confidence_at_the_start_does_not_grow_the_string(self):
+        points, missing, low, guessed, adjusted = self._apply(
+            {1: (0.0, 0.0, 0.0), 2: (0.10, 0.0, 0.0), 3: (0.20, 0.0, 0.0)},
+            [0], [1], 4,
+        )
+        self.assertEqual(missing, [0])
+        self.assertEqual(guessed, [])
+        self.assertEqual(low, [1])
+        self.assertEqual(adjusted, [])
+        self.assertNotIn(0, points)
+        self._near(points[1], (0.0, 0.0, 0.0))
+
+    def test_low_confidence_at_the_end_does_not_grow_the_string(self):
+        points, missing, low, guessed, adjusted = self._apply(
+            {0: (0.0, 0.0, 0.0), 1: (0.10, 0.0, 0.0), 2: (0.20, 0.0, 0.0)},
+            [3], [2], 4,
+        )
+        self.assertEqual(missing, [3])
+        self.assertEqual(guessed, [])
+        self.assertEqual(low, [2])
+        self.assertEqual(adjusted, [])
+        self.assertNotIn(3, points)
+        self._near(points[2], (0.20, 0.0, 0.0))
+
+    def test_low_confidence_pair_does_not_set_the_end_step(self):
+        points, missing, low, guessed, adjusted = self._apply(
+            {
+                2: (0.0, 0.0, 0.0),
+                3: (0.08, 0.0, 0.0),
+                4: (10.0, 0.0, 0.0),
+            },
+            [0, 1], [4], 5,
+        )
+        self.assertEqual(guessed, [0, 1])
+        self.assertEqual(missing, [])
+        self.assertEqual(low, [4])
+        self.assertEqual(adjusted, [])
+        self._near(points[1], (-0.08, 0.0, 0.0))
+        self._near(points[0], (-0.16, 0.0, 0.0))
+        self._near(points[4], (10.0, 0.0, 0.0))
+
+    def test_id_lists_are_disjoint_and_sorted(self):
+        _points, missing, low, guessed, adjusted = self._apply(
+            {0: (0.0, 0.0, 0.0), 2: (1.0, 1.0, 1.0), 5: (0.5, 0.0, 0.0)},
+            [1, 3, 4], [2], 6,
+        )
+        self.assertEqual(missing, sorted(missing))
+        self.assertEqual(low, sorted(low))
+        self.assertEqual(guessed, sorted(guessed))
+        self.assertEqual(adjusted, sorted(adjusted))
+        lists = [set(missing), set(low), set(guessed), set(adjusted)]
+        for i, left in enumerate(lists):
+            for right in lists[i + 1:]:
+                self.assertEqual(left & right, set())
 
     def test_input_dict_is_not_mutated(self):
         src = {2: (0.0, 0.0, 0.0), 3: (0.08, 0.0, 0.0)}
