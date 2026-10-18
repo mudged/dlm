@@ -133,6 +133,7 @@ QUIET_ROOM_REASON = (
 
 LIGHT_COUNT_MAX = 1000
 LIGHT_COUNT_ERROR = "light_count must be a whole number from 1 to 1000"
+MAX_GAP_ERROR = "max_gap_m must be a positive finite number"
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -2112,6 +2113,8 @@ def _make_result(
     all_ids: set[int],
     rejected_feeds: Optional[list[dict]] = None,
     light_count: Optional[int] = None,
+    guessed: Optional[list[int]] = None,
+    adjusted: Optional[list[int]] = None,
 ) -> dict:
     if light_count is None:
         light_count = max(all_ids) + 1 if all_ids else 0
@@ -2124,6 +2127,8 @@ def _make_result(
         ],
         "missing":        sorted(missing),
         "low_confidence": sorted(set(low_conf)),
+        "guessed":        sorted(guessed or []),
+        "adjusted":       sorted(adjusted or []),
         "rejected_feeds": list(rejected_feeds or []),
         "error":          None,
     }
@@ -2136,6 +2141,8 @@ def _make_error(message: str, rejected_feeds: Optional[list[dict]] = None) -> di
         "lights":         [],
         "missing":        [],
         "low_confidence": [],
+        "guessed":        [],
+        "adjusted":       [],
         "rejected_feeds": list(rejected_feeds or []),
         "error":          message,
     }
@@ -2199,6 +2206,18 @@ def _parse_light_count(value) -> tuple[Optional[int], Optional[str]]:
     return n, None
 
 
+def _parse_max_gap_m(value) -> tuple[float, Optional[str]]:
+    """Returns ``(max_gap_m, error)``. An absent value is 0.10 m."""
+    if value is None:
+        return 0.10, None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return 0.10, MAX_GAP_ERROR
+    v = float(value)
+    if not math.isfinite(v) or v <= 0:
+        return 0.10, MAX_GAP_ERROR
+    return v, None
+
+
 def _missed_flashes_message(rejected_feeds: list[dict]) -> str:
     dropped = "; ".join(f"{r['file']} ({r['reason']})" for r in rejected_feeds)
     if any(r["reason"] == QUIET_ROOM_REASON for r in rejected_feeds):
@@ -2254,6 +2273,10 @@ def main() -> None:
     light_count, count_err = _parse_light_count(spec.get("light_count"))
     if count_err:
         _emit_failure(count_err)
+
+    max_gap_m, gap_err = _parse_max_gap_m(spec.get("max_gap_m"))
+    if gap_err:
+        _emit_failure(gap_err)
 
     try:
         _log(f"DLM reconstruct: {len(feeds)} feed(s), dwell={dwell_ms} ms")
@@ -2352,12 +2375,18 @@ def main() -> None:
             if lid not in all_ids and lid not in missing:
                 missing.append(lid)
 
+        lights_3d, missing, low_conf, guessed, adjusted = apply_wire_spacing(
+            lights_3d, missing, low_conf, span, max_gap_m
+        )
+
         result = _make_result(
-            lights_3d, missing, low_conf, all_ids, rejected_feeds, light_count
+            lights_3d, missing, low_conf, all_ids, rejected_feeds, light_count,
+            guessed=guessed, adjusted=adjusted,
         )
         _log(
             f"  done: {len(lights_3d)} triangulated, "
-            f"{len(missing)} missing, {len(low_conf)} low_confidence"
+            f"{len(missing)} missing, {len(low_conf)} low_confidence, "
+            f"{len(guessed)} guessed, {len(adjusted)} adjusted"
         )
         print(_serialise_result(result))
 

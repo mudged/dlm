@@ -173,21 +173,18 @@ class TestReconstructSynthetic(unittest.TestCase):
         """A light visible in only 1 feed must appear in missing, never in lights."""
         occlude_feed, occlude_light = 1, 2
         with tempfile.TemporaryDirectory() as d:
-            gt  = _gen(d, n_lights=5, seed=4,
+            gt  = _gen(d, n_lights=6, seed=4,
                        occlude_in_feed=[occlude_feed, occlude_light])
             res = _reconstruct(_spec(d, gt))
 
         self.assertEqual(res["status"], "succeeded", res.get("error"))
         recovered_ids = {lp["id"] for lp in res["lights"]}
-        self.assertNotIn(
-            occlude_light, recovered_ids,
-            f"Light {occlude_light} occluded in feed {occlude_feed} "
-            f"must NOT have coordinates",
-        )
         self.assertIn(
-            occlude_light, res["missing"],
-            f"Light {occlude_light} must appear in 'missing'",
+            occlude_light, recovered_ids,
+            f"Light {occlude_light} between confident neighbours must be guessed",
         )
+        self.assertIn(occlude_light, res["guessed"])
+        self.assertNotIn(occlude_light, res["missing"])
 
     def test_no_fabrication_guarantee(self):
         """lights + missing + low_confidence are mutually disjoint (no duplication)."""
@@ -202,6 +199,10 @@ class TestReconstructSynthetic(unittest.TestCase):
 
         self.assertEqual(recovered & miss, set(),
                          "A light ID appears in both lights and missing")
+        self.assertEqual(set(res["guessed"]) & miss, set())
+        self.assertEqual(set(res["adjusted"]) & set(res["low_confidence"]), set())
+        self.assertTrue(set(res["guessed"]) <= recovered)
+        self.assertTrue(set(res["adjusted"]) <= recovered)
         # low_confidence is a subset of lights (it has coordinates, just uncertain)
         self.assertTrue(low <= recovered or low == set(),
                         "low_confidence IDs should be a subset of lights IDs")
@@ -375,7 +376,7 @@ class TestReconstructSynthetic(unittest.TestCase):
             res = _reconstruct(_spec(d, gt))
 
         required = ("status", "light_count", "lights", "missing",
-                    "low_confidence", "error")
+                    "low_confidence", "guessed", "adjusted", "error")
         for key in required:
             self.assertIn(key, res, f"Result missing field '{key}'")
 
@@ -384,6 +385,8 @@ class TestReconstructSynthetic(unittest.TestCase):
         self.assertIsInstance(res["lights"],         list)
         self.assertIsInstance(res["missing"],        list)
         self.assertIsInstance(res["low_confidence"], list)
+        self.assertIsInstance(res["guessed"], list)
+        self.assertIsInstance(res["adjusted"], list)
 
         for lp in res["lights"]:
             for field in ("id", "x", "y", "z"):
@@ -425,12 +428,9 @@ class TestReconstructSynthetic(unittest.TestCase):
         self.assertEqual(res["status"], "succeeded", res.get("error"))
 
         recovered_ids = {lp["id"] for lp in res["lights"]}
-        # The occluded light has only one usable view → must be reported missing,
-        # never fabricated with coordinates from a mismatched correspondence.
-        self.assertNotIn(occlude_light, recovered_ids,
-                         f"Occluded light {occlude_light} must not get coordinates")
-        self.assertIn(occlude_light, res["missing"],
-                      f"Occluded light {occlude_light} must be in 'missing'")
+        self.assertIn(occlude_light, recovered_ids)
+        self.assertIn(occlude_light, res["guessed"])
+        self.assertNotIn(occlude_light, res["missing"])
 
         # Lights that blink AFTER the dropped one must keep their correct IDs and
         # land near ground truth (i.e. not be shifted into the wrong slot).
@@ -1598,8 +1598,10 @@ class TestBookends(unittest.TestCase):
         self.assertEqual(res["status"], "succeeded", res.get("error"))
         self.assertEqual(res["rejected_feeds"], [])
         self.assertEqual(res["light_count"], 8)
-        self.assertIn(6, res["missing"])
-        self.assertIn(7, res["missing"])
+        self.assertIn(6, res["guessed"])
+        self.assertIn(7, res["guessed"])
+        self.assertNotIn(6, res["missing"])
+        self.assertNotIn(7, res["missing"])
 
 
 class TestQuietRoomHelpers(unittest.TestCase):
@@ -2420,6 +2422,30 @@ class TestWireSpacing(unittest.TestCase):
         return self.m.apply_wire_spacing(
             dict(points), list(missing), list(low), span, gap
         )
+
+    def test_absent_max_gap_defaults(self):
+        self.assertEqual(self.m._parse_max_gap_m(None), (0.10, None))
+
+    def test_present_max_gap_is_kept(self):
+        self.assertEqual(self.m._parse_max_gap_m(0.25), (0.25, None))
+
+    def test_invalid_max_gap_message(self):
+        for bad in (0, -0.1, float("nan"), float("inf"), "10", True):
+            value, err = self.m._parse_max_gap_m(bad)
+            self.assertEqual(err, "max_gap_m must be a positive finite number", bad)
+            self.assertEqual(value, 0.10)
+
+    def test_make_error_includes_empty_guess_lists(self):
+        err = self.m._make_error("boom")
+        self.assertEqual(err["guessed"], [])
+        self.assertEqual(err["adjusted"], [])
+
+    def test_make_result_includes_guess_lists(self):
+        result = self.m._make_result(
+            {0: (0.0, 0.0, 0.0)}, [], [], {0}, guessed=[0], adjusted=[]
+        )
+        self.assertEqual(result["guessed"], [0])
+        self.assertEqual(result["adjusted"], [])
 
     def test_end_uses_longest_confident_step(self):
         points, missing, low, guessed, adjusted = self._apply(
