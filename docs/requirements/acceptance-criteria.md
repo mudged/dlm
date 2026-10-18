@@ -240,6 +240,14 @@ does). No coding knowledge needed — just follow the steps.
 - Try: upload clips that include the colour flashes but have no moment with the bulbs off before the opening flash or after the closing flash.
 - You should see: each of those clips named, with a reason that the recording needs a moment of the room with the bulbs off. The app does not say the flashes were missed.
 
+**A short hole in the scan is filled in and named.**
+- Try: create a model from video where the scan missed three lights in a row between lights it saw.
+- You should see: those three ids named as guessed, and Confirm can save the model.
+
+**A long hole still blocks the save.**
+- Try: create a model from video where the scan missed four lights in a row.
+- You should see: those ids named as missing, a line that Confirm will not save while any light is missing, and the save is refused.
+
 ---
 
 ## Getting it and running it

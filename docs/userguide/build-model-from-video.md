@@ -67,12 +67,17 @@ When the app finishes thinking, it shows you:
 
 - how many lights it found,
 - any lights it couldn't quite place,
+- any lights filled in along the string that were not seen in the videos (shown as **guessed**),
+- any lights the scan did see but moved onto the usual step between neighbours (shown as **adjusted**),
 - any clip it had to set aside because the red–blue–green flashes were missing, and
 - a 3D preview so you can see the result.
 
 There is an optional **light count** box on that page. Leave it empty when every clip includes the
 opening colour flash. Fill in the same number you set on the device when a clip only caught the
 closing flash.
+
+There is also a **Maximum gap (cm)** box, prefilled with **10**. The app uses it only when the scan
+cannot measure a step from lights it is sure about.
 
 If it looks good, type a name and press **Confirm** to save it as a model. Not happy? Press
 **Cancel** and try again with better recordings.

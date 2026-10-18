@@ -851,12 +851,14 @@ Python install (§3.23.1).
   detections into a 3D point; optionally refine with a small bundle adjustment. Output coordinates in
   metres.
 - **Reporting (REQ-048 BR 7):** indices not seen in enough feeds to triangulate are returned in
-  `missing`; weakly-supported points in `low_confidence`. The pipeline never fabricates coordinates for
-  undetected lights; the review step (§4.17) surfaces these so the user can re-record before confirming.
+  `missing`; weakly-supported points in `low_confidence`. A hole of one, two, or three lights is filled
+  by §3.23.4, and a low-confidence light inside that hole is moved onto the filled line. A longer hole
+  stays in `missing`. The review step (§4.17) shows guessed, adjusted, missing, and low-confidence ids
+  so the user can re-record before confirming.
 
 **Result contract (Go ↔ CV child):** the child reads a small JSON job spec (input file paths, marker
 config, hints) and writes a JSON result
-(`{ "light_count", "lights":[{"id","x","y","z"}], "missing":[…], "low_confidence":[…], "rejected_feeds":[{"file","reason"}] }`)
+(`{ "light_count", "lights":[{"id","x","y","z"}], "missing":[…], "low_confidence":[…], "guessed":[…], "adjusted":[…], "rejected_feeds":[{"file","reason"}] }`)
 to stdout or a result file; `internal/reconstruct` parses it. `rejected_feeds` names clips dropped by
 §3.23.3. Failures surface as `status:"failed"` with a human-readable `error`. Fewer than two usable
 clips is a failure, not a confirmable result.
@@ -867,8 +869,9 @@ flowchart TB
   V2["video feed B"] --> DET
   DET["per-feed bookends, then 2D blink detection (slot → light index)"] --> POSE
   POSE["camera pose / calibration (fiducial markers optional)"] --> TRI
-  TRI["triangulate index seen in ≥ 2 feeds → x,y,z (metres)"] --> REP
-  REP["report lights + missing + low_confidence + rejected feeds"] --> CONF["operator confirm → persist model (§3.3)"]
+  TRI["triangulate index seen in ≥ 2 feeds → x,y,z (metres)"] --> GAP
+  GAP["wire spacing: fill a hole of 1–3, move a low-confidence light (§3.23.4)"] --> REP
+  REP["report lights + missing + low_confidence + guessed + adjusted + rejected feeds"] --> CONF["operator confirm → persist model (§3.3)"]
 ```
 
 #### 3.23.1 Bundled OpenCV runtime — no separate Python install (REQ-048 BR 5)
@@ -950,5 +953,17 @@ above `light_count` are discarded, and ids in `0 … light_count−1` with no tr
 upload's base name. The review screen shows that list. When fewer than two clips remain usable, the
 job `status` is `failed` and `error` says the recordings missed the start and end flashes. That job
 cannot be confirmed.
+
+#### 3.23.4 Wire spacing (REQ-053)
+
+**In plain terms:** after the scan has placed the lights it is sure about, a short gap in the string is filled in a straight line so the model can be saved. A light the scan was unsure about is moved onto that same line. A gap of four or more is left missing, and Confirm still refuses the save.
+
+- Anchors are triangulated lights that are not in `low_confidence`. Their coordinates stay as scanned.
+- `max_step` is the longest distance between anchors whose ids differ by 1, ignoring a pair whose distance is 0. With no such pair, `max_step` is `max_gap_m` (default 0.10). The upload field is `max_gap_cm`, default 10. A value that is not a finite number greater than 0 and at most 100 is **400** `maximum gap must be a positive number of centimetres up to 100`.
+- A run of 1, 2, or 3 ids between two anchors is placed evenly on the segment. A low-confidence id in that run is `adjusted`. A missing id is `guessed`. A run of 4 or more is left as it was.
+- A run of 1, 2, or 3 ids before the first anchor, or after the last, is filled by repeating that end's neighbour step. The direction is the neighbour step. Each hop is `max_step` long. This runs only when that neighbour is an anchor and the step length is greater than 0.
+- When no adjacent anchor pair has length greater than 0, a low-confidence light within 3 ids of an anchor moves along the scanned direction to `id distance × max_gap_m` and is `adjusted`. A missing light is not invented from one anchor. The nearest anchor wins; an id-distance tie uses the lower id.
+- With no anchors, nothing is guessed or adjusted.
+- `guessed` and `adjusted` are sorted, disjoint from `missing` and `low_confidence`, and present on the result as arrays. Confirm still rejects a non-empty `missing` list. The saved model does not store these labels.
 
 ---
