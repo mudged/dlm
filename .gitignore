@@ -57,3 +57,6 @@ venv/
 
 # Release / CV runtime build outputs at repo root (not webdist/dist)
 /dist
+
+# Local git worktrees
+.worktrees/
