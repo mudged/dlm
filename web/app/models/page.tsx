@@ -4,6 +4,7 @@ import {
   faEye,
   faTrash,
   faUpload,
+  faVideo,
 } from "@fortawesome/free-solid-svg-icons";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -11,6 +12,7 @@ import { Suspense, useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import type { ModelSummary } from "@/lib/models";
 import { POST_RESET_FLASH } from "@/lib/factoryReset";
+import { buildNewModelUrl } from "@/lib/newModelRoute";
 
 function ModelsListFallback() {
   return (
@@ -106,21 +108,32 @@ function ModelsListInner() {
             Light models
           </h1>
           <p className="mt-1 max-w-xl text-sm text-slate-600 dark:text-slate-400">
-            Up to 1000 lights per model. Upload a CSV with columns{" "}
+            Film your lights and the app works out where they are. Or upload a
+            file with columns{" "}
             <code className="rounded bg-slate-200 px-1 dark:bg-slate-800">
               id,x,y,z
             </code>
-            .
+            . Up to 1000 lights per model.
           </p>
         </div>
-        <Button
-          type="button"
-          icon={faUpload}
-          className="w-full sm:w-auto"
-          onClick={() => router.push("/models/new")}
-        >
-          Upload CSV
-        </Button>
+        <div className="flex w-full flex-col gap-2 sm:w-auto">
+          <Button
+            type="button"
+            icon={faVideo}
+            className="w-full sm:w-auto"
+            onClick={() => router.push(buildNewModelUrl("video"))}
+          >
+            Create from video
+          </Button>
+          <Button
+            type="button"
+            icon={faUpload}
+            className="w-full bg-slate-600 dark:bg-slate-600 sm:w-auto"
+            onClick={() => router.push(buildNewModelUrl("csv"))}
+          >
+            Upload file
+          </Button>
+        </div>
       </header>
 
       {flash ? (
@@ -147,12 +160,19 @@ function ModelsListInner() {
         <p className="text-sm text-slate-600 dark:text-slate-400">
           No models yet.{" "}
           <Link
-            href="/models/new"
+            href={buildNewModelUrl("video")}
             className="font-medium text-sky-700 underline-offset-4 hover:underline dark:text-sky-400"
           >
-            Upload a CSV
-          </Link>{" "}
-          to add one.
+            Create from video
+          </Link>
+          , or{" "}
+          <Link
+            href={buildNewModelUrl("csv")}
+            className="font-medium text-sky-700 underline-offset-4 hover:underline dark:text-sky-400"
+          >
+            upload a file
+          </Link>
+          .
         </p>
       ) : (
         <ul className="divide-y divide-slate-200 rounded-xl border border-slate-200 bg-white dark:divide-slate-700 dark:border-slate-700 dark:bg-slate-900/40">
