@@ -128,7 +128,7 @@ function ModelsListInner() {
           <Button
             type="button"
             icon={faUpload}
-            className="w-full bg-slate-600 dark:bg-slate-600 sm:w-auto"
+            className="w-full !bg-slate-200 !text-slate-900 hover:!bg-slate-300 active:!bg-slate-400 dark:!bg-slate-700 dark:!text-slate-100 dark:hover:!bg-slate-600 dark:active:!bg-slate-500 sm:w-auto"
             onClick={() => router.push(buildNewModelUrl("csv"))}
           >
             Upload file
