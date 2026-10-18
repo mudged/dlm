@@ -2462,6 +2462,32 @@ class TestWireSpacing(unittest.TestCase):
         self._near(points[3], (0.08, 0.0, 0.0))
         self._near(points[4], (0.18, 0.0, 0.0))
 
+    def test_sure_end_light_whose_next_id_is_low_confidence_does_not_grow_prefix(
+        self,
+    ):
+        points, missing, low, guessed, adjusted = self._apply(
+            {2: (0.0, 0.0, 0.0), 3: (0.1, 0.0, 0.0), 4: (0.2, 0.0, 0.0)},
+            [0, 1], [3], 5,
+        )
+        self.assertEqual(missing, [0, 1])
+        self.assertEqual(guessed, [])
+        self.assertEqual(low, [3])
+        self.assertEqual(adjusted, [])
+        self._near(points[3], (0.1, 0.0, 0.0))
+
+    def test_sure_suffix_light_whose_prior_id_is_low_confidence_does_not_grow_suffix(
+        self,
+    ):
+        points, missing, low, guessed, adjusted = self._apply(
+            {0: (0.0, 0.0, 0.0), 1: (0.1, 0.0, 0.0), 2: (0.2, 0.0, 0.0)},
+            [3, 4], [1], 5,
+        )
+        self.assertEqual(missing, [3, 4])
+        self.assertEqual(guessed, [])
+        self.assertEqual(low, [1])
+        self.assertEqual(adjusted, [])
+        self._near(points[1], (0.1, 0.0, 0.0))
+
     def test_suffix_uses_longest_step_not_the_short_neighbour(self):
         points, missing, low, guessed, adjusted = self._apply(
             {0: (0.0, 0.0, 0.0), 1: (0.10, 0.0, 0.0), 2: (0.18, 0.0, 0.0)},
@@ -2575,10 +2601,10 @@ class TestWireSpacing(unittest.TestCase):
     def test_missing_id_between_sure_and_low_confidence_is_guessed(self):
         points, missing, low, guessed, adjusted = self._apply(
             {2: (0.0, 0.0, 0.0), 4: (0.0, 0.50, 0.0)},
-            [3], [4], 5, gap=0.10,
+            [0, 1, 3], [4], 5, gap=0.10,
         )
         self.assertEqual(guessed, [3])
-        self.assertEqual(missing, [])
+        self.assertEqual(missing, [0, 1])
         self.assertEqual(adjusted, [])
         self.assertEqual(low, [4])
         self._near(points[3], (0.0, 0.25, 0.0))

@@ -119,12 +119,12 @@ Result {
   missing:        [number, ...]                // indices not triangulable
   low_confidence: [number, ...]                // high reprojection error
   guessed:        [number, ...]                // filled along the wire (§3.23.4)
-  adjusted:       [number, ...]                // moved onto the wire (§3.23.4)
+  adjusted:       [number, ...]                // always empty (§3.23.4)
   error:          string | null
 }
 ```
 
 Light IDs are **0-based integers** matching the sweep ordinal (REQ-047 /
-REQ-048 BR 2).  Holes of 1–3 lights are filled and listed in `guessed`; a
-low-confidence light in that hole is moved and listed in `adjusted`; a longer
-hole stays in `missing` (§3.23.4).
+REQ-048 BR 2).  Holes of 1–5 lights between seen lights are filled and listed
+in `guessed`; a hole of 1–3 at either end is filled only from sure lights; a
+longer hole stays in `missing`; `adjusted` is always empty (§3.23.4).

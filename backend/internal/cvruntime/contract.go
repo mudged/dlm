@@ -26,8 +26,9 @@ type JobSpec struct {
 	// LightCount is the optional device light count (1…1000) so a closing-only
 	// clip can number backward from the last bulb (REQ-050).
 	LightCount *int `json:"light_count,omitempty"`
-	// MaxGapM is the fallback step in metres when the scan has no confident
-	// adjacent pair (REQ-053). Zero means the child uses 0.10.
+	// MaxGapM is forwarded to the child as max_gap_m and kept for form
+	// compatibility; the fill step does not read it (REQ-053, §3.23.4).
+	// Zero means the child substitutes 0.10.
 	MaxGapM float64 `json:"max_gap_m,omitempty"`
 }
 
