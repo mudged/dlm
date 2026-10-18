@@ -109,6 +109,7 @@ JobSpec {
                  edge_length_m: number}
   scale_hint_m?: number                        // camera baseline in metres
   dwell_ms:     number                         // blink window from REQ-047
+  max_gap_m?:   number                         // wire spacing cap (§3.23.4)
 }
 
 Result {
@@ -117,10 +118,13 @@ Result {
   lights:         [{id, x, y, z}, ...]         // metres, 0-based IDs
   missing:        [number, ...]                // indices not triangulable
   low_confidence: [number, ...]                // high reprojection error
+  guessed:        [number, ...]                // filled along the wire (§3.23.4)
+  adjusted:       [number, ...]                // moved onto the wire (§3.23.4)
   error:          string | null
 }
 ```
 
 Light IDs are **0-based integers** matching the sweep ordinal (REQ-047 /
-REQ-048 BR 2).  The script **never fabricates** coordinates for undetected
-lights (REQ-048 BR 7); they appear in `missing` or `low_confidence` instead.
+REQ-048 BR 2).  Holes of 1–3 lights are filled and listed in `guessed`; a
+low-confidence light in that hole is moved and listed in `adjusted`; a longer
+hole stays in `missing` (§3.23.4).

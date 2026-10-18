@@ -68,7 +68,7 @@ When the app finishes thinking, it shows you:
 - how many lights it found,
 - any lights it couldn't quite place,
 - any lights filled in along the string that were not seen in the videos (shown as **guessed**),
-- any lights the scan did see but moved onto the usual step between neighbours (shown as **adjusted**),
+- any lights the scan did see but moved onto the usual step (shown as **adjusted**),
 - any clip it had to set aside because the red–blue–green flashes were missing, and
 - a 3D preview so you can see the result.
 

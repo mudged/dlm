@@ -947,7 +947,7 @@ between two stretches, both blinks at that change stay, because each matches the
 stretch. Leave the other indexes as they are. `light_count` does not
 renumber a clip that already has the opening signal. When `light_count` is provided, indexes at or
 above `light_count` are discarded, and ids in `0 … light_count−1` with no triangulated point go in
-`missing`.
+`missing` (§3.23.4 may then fill a short run).
 
 **Job outcome.** Each dropped clip is listed in `rejected_feeds` as `{ "file", "reason" }` using the
 upload's base name. The review screen shows that list. When fewer than two clips remain usable, the
