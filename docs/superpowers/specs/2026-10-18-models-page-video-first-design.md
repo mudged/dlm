@@ -1,7 +1,7 @@
 # Models page leads with video — design
 
 **Date:** 2026-10-18
-**Status:** Pending review
+**Status:** Approved for planning
 **Scope:** The Models screen lists models and offers two ways to add one. **Create from video** is the main action and opens the video tab. **Upload file** is the quieter second action and opens the file tab. The new-model page uses the same order and opens on video when no tab is selected. No new `REQ-*`. The CSV file rules, the video form, and the way a listed model opens stay as they are.
 
 ## Context
