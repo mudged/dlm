@@ -68,16 +68,16 @@ When the app finishes thinking, it shows you:
 - how many lights it found,
 - any lights it couldn't quite place,
 - any lights filled in along the string that were not seen in the videos (shown as **guessed**),
-- any lights the scan did see but moved onto the usual step (shown as **adjusted**),
 - any clip it had to set aside because the red–blue–green flashes were missing, and
 - a 3D preview so you can see the result.
+
+A hole of up to five lights between lights the scan saw is filled in along the string. A longer hole is left missing, and the model is not saved while any light is missing. At the very start or end, only a hole of up to three is filled, and only from lights the scan is sure about.
 
 There is an optional **light count** box on that page. Leave it empty when every clip includes the
 opening colour flash. Fill in the same number you set on the device when a clip only caught the
 closing flash.
 
-There is also a **Maximum gap (cm)** box, prefilled with **10**. The app uses it only when the scan
-cannot measure a step from lights it is sure about.
+There is also a **Maximum gap (cm)** box, prefilled with **10**. Filling a missing light does not use this number.
 
 If it looks good, type a name and press **Confirm** to save it as a model. Not happy? Press
 **Cancel** and try again with better recordings.

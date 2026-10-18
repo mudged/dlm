@@ -459,10 +459,9 @@ Here's the idea:
    opening flash is ignored. If that opening flash was missed, a light that is still there after the
    closing flash is ignored instead. Each bulb still has to be the brightest new thing when it turns on.
 5. **Review and save.** Before anything is saved, the app shows you what it found — how many lights it
-   detected, and any it wasn't sure about — and you decide whether to keep it. A hole of up to three
-   lights is filled in along the string and named before you save. A longer hole is still reported, and
-   the model is not saved while any light is missing. A light the scan was unsure about can be moved
-   onto the usual spacing and is named as adjusted.
+   detected, and any it wasn't sure about — and you decide whether to keep it. A hole of up to five
+   lights between lights the scan saw is filled in along the string and named before you save. A longer hole is still reported, and
+   the model is not saved while any light is missing. At the very start or end, only a hole of up to three is filled, and only from lights the scan is sure about.
 
 There's also an **optional** set of three printable **markers** (special printed patterns, each one
 different). Print all three and stick them on different sides of what you are wrapping, such as a

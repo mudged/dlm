@@ -244,8 +244,12 @@ does). No coding knowledge needed — just follow the steps.
 - Try: create a model from video where the scan missed three lights in a row between lights it saw.
 - You should see: those three ids named as guessed, and Confirm can save the model.
 
-**A long hole still blocks the save.**
-- Try: create a model from video where the scan missed four lights in a row.
+**Five missed lights between lights the scan saw are filled in.**
+- Try: create a model from video where the scan missed five lights in a row between lights it saw.
+- You should see: those five ids named as guessed, and Confirm can save the model.
+
+**A longer hole still blocks the save.**
+- Try: create a model from video where the scan missed six lights in a row.
 - You should see: those ids named as missing, a line that Confirm will not save while any light is missing, and the save is refused.
 
 ---

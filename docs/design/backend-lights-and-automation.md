@@ -851,10 +851,10 @@ Python install (§3.23.1).
   detections into a 3D point; optionally refine with a small bundle adjustment. Output coordinates in
   metres.
 - **Reporting (REQ-048 BR 7):** indices not seen in enough feeds to triangulate are returned in
-  `missing`; weakly-supported points in `low_confidence`. A hole of one, two, or three lights is filled
-  by §3.23.4, and a low-confidence light inside that hole is moved onto the filled line. A longer hole
-  stays in `missing`. The review step (§4.17) shows guessed, adjusted, missing, and low-confidence ids
-  so the user can re-record before confirming.
+  `missing`; weakly-supported points in `low_confidence`. A hole of one to five lights between lights the scan saw is filled
+  by §3.23.4. A low-confidence light keeps its scanned coordinate. A hole of six or more
+  stays in `missing`. At the start or end, a hole of up to three is filled only from lights the scan is sure about. The review step (§4.17) shows guessed, missing, and low-confidence ids
+  so the user can re-record before confirming. `adjusted` is always empty.
 
 **Result contract (Go ↔ CV child):** the child reads a small JSON job spec (input file paths, marker
 config, hints) and writes a JSON result
@@ -870,7 +870,7 @@ flowchart TB
   DET["per-feed bookends, then 2D blink detection (slot → light index)"] --> POSE
   POSE["camera pose / calibration (fiducial markers optional)"] --> TRI
   TRI["triangulate index seen in ≥ 2 feeds → x,y,z (metres)"] --> GAP
-  GAP["wire spacing: fill a hole of 1–3, move a low-confidence light (§3.23.4)"] --> REP
+  GAP["wire spacing: fill a hole of 1–5 between seen lights (§3.23.4)"] --> REP
   REP["report lights + missing + low_confidence + guessed + adjusted + rejected feeds"] --> CONF["operator confirm → persist model (§3.3)"]
 ```
 
@@ -956,14 +956,16 @@ cannot be confirmed.
 
 #### 3.23.4 Wire spacing (REQ-053)
 
-**In plain terms:** after the scan has placed the lights it is sure about, a short gap in the string is filled in a straight line so the model can be saved. A light the scan was unsure about is moved onto that same line. A gap of four or more is left missing, and Confirm still refuses the save.
+**In plain terms:** after the scan has placed every light it saw, a hole of up to five lights between those lights is filled in a straight line. The lights it saw keep their coordinates, even when the scan was not sure about them. A hole of six or more is left missing, and Confirm still refuses the save. At the start or end of the string, a hole of up to three is filled only from lights the scan is sure about.
 
-- Anchors are triangulated lights that are not in `low_confidence`. Their coordinates stay as scanned.
-- `max_step` is the longest distance between anchors whose ids differ by 1, ignoring a pair whose distance is 0. With no such pair, `max_step` is `max_gap_m` (default 0.10). The upload field is `max_gap_cm`, default 10. A value that is not a finite number greater than 0 and at most 100 is **400** `maximum gap must be a positive number of centimetres up to 100`.
-- A run of 1, 2, or 3 ids between two anchors is placed evenly on the segment. A low-confidence id in that run is `adjusted`. A missing id is `guessed`. A run of 4 or more is left as it was.
-- A run of 1, 2, or 3 ids before the first anchor, or after the last, is filled by repeating that end's neighbour step. The direction is the neighbour step. Each hop is `max_step` long. This runs only when that neighbour is an anchor and the step length is greater than 0.
-- When no adjacent anchor pair has length greater than 0, a low-confidence light within 3 ids of an anchor moves along the scanned direction to `id distance × max_gap_m` and is `adjusted`. A missing light is not invented from one anchor. The nearest anchor wins; an id-distance tie uses the lower id.
-- With no anchors, nothing is guessed or adjusted.
+- Seen anchors are every triangulated light, including one in `low_confidence`. Their coordinates stay as scanned. A guessed id is not an anchor.
+- Sure anchors are triangulated lights that are not in `low_confidence`.
+- A run of 1 to 5 ids between two successive seen anchors is placed evenly on the segment and listed in `guessed`. A run of 6 or more is left in `missing`. There is no partial fill.
+- A run of 1, 2, or 3 missing ids before the first seen light, or after the last, is filled by repeating that end's direction. The end light and the neighbouring id must both be sure, and the neighbour step must have length greater than 0. Each hop is `max_step` long. A run of 4 or more at an end is left missing. A low-confidence light at that end blocks the fill.
+- `max_step` is the longest distance between sure lights whose ids differ by 1, ignoring a pair whose distance is 0. A low-confidence light is not part of a pair that sets `max_step`. The fill step does not read `max_gap_m`.
+- The upload field is still `max_gap_cm`, default 10. A value that is not a finite number greater than 0 and at most 100 is **400** `maximum gap must be a positive number of centimetres up to 100`.
+- A low-confidence light stays in `low_confidence`. `adjusted` is always an empty array.
+- With no seen lights, nothing is guessed.
 - `guessed` and `adjusted` are sorted, disjoint from `missing` and `low_confidence`, and present on the result as arrays. Confirm still rejects a non-empty `missing` list. The saved model does not store these labels.
 
 ---

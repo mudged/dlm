@@ -1,7 +1,7 @@
 # Wider hole fill — design
 
 **Date:** 2026-10-18
-**Status:** Pending spec review
+**Status:** Approved
 **Scope:** Amend REQ-053. Between two lights the scan saw, fill a run of up to five missing lights from their coordinates, including when the scan was not sure about those lights. Leave a seen light where it was scanned. Keep the start and end rules at a run of three from lights the scan is sure about. Do not add a requirement code. Do not change blink detection, bookends, camera pose, triangulation, or the Confirm error.
 
 ## Context

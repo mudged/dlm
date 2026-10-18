@@ -447,8 +447,7 @@ function VideoPanel({
             Maximum gap (cm)
           </label>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            This number is used only when the scan cannot measure a step from
-            lights it is sure about.
+            Filling a missing light does not use this number.
           </p>
           <input
             id="capture-max-gap"
