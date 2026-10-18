@@ -16,6 +16,8 @@ import {
   createCaptureJob,
   discardCaptureJob,
   getCaptureJob,
+  maxGapCmMessage,
+  parseMaxGapCm,
   parseOptionalCaptureLightCount,
 } from "@/lib/models";
 import type { CaptureJob, CaptureJobLight, Light } from "@/lib/models";
@@ -190,6 +192,7 @@ function VideoPanel({
   const [files, setFiles] = useState<File[]>([]);
   const [useMarker, setUseMarker] = useState(false);
   const [lightCount, setLightCount] = useState("");
+  const [maxGapCm, setMaxGapCm] = useState("10");
   const [uploadError, setUploadError] = useState<string | null>(null);
 
   const [confirmName, setConfirmName] = useState("");
@@ -270,11 +273,21 @@ function VideoPanel({
       );
       return;
     }
+    let parsedMaxGap: number | undefined;
+    try {
+      parsedMaxGap = parseMaxGapCm(maxGapCm);
+    } catch (err) {
+      setUploadError(
+        err instanceof Error ? err.message : maxGapCmMessage,
+      );
+      return;
+    }
     setPhase({ kind: "submitting" });
     try {
       const job = await createCaptureJob(files, {
         marker: useMarker || undefined,
         light_count: parsedLightCount,
+        max_gap_cm: parsedMaxGap,
       });
       setJobIdInUrl(job.job_id);
       if (job.status === "succeeded") {
@@ -332,6 +345,7 @@ function VideoPanel({
     setPhase({ kind: "idle" });
     setFiles([]);
     setLightCount("");
+    setMaxGapCm("10");
     setConfirmName("");
     setConfirmError(null);
   }
@@ -423,6 +437,27 @@ function VideoPanel({
             autoComplete="off"
             value={lightCount}
             onChange={(e) => setLightCount(e.target.value)}
+            disabled={phase.kind === "submitting"}
+            className="min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-900"
+          />
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <label htmlFor="capture-max-gap" className="text-sm font-medium">
+            Maximum gap (cm)
+          </label>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            This number is used only when the scan cannot measure a step from
+            lights it is sure about.
+          </p>
+          <input
+            id="capture-max-gap"
+            name="max_gap_cm"
+            type="text"
+            inputMode="decimal"
+            autoComplete="off"
+            value={maxGapCm}
+            onChange={(e) => setMaxGapCm(e.target.value)}
             disabled={phase.kind === "submitting"}
             className="min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-900"
           />
@@ -530,18 +565,46 @@ function VideoPanel({
             {(result?.light_count ?? 0) === 1 ? "" : "s"} detected
           </p>
           {result && result.missing.length > 0 ? (
-            <p className="mt-1.5 text-xs text-amber-700 dark:text-amber-400">
-              Missing IDs: {result.missing.join(", ")}
-            </p>
+            <>
+              <p className="mt-1.5 text-xs text-amber-700 dark:text-amber-400">
+                Missing IDs: {result.missing.join(", ")}
+              </p>
+              <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
+                Confirm will not save a model while any light is missing.
+              </p>
+            </>
           ) : null}
           {result && result.low_confidence.length > 0 ? (
             <p className="mt-1 text-xs text-amber-600 dark:text-amber-500">
               Low-confidence IDs: {result.low_confidence.join(", ")}
             </p>
           ) : null}
+          {result && result.guessed.length > 0 ? (
+            <>
+              <p className="mt-1 text-xs text-amber-600 dark:text-amber-500">
+                Guessed IDs: {result.guessed.join(", ")}
+              </p>
+              <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
+                These positions were filled in along the string. They were not
+                seen in the videos.
+              </p>
+            </>
+          ) : null}
+          {result && result.adjusted.length > 0 ? (
+            <>
+              <p className="mt-1 text-xs text-amber-600 dark:text-amber-500">
+                Adjusted IDs: {result.adjusted.join(", ")}
+              </p>
+              <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
+                These were seen, then moved onto the usual step.
+              </p>
+            </>
+          ) : null}
           {result &&
           result.missing.length === 0 &&
-          result.low_confidence.length === 0 ? (
+          result.low_confidence.length === 0 &&
+          result.guessed.length === 0 &&
+          result.adjusted.length === 0 ? (
             <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-400">
               All lights detected with high confidence.
             </p>

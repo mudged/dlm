@@ -5,6 +5,7 @@ import {
   createCaptureJob,
   discardCaptureJob,
   getCaptureJob,
+  parseMaxGapCm,
   parseOptionalCaptureLightCount,
 } from "./models";
 
@@ -147,6 +148,40 @@ describe("createCaptureJob (REQ-049)", () => {
     expect((captured as FormData).has("light_count")).toBe(false);
   });
 
+  it("sets max_gap_cm on the form when the caller passes it", async () => {
+    let captured: FormData | null = null;
+    globalThis.fetch = vi.fn(async (_url, init) => {
+      captured = init?.body as FormData;
+      return new Response(JSON.stringify(MOCK_JOB), {
+        status: 202,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as typeof globalThis.fetch;
+
+    const f1 = new File(["a"], "a.mp4", { type: "video/mp4" });
+    const f2 = new File(["b"], "b.mp4", { type: "video/mp4" });
+    await createCaptureJob([f1, f2], { max_gap_cm: 10 });
+
+    expect((captured as FormData).get("max_gap_cm")).toBe("10");
+  });
+
+  it("omits max_gap_cm when the caller does not pass it", async () => {
+    let captured: FormData | null = null;
+    globalThis.fetch = vi.fn(async (_url, init) => {
+      captured = init?.body as FormData;
+      return new Response(JSON.stringify(MOCK_JOB), {
+        status: 202,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as typeof globalThis.fetch;
+
+    const f1 = new File(["a"], "a.mp4", { type: "video/mp4" });
+    const f2 = new File(["b"], "b.mp4", { type: "video/mp4" });
+    await createCaptureJob([f1, f2]);
+
+    expect((captured as FormData).has("max_gap_cm")).toBe(false);
+  });
+
   it("explains a dropped connection instead of Failed to fetch", async () => {
     globalThis.fetch = vi.fn(async () => {
       throw new TypeError("Failed to fetch");
@@ -157,6 +192,26 @@ describe("createCaptureJob (REQ-049)", () => {
     await expect(createCaptureJob([f1, f2])).rejects.toThrow(
       /stopped before the server could reply/,
     );
+  });
+});
+
+describe("parseMaxGapCm (REQ-053)", () => {
+  it("returns undefined for a blank box", () => {
+    expect(parseMaxGapCm("")).toBeUndefined();
+    expect(parseMaxGapCm("  ")).toBeUndefined();
+  });
+
+  it("parses 10 and 100", () => {
+    expect(parseMaxGapCm("10")).toBe(10);
+    expect(parseMaxGapCm("100")).toBe(100);
+  });
+
+  it("rejects zero, above 100, and words", () => {
+    for (const raw of ["0", "-1", "101", "nope"]) {
+      expect(() => parseMaxGapCm(raw)).toThrow(
+        "maximum gap must be a positive number of centimetres up to 100",
+      );
+    }
   });
 });
 

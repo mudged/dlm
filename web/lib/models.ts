@@ -28,6 +28,8 @@ export type CaptureJobResult = {
   lights: CaptureJobLight[];
   missing: number[];
   low_confidence: number[];
+  guessed: number[];
+  adjusted: number[];
   rejected_feeds?: CaptureJobRejectedFeed[];
 };
 
@@ -44,6 +46,23 @@ export function parseOptionalCaptureLightCount(raw: string): number | undefined 
   const n = Number.parseInt(trimmed, 10);
   if (n < 1 || n > 1000) {
     throw new Error(captureLightCountRangeMessage);
+  }
+  return n;
+}
+
+export const maxGapCmMessage =
+  "maximum gap must be a positive number of centimetres up to 100";
+
+/** Blank means omit max_gap_cm. Otherwise a number of centimetres in (0, 100]. */
+export function parseMaxGapCm(raw: string): number | undefined {
+  const trimmed = raw.trim();
+  if (trimmed === "") return undefined;
+  if (!/^(?:\d+\.?\d*|\.\d+)$/.test(trimmed)) {
+    throw new Error(maxGapCmMessage);
+  }
+  const n = Number(trimmed);
+  if (!Number.isFinite(n) || n <= 0 || n > 100) {
+    throw new Error(maxGapCmMessage);
   }
   return n;
 }
@@ -107,7 +126,12 @@ function isConnectionFailure(err: unknown): boolean {
 /** POST /api/v1/models/capture — submit ≥ 2 video files, returns a new job. */
 export async function createCaptureJob(
   files: File[],
-  params?: { marker?: boolean; scale_hint?: number; light_count?: number },
+  params?: {
+    marker?: boolean;
+    scale_hint?: number;
+    light_count?: number;
+    max_gap_cm?: number;
+  },
 ): Promise<CaptureJob> {
   const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
   if (totalBytes > maxCaptureUploadBytes) {
@@ -127,6 +151,9 @@ export async function createCaptureJob(
     params.light_count <= 1000
   ) {
     fd.set("light_count", String(params.light_count));
+  }
+  if (params?.max_gap_cm !== undefined) {
+    fd.set("max_gap_cm", String(params.max_gap_cm));
   }
   let res: Response;
   try {
