@@ -54,8 +54,8 @@ You have a few options for telling the app where your lights are:
 
 ### Uploading a file (CSV)
 
-A **CSV** is just a simple spreadsheet saved as text. On the **Models** screen you can upload one to
-create a model. The file has to be laid out exactly like this:
+A **CSV** is just a simple spreadsheet saved as text. On the **Models** screen, **Upload file** is the second button, next to **Create from video**.
+The file has to be laid out exactly like this:
 
 ```csv
 id,x,y,z

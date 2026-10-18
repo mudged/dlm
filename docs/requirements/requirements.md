@@ -144,7 +144,7 @@ You can:
 - **Open** one to look at its lights and details.
 - **Delete** ones you don't want — *unless* a model is being used in a scene, in which case the app
   stops you and explains that you need to remove it from the scene first.
-- **Add a new model** by uploading a CSV file.
+- **Add a new model** by filming your lights (**Create from video**), or by uploading a file.
 
 ### The app checks your file before saving
 
@@ -448,8 +448,8 @@ Here's the idea:
    different positions). Starting the recording before you press Start capture catches the opening
    flash. A clip that misses that opening flash can still be used if it includes the closing flash and
    you type the device's light count when you upload.
-3. **Upload the videos.** On the model screen there's a **"create from video"** option alongside the CSV
-   upload. You upload your clips.
+3. **Upload the videos.** On the Models screen, **Create from video** is the main button. **Upload file** is the second button, for a spreadsheet of coordinates.
+   You upload your clips.
 4. **The app figures it out.** Using a computer-vision toolkit called **OpenCV** (built right into the
    app — no separate install needed), it looks for the red–blue–green flashes so it knows which blink
    is the first bulb, even when one camera started a moment later than another. Then it spots each

@@ -212,6 +212,10 @@ does). No coding knowledge needed — just follow the steps.
   (for example "3 / 120"). Stopping during a colour flash turns them all off within about two seconds.
   Keep recording until the second colour flash finishes.
 
+**The Models screen leads with filming.**
+- Try: open the Models screen, including when it has models and when the list is empty.
+- You should see: **Create from video** as the main button and a quieter **Upload file** button. Create from video opens the new-model page on the video tab. Upload file opens it on the file tab. The page text mentions filming first, then a file whose columns are `id,x,y,z`. With no models, the empty sentence offers the same two links.
+
 **You can build a model from uploaded videos.**
 - Try: on the model screen, choose "create from video" and upload two or more clips of the same sweep
   from different angles.

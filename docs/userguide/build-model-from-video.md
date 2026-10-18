@@ -59,7 +59,9 @@ per angle, moving the camera to a new spot each time.
 
 ### 4. Upload and check the result
 
-On the **Models** screen, choose **Create from video** and upload your recordings. Supported video
+On the **Models** screen, choose **Create from video** and upload your recordings.
+**Upload file** is the other button on that screen, for when you already have a spreadsheet of positions.
+Supported video
 types are **MP4, MOV, MKV, and WebM** (those are the formats most phones use, so you're probably
 fine).
 
