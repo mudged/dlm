@@ -22,8 +22,10 @@ import {
 } from "@/lib/models";
 import type { CaptureJob, CaptureJobLight, Light } from "@/lib/models";
 import {
+  activeNewModelTab,
   buildNewModelUrl,
   initialVideoPhaseFromJobId,
+  type NewModelTab,
 } from "@/lib/newModelRoute";
 
 // ── shared helpers ────────────────────────────────────────────────────────────
@@ -66,7 +68,7 @@ function ErrorBanner({ msg }: { msg: string }) {
   );
 }
 
-// ── CSV upload panel (original form) ─────────────────────────────────────────
+// ── file upload panel (original form) ────────────────────────────────────────
 
 function CsvPanel() {
   const router = useRouter();
@@ -716,14 +718,12 @@ function VideoPanel({
 
 // ── tab bar ───────────────────────────────────────────────────────────────────
 
-type Tab = "csv" | "video";
-
 function TabBar({
   active,
   onSelect,
 }: {
-  active: Tab;
-  onSelect: (t: Tab) => void;
+  active: NewModelTab;
+  onSelect: (t: NewModelTab) => void;
 }) {
   const base =
     "flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition";
@@ -738,6 +738,24 @@ function TabBar({
       aria-label="Model creation method"
       className="flex rounded-xl bg-slate-100 p-1 dark:bg-slate-800"
     >
+      <button
+        role="tab"
+        aria-selected={active === "video"}
+        type="button"
+        className={`${base} ${active === "video" ? activeClass : inactiveClass}`}
+        onClick={() => onSelect("video")}
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          className="h-4 w-4 shrink-0"
+          viewBox="0 0 20 20"
+          fill="currentColor"
+          aria-hidden
+        >
+          <path d="M2 6a2 2 0 012-2h6a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6zM14.553 7.106A1 1 0 0014 8v4a1 1 0 00.553.894l2 1A1 1 0 0018 13V7a1 1 0 00-1.447-.894l-2 1z" />
+        </svg>
+        Create from video
+      </button>
       <button
         role="tab"
         aria-selected={active === "csv"}
@@ -758,25 +776,7 @@ function TabBar({
             clipRule="evenodd"
           />
         </svg>
-        CSV upload
-      </button>
-      <button
-        role="tab"
-        aria-selected={active === "video"}
-        type="button"
-        className={`${base} ${active === "video" ? activeClass : inactiveClass}`}
-        onClick={() => onSelect("video")}
-      >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          className="h-4 w-4 shrink-0"
-          viewBox="0 0 20 20"
-          fill="currentColor"
-          aria-hidden
-        >
-          <path d="M2 6a2 2 0 012-2h6a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6zM14.553 7.106A1 1 0 0014 8v4a1 1 0 00.553.894l2 1A1 1 0 0018 13V7a1 1 0 00-1.447-.894l-2 1z" />
-        </svg>
-        Create from video
+        Upload file
       </button>
     </div>
   );
@@ -789,10 +789,10 @@ export function NewModelClient() {
   const params = useSearchParams();
 
   const rawTab = params.get("tab");
-  const activeTab: Tab = rawTab === "video" ? "video" : "csv";
+  const activeTab = activeNewModelTab(rawTab);
   const jobId = params.get("jobId");
 
-  function switchTab(t: Tab) {
+  function switchTab(t: NewModelTab) {
     router.push(buildNewModelUrl(t, jobId));
   }
 
@@ -803,7 +803,8 @@ export function NewModelClient() {
           New model
         </h1>
         <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
-          Upload a CSV of light coordinates, or reconstruct from video.
+          Film your lights and the app works out where they are. Or upload a
+          file of light coordinates.
         </p>
       </header>
 
